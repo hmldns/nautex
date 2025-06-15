@@ -47,21 +47,21 @@ class IntegrationStatusService:
         self,
         config_service: ConfigurationService,
         mcp_config_service: MCPConfigService,
+        nautex_api_service: Optional[NautexAPIService] = None,
         project_root: Optional[Path] = None
     ):
         """Initialize the integration status service.
 
         Args:
             config_service: Service for configuration management
-            mcp_config_service: Service for MCP configuration management  
+            mcp_config_service: Service for MCP configuration management
+            nautex_api_service: Service for Nautex API operations (can be None if not configured)
             project_root: Root directory for the project
         """
         self.config_service = config_service
         self.mcp_config_service = mcp_config_service
         self.project_root = project_root or Path.cwd()
-
-        # Cached services (created on demand)
-        self._nautex_api_service: Optional[NautexAPIService] = None
+        self._nautex_api_service = nautex_api_service
 
     async def get_integration_status(self) -> IntegrationStatus:
         """Get comprehensive integration status.
@@ -90,29 +90,36 @@ class IntegrationStatusService:
         logger.info(f"Integration status: {status.status_message}")
         return status
 
-    async def validate_api_token(self, token: str) -> Tuple[bool, Optional[AccountInfo], Optional[str]]:
+    async def validate_api_token(self, token: str, api_client_factory=None) -> Tuple[bool, Optional[AccountInfo], Optional[str]]:
         """Validate an API token without requiring full configuration.
 
         Args:
             token: API token to validate
+            api_client_factory: Function to create API client (if None, uses default)
 
         Returns:
             Tuple of (is_valid, account_info, error_message)
         """
         try:
-            from ..api import create_api_client
             from pydantic import SecretStr
             import os
 
-            # Create temporary config and service for validation
+            # Create temporary config for validation
             temp_config = NautexConfig(
                 agent_instance_name="validation-temp",
                 api_token=SecretStr(token)
             )
 
-            # Check for test mode from environment or config default
-            test_mode = os.getenv('NAUTEX_API_TEST_MODE', 'true').lower() == 'true'
-            api_client = create_api_client(base_url="https://api.nautex.ai", test_mode=test_mode)
+            # Create API client using factory or default
+            if api_client_factory is None:
+                from ..api import create_api_client
+                # Check for test mode from environment or config default
+                test_mode = os.getenv('NAUTEX_API_TEST_MODE', 'true').lower() == 'true'
+                api_client = create_api_client(base_url="https://api.nautex.ai", test_mode=test_mode)
+            else:
+                api_client = api_client_factory()
+
+            # Create temporary service for validation
             api_service = NautexAPIService(api_client, temp_config)
 
             # Test the token
@@ -157,12 +164,6 @@ class IntegrationStatusService:
             status.config_loaded = True
             status.config_path = self.config_service.get_config_path()
             status.config_summary = self._create_config_summary(config)
-
-            # Cache API service if config is valid
-            if config.api_token:
-                from ..api import create_api_client
-                api_client = create_api_client(base_url="https://api.nautex.ai", test_mode=config.api_test_mode)
-                self._nautex_api_service = NautexAPIService(api_client, config)
 
             logger.debug(f"Configuration loaded from {status.config_path}")
 

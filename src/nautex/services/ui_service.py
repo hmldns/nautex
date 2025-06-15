@@ -4,12 +4,11 @@ import asyncio
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-from ..tui.screens import SetupApp, StatusScreen
-from ..services.config_service import ConfigurationService, ConfigurationError
-from ..services.nautex_api_service import NautexAPIService
-from ..services.integration_status_service import IntegrationStatusService
+from ..services.config_service import ConfigurationService
 from ..services.plan_context_service import PlanContextService
 from ..services.mcp_config_service import MCPConfigService
+from ..services.integration_status_service import IntegrationStatusService
+from ..services.nautex_api_service import NautexAPIService
 from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig, AccountInfo
 from ..models.api_models import Project, ImplementationPlan, PlanContext
@@ -26,6 +25,32 @@ class UIService:
         """
         self.project_root = project_root or Path.cwd()
         self.config_service = ConfigurationService(self.project_root)
+        self.plan_context_service = PlanContextService()
+    
+    def launch_setup(self):
+        """Launch the interactive setup TUI."""
+        from ..tui.screens import SetupApp
+        app = SetupApp(
+            config_service=self.config_service,
+            project_root=self.project_root
+        )
+        app.run()
+
+    def launch_status(self):
+        """Launch the status TUI."""
+        from ..tui.screens import StatusScreen
+        plan_context = self.plan_context_service.get_plan_context()
+        mcp_config_service = MCPConfigService()
+        integration_status_service = IntegrationStatusService(
+            config_service=self.config_service,
+            mcp_config_service=mcp_config_service,
+            project_root=self.project_root
+        )
+        app = StatusScreen(
+            plan_context=plan_context,
+            integration_status_service=integration_status_service
+        )
+        app.run()
     
     async def handle_setup_command(self) -> None:
         """Handle the setup command by launching the interactive SetupScreen TUI.

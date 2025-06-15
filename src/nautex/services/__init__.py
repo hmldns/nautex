@@ -1,0 +1,21 @@
+"""Services module for Nautex CLI."""
+
+from .config_service import ConfigurationService, ConfigurationError
+from .nautex_api_service import NautexAPIService
+from .ui_service import UIService
+from .mcp_config_service import MCPConfigService
+from .integration_status_service import IntegrationStatusService, IntegrationStatus
+from .plan_context_service import PlanContextService
+from .mcp_service import MCPService
+
+__all__ = [
+    "ConfigurationService",
+    "ConfigurationError", 
+    "NautexAPIService",
+    "UIService",
+    "MCPConfigService",
+    "IntegrationStatusService",
+    "IntegrationStatus",
+    "PlanContextService",
+    "MCPService",
+]

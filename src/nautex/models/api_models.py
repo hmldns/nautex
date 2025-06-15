@@ -6,9 +6,28 @@ from pathlib import Path
 from pydantic import BaseModel, Field, validator
 
 
+class AccountInfo(BaseModel):
+    """Account information from Nautex.ai API.
+
+    This model represents the account details returned from the 
+    Nautex.ai /d/v1/info/account endpoint after successful token validation.
+    """
+    profile_email: str = Field(..., description="User's profile email address")
+    api_version: str = Field(..., description="API version from the response")
+
+    class Config:
+        """Pydantic configuration."""
+        json_schema_extra = {
+            "example": {
+                "profile_email": "user@example.com",
+                "api_version": "1.0.0"
+            }
+        }
+
+
 class MCPConfigStatus(str, Enum):
     """Status of MCP configuration integration.
-    
+
     Used by MCPConfigService to indicate the current state
     of the IDE's mcp.json configuration file.
     """
@@ -37,13 +56,13 @@ class RequirementStatus(str, Enum):
 # Core API Models
 class Project(BaseModel):
     """Project model from Nautex.ai API.
-    
+
     Represents a project entity returned from the /d/v1/projects endpoint.
     """
     project_id: str = Field(..., description="Unique project identifier")
     name: str = Field(..., description="Human-readable project name")
     description: Optional[str] = Field(None, description="Project description")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -56,14 +75,14 @@ class Project(BaseModel):
 
 class ImplementationPlan(BaseModel):
     """Implementation plan model from Nautex.ai API.
-    
+
     Represents a plan entity returned from the /d/v1/plans/get endpoint.
     """
     plan_id: str = Field(..., description="Unique plan identifier")
     project_id: str = Field(..., description="Parent project identifier")
     name: str = Field(..., description="Human-readable plan name")
     description: Optional[str] = Field(None, description="Plan description")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -77,7 +96,7 @@ class ImplementationPlan(BaseModel):
 
 class Task(BaseModel):
     """Task model from Nautex.ai API.
-    
+
     Represents a task entity returned from various /d/v1/tasks endpoints.
     """
     project_id: str = Field(..., description="Parent project identifier")
@@ -88,7 +107,7 @@ class Task(BaseModel):
     status: TaskStatus = Field(..., description="Current task status")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     notes: List[str] = Field(default_factory=list, description="List of task notes")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -106,7 +125,7 @@ class Task(BaseModel):
 
 class Requirement(BaseModel):
     """Requirement model from Nautex.ai API.
-    
+
     Represents a requirement entity returned from /d/v1/requirements endpoints.
     """
     project_id: str = Field(..., description="Parent project identifier")
@@ -115,7 +134,7 @@ class Requirement(BaseModel):
     description: str = Field(..., description="Detailed requirement description")
     status: RequirementStatus = Field(..., description="Current requirement status")
     notes: List[str] = Field(default_factory=list, description="List of requirement notes")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -131,7 +150,7 @@ class Requirement(BaseModel):
 
 class PlanContext(BaseModel):
     """Aggregated context for current plan status.
-    
+
     This model is used by PlanContextService to provide a comprehensive
     view of the current CLI state, including configuration, API connectivity,
     and next available task.
@@ -145,10 +164,10 @@ class PlanContext(BaseModel):
     next_task: Optional[Task] = Field(None, description="Next available task from the plan")
     advised_action: str = Field(..., description="Recommended next action for the agent")
     timestamp: str = Field(..., description="Timestamp when the context was created")
-    
+
     # Using Any for config to avoid circular import with NautexConfig
     config_summary: Optional[Any] = Field(None, description="Summary of current configuration")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -173,7 +192,7 @@ class PlanContext(BaseModel):
 class ProjectListRequest(BaseModel):
     """Request model for listing projects via /d/v1/projects."""
     project_ids: Optional[List[str]] = Field(None, description="Specific project IDs to retrieve")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -185,7 +204,7 @@ class ProjectListRequest(BaseModel):
 class PlanGetRequest(BaseModel):
     """Request model for getting plans via /d/v1/plans/get."""
     project_id: str = Field(..., description="Project ID to get plans for")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -202,14 +221,14 @@ class TaskActionRequest(BaseModel):
     task_designator: Optional[str] = Field(None, description="Specific task designator for single-task actions")
     task_designators: Optional[List[str]] = Field(None, description="Multiple task designators for batch actions")
     content: Optional[str] = Field(None, description="Note content for add_note action")
-    
+
     @validator('task_designators')
     def validate_task_designators_not_empty(cls, v):
         """Ensure task_designators list is not empty when provided."""
         if v is not None and len(v) == 0:
             raise ValueError('task_designators cannot be an empty list')
         return v
-    
+
     class Config:
         json_schema_extra = {
             "examples": [
@@ -244,14 +263,14 @@ class RequirementActionRequest(BaseModel):
     content: Optional[str] = Field(None, description="Note content for add_note action")
     description: Optional[str] = Field(None, description="Updated description for update action")
     status: Optional[RequirementStatus] = Field(None, description="Updated status for update action")
-    
+
     @validator('requirement_designators')
     def validate_requirement_designators_not_empty(cls, v):
         """Ensure requirement_designators list is not empty when provided."""
         if v is not None and len(v) == 0:
             raise ValueError('requirement_designators cannot be an empty list')
         return v
-    
+
     class Config:
         json_schema_extra = {
             "examples": [
@@ -280,21 +299,21 @@ class RequirementActionRequest(BaseModel):
 # API Response Models
 class APIResponse(BaseModel):
     """Standardized API response wrapper.
-    
+
     All Nautex.ai API endpoints return responses in this format.
     """
     status: str = Field(..., description="Response status: success or error")
     data: Optional[Any] = Field(None, description="Response data payload")
     message: Optional[str] = Field(None, description="Human-readable message")
     details: Optional[Any] = Field(None, description="Additional error details")
-    
+
     @validator('status')
     def validate_status(cls, v):
         """Ensure status is either 'success' or 'error'."""
         if v not in ['success', 'error']:
             raise ValueError('status must be either "success" or "error"')
         return v
-    
+
     class Config:
         json_schema_extra = {
             "examples": [

@@ -4,9 +4,9 @@ from .dialogs import ConfirmationDialog
 from .inputs import CompactInput, ApiTokenInput, TitledInput
 from .layouts import StepByStepLayout, CompactHorizontalLayout
 from .lists import TitledOptionList
-from .status import StatusDisplay, SetupStatusPanel, AccountStatusPanel
+from .status import StatusDisplay, IntegrationStatusPanel, AccountStatusPanel
 from .views import ConfigurationSummaryView
-from .integration import IntegrationStatusWidget, get_shared_integration_status_widget
+from .integration import IntegrationStatusWidget
 from .plan_context import PlanContextWidget
 
 __all__ = [
@@ -18,10 +18,9 @@ __all__ = [
     "CompactHorizontalLayout",
     "TitledOptionList",
     "StatusDisplay",
-    "SetupStatusPanel",
+    "IntegrationStatusPanel",
     "AccountStatusPanel",
     "ConfigurationSummaryView",
     "IntegrationStatusWidget",
-    "get_shared_integration_status_widget",
     "PlanContextWidget",
 ]

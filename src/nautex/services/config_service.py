@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from pydantic import ValidationError
 
-from ..models.config_models import NautexConfig, AccountInfo
+from ..models.config_models import NautexConfig
 
 
 class ConfigurationError(Exception):
@@ -18,15 +18,15 @@ class ConfigurationError(Exception):
 
 class ConfigurationService:
     """Service for managing Nautex CLI configuration settings.
-    
+
     This service handles loading configuration from .nautex/config.json and
     optionally from environment variables via .env file support. It also
     manages saving configuration with appropriate file permissions.
     """
-    
+
     def __init__(self, project_root: Optional[Path] = None):
         """Initialize the configuration service.
-        
+
         Args:
             project_root: Root directory for the project. Defaults to current working directory.
         """
@@ -34,26 +34,26 @@ class ConfigurationService:
         self.config_dir = self.project_root / ".nautex"
         self.config_file = self.config_dir / "config.json"
         self.env_file = self.project_root / ".env"
-    
+
     def load_configuration(self) -> NautexConfig:
         """Load configuration from .nautex/config.json and environment variables.
-        
+
         The configuration is loaded with the following precedence:
         1. Environment variables (with NAUTEX_ prefix)
         2. .env file in project root
         3. .nautex/config.json file
         4. Default values from the model
-        
+
         Returns:
             NautexConfig: Loaded and validated configuration
-            
+
         Raises:
             ConfigurationError: If configuration cannot be loaded or is invalid
         """
         try:
             # Load environment variables first (they have highest precedence)
             env_vars = self._load_environment_variables()
-            
+
             # Load from config file if it exists
             config_data = {}
             if self.config_file.exists():
@@ -64,53 +64,49 @@ class ConfigurationService:
                     raise ConfigurationError(f"Invalid JSON in config file: {e}")
                 except IOError as e:
                     raise ConfigurationError(f"Cannot read config file: {e}")
-            
+
             # Merge config file data with environment variables (env vars take precedence)
             merged_config = {**config_data, **env_vars}
-            
-            # Convert any nested account_details dict to AccountInfo model
-            if 'account_details' in merged_config and isinstance(merged_config['account_details'], dict):
-                try:
-                    merged_config['account_details'] = AccountInfo(**merged_config['account_details'])
-                except ValidationError as e:
-                    # If account_details is invalid, set to None rather than failing
-                    merged_config['account_details'] = None
-            
+
+            # Remove account_details if present (no longer part of NautexConfig)
+            if 'account_details' in merged_config:
+                merged_config.pop('account_details')
+
             # Create NautexConfig with merged data
             # pydantic-settings will also automatically check for env vars with NAUTEX_ prefix
             try:
                 config = NautexConfig(**merged_config)
             except ValidationError as e:
                 raise ConfigurationError(f"Invalid configuration data: {e}")
-            
+
             return config
-            
+
         except Exception as e:
             if isinstance(e, ConfigurationError):
                 raise
             raise ConfigurationError(f"Unexpected error loading configuration: {e}")
-    
+
     def _load_environment_variables(self) -> Dict[str, Any]:
         """Load environment variables with NAUTEX_ prefix.
-        
+
         Returns:
             Dict with environment variable values (keys without NAUTEX_ prefix)
         """
         env_vars = {}
         prefix = "NAUTEX_"
-        
+
         # Check for environment variables with NAUTEX_ prefix
         for key, value in os.environ.items():
             if key.startswith(prefix):
                 # Remove prefix and convert to lowercase for pydantic field matching
                 field_name = key[len(prefix):].lower()
-                
+
                 # Handle boolean values
                 if field_name == "api_test_mode":
                     env_vars[field_name] = value.lower() in ("true", "1", "yes", "on")
                 else:
                     env_vars[field_name] = value
-        
+
         # Load from .env file if it exists (lower precedence than system env vars)
         if self.env_file.exists():
             try:
@@ -121,7 +117,7 @@ class ConfigurationService:
                             key, value = line.split('=', 1)
                             key = key.strip()
                             value = value.strip().strip('"').strip("'")  # Remove quotes
-                            
+
                             if key.startswith(prefix):
                                 field_name = key[len(prefix):].lower()
                                 # Only use .env value if not already set by system env var
@@ -133,65 +129,65 @@ class ConfigurationService:
             except IOError:
                 # If we can't read .env file, just continue without it
                 pass
-        
+
         return env_vars
-    
+
     def save_configuration(self, config_data: NautexConfig) -> None:
         """Save configuration to .nautex/config.json with proper file permissions.
-        
+
         Args:
             config_data: Configuration to save
-            
+
         Raises:
             ConfigurationError: If configuration cannot be saved
         """
         try:
             # Ensure .nautex directory exists
             self.config_dir.mkdir(exist_ok=True)
-            
+
             # Convert config to dict, handling SecretStr and nested models
             config_dict = self._prepare_config_for_saving(config_data)
-            
+
             # Write JSON to file
             try:
                 with open(self.config_file, 'w', encoding='utf-8') as f:
                     json.dump(config_dict, f, indent=2, ensure_ascii=False)
             except IOError as e:
                 raise ConfigurationError(f"Cannot write config file: {e}")
-            
+
             # Set file permissions (user read/write only)
             self._set_secure_file_permissions(self.config_file)
-            
+
         except Exception as e:
             if isinstance(e, ConfigurationError):
                 raise
             raise ConfigurationError(f"Unexpected error saving configuration: {e}")
-    
+
     def _prepare_config_for_saving(self, config_data: NautexConfig) -> Dict[str, Any]:
         """Prepare configuration data for JSON serialization.
-        
+
         Args:
             config_data: Configuration to prepare
-            
+
         Returns:
             Dictionary ready for JSON serialization
         """
         # Use model_dump to get dict representation
         config_dict = config_data.model_dump()
-        
+
         # Handle SecretStr fields - extract the actual secret value for storage
         if 'api_token' in config_dict:
             config_dict['api_token'] = config_data.api_token.get_secret_value()
-        
+
         # Remove any None values to keep the file clean
         return {k: v for k, v in config_dict.items() if v is not None}
-    
+
     def _set_secure_file_permissions(self, file_path: Path) -> None:
         """Set secure file permissions on the configuration file.
-        
+
         Sets permissions to user read/write only (600 on Unix-like systems).
         On Windows, uses os.chmod if available, otherwise relies on default ACLs.
-        
+
         Args:
             file_path: Path to the file to secure
         """
@@ -212,26 +208,26 @@ class ConfigurationService:
             # If we can't set permissions, log a warning but don't fail
             # In production, this might warrant a warning log
             pass
-    
+
     def config_exists(self) -> bool:
         """Check if a configuration file exists.
-        
+
         Returns:
             True if .nautex/config.json exists, False otherwise
         """
         return self.config_file.exists()
-    
+
     def get_config_path(self) -> Path:
         """Get the path to the configuration file.
-        
+
         Returns:
             Path to the configuration file
         """
         return self.config_file
-    
+
     def delete_configuration(self) -> None:
         """Delete the configuration file if it exists.
-        
+
         Raises:
             ConfigurationError: If file cannot be deleted
         """
@@ -240,13 +236,13 @@ class ConfigurationService:
                 self.config_file.unlink()
             except OSError as e:
                 raise ConfigurationError(f"Cannot delete config file: {e}")
-    
+
     def create_api_client(self, config: NautexConfig):
         """Create the appropriate API client based on test mode configuration.
-        
+
         Args:
             config: Nautex configuration containing test mode flag
-            
+
         Returns:
             Either NautexAPIClient or NautexTestAPIClient based on config
         """

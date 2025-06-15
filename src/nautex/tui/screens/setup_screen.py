@@ -7,7 +7,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button
+from textual.widgets import Button, Header, Footer
 
 from ..widgets import (
     AccountStatusPanel,
@@ -38,44 +38,22 @@ class SetupScreen(Screen):
         Binding("f1", "show_help", "Help"),
     ]
 
-    DEFAULT_CSS = """
-    SetupScreen {
-        layout: vertical;
-        background: $background;
-    }
+    CSS = """
     #status_section {
-        height: 8;
-        dock: top;
-        background: $panel;
-        border: solid $primary;
-        margin: 1;
-        padding: 1;
+        height: auto;
+        margin: 0;
+        padding: 0;
     }
+    
     #main_content {
-        height: auto;
-    }
-    #input_section {
-        height: auto;
-        margin: 1;
-    }
-    #info_section {
-        width: 1fr;
-        height: auto;
-        margin: 1;
-    }
-    #selection_section {
-        height: auto;
-        margin: 1;
+        padding: 1;
+        margin: 0;
     }
     #button_section {
-        height: 3;
+        height: 1;
         dock: bottom;
-        background: $panel;
-        margin: 1;
-    }
-    .widget_title {
-        text-style: bold;
-        color: $primary;
+        margin: 0;
+        padding: 0;
     }
     """
 
@@ -115,6 +93,7 @@ class SetupScreen(Screen):
         self._load_existing_config()
 
     def compose(self) -> ComposeResult:
+        # yield Header()
         with Vertical(id="status_section"):
             yield self.integration_status_widget
         with Vertical(id="main_content"):
@@ -132,6 +111,7 @@ class SetupScreen(Screen):
             yield self.back_button
             yield self.next_button
             yield self.save_button
+        yield Footer()
 
     async def on_mount(self) -> None:
         await self._update_integration_status()
@@ -153,8 +133,7 @@ class SetupScreen(Screen):
                     self.setup_data["project_id"] = config.project_id
                 if hasattr(config, "implementation_plan_id") and config.implementation_plan_id:
                     self.setup_data["implementation_plan_id"] = config.implementation_plan_id
-                if hasattr(config, "account_details") and config.account_details:
-                    self.account_info = config.account_details
+                # Account info is now retrieved directly from the API when needed
         except ConfigurationError:
             pass
 
@@ -301,7 +280,7 @@ Navigation:
                 "agent_instance_name": self.setup_data["agent_instance_name"],
                 "project_id": self.setup_data["project_id"],
                 "implementation_plan_id": self.setup_data["implementation_plan_id"],
-                "account_details": self.account_info.model_dump() if self.account_info else None,
+                # account_details is no longer stored in config
             }
             config = NautexConfig(**config_data)
             self.config_service.save_configuration(config)
@@ -319,10 +298,16 @@ Navigation:
             )
             if is_valid and account_info:
                 self.account_info = account_info
+
+                # Get API service to access latency information
+                api_service = self._get_api_service()
+                # Use overall API latency
+                _, max_latency = api_service.api_latency
+
                 self.account_panel.show_account_info(
                     self.account_info.profile_email,
                     self.account_info.api_version,
-                    self.account_info.response_latency,
+                    max_latency,  # Use max latency from the API service
                 )
                 self.integration_status_widget.update_status("network", "🟢")
                 self.integration_status_widget.update_status("api", "🟢")

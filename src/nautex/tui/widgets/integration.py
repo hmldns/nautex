@@ -2,43 +2,56 @@
 
 from textual.widgets import Static
 from textual.containers import Vertical
-from .status import SetupStatusPanel
+from .integration_status import IntegrationStatusPanel
 
 
 class IntegrationStatusWidget(Vertical):
-    """A comprehensive status widget tied to the integration status service."""
+    """A simple 2-line status widget for terminal display."""
 
     DEFAULT_CSS = """
     IntegrationStatusWidget {
-        height: auto;
-        border: solid blue;
-        margin: 1;
-        padding: 1;
-    }
-
-    IntegrationStatusWidget > Static {
         height: auto;
         margin: 0;
         padding: 0;
     }
 
-    IntegrationStatusWidget > SetupStatusPanel {
-        height: auto;
-        margin: 1 0;
+    IntegrationStatusWidget Static {
+        margin: 0;
+        padding: 0;
+    }
+
+    IntegrationStatusWidget IntegrationStatusPanel {
+        margin: 0;
         padding: 0;
     }
     """
 
+    # DEFAULT_CSS = """
+    # IntegrationStatusWidget {
+    #     height: 5;
+    #     margin: 0;
+    #     padding: 0;
+    # }
+    #
+    # IntegrationStatusWidget > Static {
+    #     margin: 0;
+    #     padding: 0;
+    # }
+    #
+    # IntegrationStatusWidget > IntegrationStatusPanel {
+    #     margin: 0;
+    #     padding: 0;
+    # }
+    # """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.status_panel = SetupStatusPanel()
-        self.status_text = Static("Checking integration status...", id="status_text")
+        self.status_panel = IntegrationStatusPanel()
+        self.status_text = Static("Checking status...", id="status_text")
 
     def compose(self):
         """Compose the integration status widget layout."""
-        yield Static("Integration Status", classes="widget_title")
         yield self.status_panel
-        yield Static("─" * 30)
         yield self.status_text
 
     def update_from_integration_status(self, integration_status) -> None:
@@ -51,22 +64,6 @@ class IntegrationStatusWidget(Vertical):
 
         # Update status text
         if integration_status.integration_ready:
-            self.status_text.update("✅ Ready to work!")
+            self.status_text.update("✅ Ready to work")
         else:
             self.status_text.update(f"⚠️ {integration_status.status_message}")
-
-
-# Global shared integration status widget instance
-_shared_integration_status_widget = None
-
-
-def get_shared_integration_status_widget():
-    """Get the shared integration status widget instance.
-
-    Returns:
-        IntegrationStatusWidget: Shared widget instance
-    """
-    global _shared_integration_status_widget
-    if _shared_integration_status_widget is None:
-        _shared_integration_status_widget = IntegrationStatusWidget()
-    return _shared_integration_status_widget 

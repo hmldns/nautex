@@ -1,7 +1,14 @@
 """Status-related widgets for the Nautex TUI."""
+from time import monotonic
 
-from textual.widgets import Static
-from textual.containers import Horizontal
+from pygments.styles.dracula import yellow
+from textual.reactive import reactive
+from textual.widgets import Static, Button, Digits
+from textual.containers import Horizontal, HorizontalGroup
+
+from src.nautex.models.api_models import MCPConfigStatus
+from src.nautex.services import IntegrationStatus
+
 
 
 class StatusDisplay(Static):
@@ -13,7 +20,7 @@ class StatusDisplay(Static):
         width: auto;
         margin: 0 1 0 0;
         padding: 0;
-        min-width: 12;
+        min-width: 10;
     }
     """
 
@@ -24,7 +31,7 @@ class StatusDisplay(Static):
             label: The label text
             status: The status indicator (emoji)
         """
-        super().__init__(f"({status}) {label}", **kwargs)
+        super().__init__(f"{status} {label}", **kwargs)
         self.label_text = label
         self.status_indicator = status
 
@@ -35,42 +42,46 @@ class StatusDisplay(Static):
             status: New status indicator
         """
         self.status_indicator = status
-        self.update(f"({status}) {self.label_text}")
+        self.update(f"{status} {self.label_text}")
 
 
-class SetupStatusPanel(Horizontal):
-    """A horizontal strip of StatusDisplay widgets for setup progress."""
-
+class IntegrationStatusPanel(HorizontalGroup):
+    """A horizontal strip of StatusDisplay widgets for integration status."""
+    #
     DEFAULT_CSS = """
-    SetupStatusPanel {
+    IntegrationStatusPanel {
+        width: 1fr;
         height: auto;
         width: 100%;
-        margin: 0 0 1 0;
-        padding: 0;
         border: solid $primary;
     }
 
-    SetupStatusPanel > StatusDisplay {
+    IntegrationStatusPanel StatusDisplay {
         height: auto;
         margin: 0 1 0 0;
-        padding: 0 1;
+        padding: 1 1;
     }
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.statuses = {
-            "network": StatusDisplay("network", "⚪"),
+            "network": StatusDisplay("net", "⚪"),
             "api": StatusDisplay("api", "⚪"),
-            "project": StatusDisplay("project", "⚪"),
+            "project": StatusDisplay("proj", "⚪"),
             "plan": StatusDisplay("plan", "⚪"),
             "mcp": StatusDisplay("mcp", "⚪"),
         }
+
+        self.border_title = "Integration Status"
 
     def compose(self):
         """Compose the status panel layout."""
         for status_widget in self.statuses.values():
             yield status_widget
+
+        # yield Button("Reset", id="reset")
+
 
     def update_status(self, key: str, status: str) -> None:
         """Update a specific status indicator.
@@ -82,7 +93,7 @@ class SetupStatusPanel(Horizontal):
         if key in self.statuses:
             self.statuses[key].update_status(status)
 
-    def update_from_integration_status(self, integration_status) -> None:
+    def update_from_integration_status(self, integration_status: IntegrationStatus) -> None:
         """Update status indicators based on integration status service data.
 
         Args:
@@ -120,7 +131,6 @@ class SetupStatusPanel(Horizontal):
 
         # MCP status (from integration service)
         if hasattr(integration_status, 'mcp_status'):
-            from nautex.models.api_models import MCPConfigStatus
             if integration_status.mcp_status == MCPConfigStatus.OK:
                 self.update_status("mcp", "🟢")
             elif integration_status.mcp_status == MCPConfigStatus.MISCONFIGURED:

@@ -25,17 +25,6 @@ class AccountInfo(BaseModel):
         }
 
 
-class MCPConfigStatus(str, Enum):
-    """Status of MCP configuration integration.
-
-    Used by MCPConfigService to indicate the current state
-    of the IDE's mcp.json configuration file.
-    """
-    OK = "OK"
-    MISCONFIGURED = "MISCONFIGURED"
-    NOT_FOUND = "NOT_FOUND"
-
-
 class TaskStatus(str, Enum):
     """Valid task status values."""
     TODO = "todo"
@@ -144,46 +133,6 @@ class Requirement(BaseModel):
                 "description": "Passwords must be hashed using Argon2",
                 "status": "approved",
                 "notes": ["Library recommendation: argon2-cffi"]
-            }
-        }
-
-
-class PlanContext(BaseModel):
-    """Aggregated context for current plan status.
-
-    This model is used by PlanContextService to provide a comprehensive
-    view of the current CLI state, including configuration, API connectivity,
-    and next available task.
-    """
-    config_loaded: bool = Field(..., description="Whether configuration was successfully loaded")
-    config_path: Optional[Path] = Field(None, description="Path to the configuration file")
-    mcp_status: MCPConfigStatus = Field(..., description="MCP integration status")
-    mcp_config_path: Optional[Path] = Field(None, description="Path to the MCP configuration file")
-    api_connected: bool = Field(..., description="Whether API connectivity test passed")
-    api_response_time: Optional[float] = Field(None, description="API response time in seconds")
-    next_task: Optional[Task] = Field(None, description="Next available task from the plan")
-    advised_action: str = Field(..., description="Recommended next action for the agent")
-    timestamp: str = Field(..., description="Timestamp when the context was created")
-
-    # Using Any for config to avoid circular import with NautexConfig
-    config_summary: Optional[Any] = Field(None, description="Summary of current configuration")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "config_loaded": True,
-                "config_path": "/path/to/.nautex/config.json",
-                "mcp_status": "OK",
-                "mcp_config_path": "/path/to/.cursor/mcp.json",
-                "api_connected": True,
-                "api_response_time": 0.234,
-                "next_task": {
-                    "task_designator": "TASK-123",
-                    "name": "Implement user auth",
-                    "status": "todo"
-                },
-                "advised_action": "Start working on task TASK-123",
-                "timestamp": "2024-01-15 14:30:45"
             }
         }
 

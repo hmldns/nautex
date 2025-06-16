@@ -11,7 +11,8 @@ from ..services.integration_status_service import IntegrationStatusService
 from ..services.nautex_api_service import NautexAPIService
 from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig, AccountInfo
-from ..models.api_models import Project, ImplementationPlan, PlanContext
+from ..models.api_models import Project, ImplementationPlan
+from ..models.plan_context import PlanContext
 
 
 class UIService:

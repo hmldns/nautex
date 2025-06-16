@@ -13,21 +13,21 @@ sys.path.insert(0, str(project_root))
 from src.nautex.tui.screens.setup_screen import SetupScreen, SetupApp
 from src.nautex.services.config_service import ConfigurationService
 from src.nautex.services.integration_status_service import IntegrationStatus, IntegrationStatusService
-from src.nautex.services.mcp_config_service import MCPConfigService
+from src.nautex.services.mcp_config_service import MCPConfigService, MCPConfigStatus
 from src.nautex.services.nautex_api_service import NautexAPIService
-from src.nautex.models.api_models import Project, ImplementationPlan, MCPConfigStatus, AccountInfo
+from src.nautex.models.api_models import Project, ImplementationPlan, AccountInfo
 from src.nautex.models.config_models import NautexConfig
 from pydantic import SecretStr
 
 # --- MOCK CONFIGURATION SERVICE ---
 class MockConfigurationService:
     """Mock configuration service for testing."""
-    
+
     def __init__(self, project_root: Optional[Path] = None):
         """Initialize with optional project root."""
         self.project_root = project_root or Path.cwd()
         self.config_data = None
-    
+
     def load_configuration(self) -> NautexConfig:
         """Return mock configuration."""
         if self.config_data:
@@ -38,16 +38,16 @@ class MockConfigurationService:
             project_id="mock-project-id",
             implementation_plan_id="mock-plan-id"
         )
-    
+
     def save_configuration(self, config_data: NautexConfig) -> None:
         """Save configuration (mock)."""
         self.config_data = config_data
         print(f"✅ Configuration saved (mock): {config_data}")
-    
+
     def config_exists(self) -> bool:
         """Check if config exists (mock)."""
         return self.config_data is not None
-    
+
     def get_config_path(self) -> Path:
         """Get path to config file (mock)."""
         return self.project_root / "nautex.toml"
@@ -55,7 +55,7 @@ class MockConfigurationService:
 # --- MOCK INTEGRATION STATUS SERVICE ---
 class MockIntegrationStatusService:
     """Mock integration status service for testing."""
-    
+
     def __init__(
         self,
         config_service: ConfigurationService,
@@ -66,12 +66,12 @@ class MockIntegrationStatusService:
         self.config_service = config_service
         self.mcp_config_service = mcp_config_service
         self.project_root = project_root or Path.cwd()
-    
+
     async def get_integration_status(self) -> IntegrationStatus:
         """Return mock integration status."""
         # Simulate some delay like a real API call
         await asyncio.sleep(0.2)
-        
+
         return IntegrationStatus(
             config_loaded=True,
             config_path=Path("/home/user/dev/phoenix-ui/nautex.toml"),
@@ -89,12 +89,12 @@ class MockIntegrationStatusService:
             integration_ready=True,
             status_message="All systems operational - ready for development"
         )
-    
+
     async def validate_api_token(self, token: str) -> Tuple[bool, Optional[AccountInfo], Optional[str]]:
         """Validate API token (mock)."""
         # Simulate some delay like a real API call
         await asyncio.sleep(0.5)
-        
+
         if token and len(token) > 8:
             account_info = AccountInfo(
                 profile_email="user@example.com",
@@ -109,18 +109,18 @@ class MockIntegrationStatusService:
 # --- MOCK NAUTEX API SERVICE ---
 class MockNautexAPIService:
     """Mock Nautex API service for testing."""
-    
+
     def __init__(self, api_client=None, config=None):
         """Initialize with optional API client and config."""
         self.api_client = api_client
         self.config = config
         self._api_latency = (0.1, 0.2)  # min, max latency
-    
+
     @property
     def api_latency(self) -> Tuple[float, float]:
         """Get API latency information."""
         return self._api_latency
-    
+
     async def verify_token_and_get_account_info(self, token: Optional[str] = None) -> AccountInfo:
         """Verify token and get account info (mock)."""
         await asyncio.sleep(0.3)
@@ -130,7 +130,7 @@ class MockNautexAPIService:
             account_id="acc_12345",
             organization_id="org_67890"
         )
-    
+
     async def list_projects(self) -> List[Project]:
         """List available projects (mock)."""
         await asyncio.sleep(0.3)
@@ -151,7 +151,7 @@ class MockNautexAPIService:
                 description="Cross-platform mobile application"
             )
         ]
-    
+
     async def list_implementation_plans(self, project_id: str) -> List[ImplementationPlan]:
         """List implementation plans for a project (mock)."""
         await asyncio.sleep(0.3)
@@ -179,11 +179,11 @@ class MockNautexAPIService:
 # --- MOCK MCP CONFIG SERVICE ---
 class MockMCPConfigService:
     """Mock MCP config service for testing."""
-    
+
     def __init__(self, project_root: Optional[Path] = None):
         """Initialize with optional project root."""
         self.project_root = project_root or Path.cwd()
-    
+
     def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:
         """Check MCP configuration status (mock)."""
         return MCPConfigStatus.OK, self.project_root / ".cursor" / "mcp.json"
@@ -191,7 +191,7 @@ class MockMCPConfigService:
 # --- SAMPLE SETUP APP ---
 class SampleSetupApp(SetupApp):
     """A sample app to run the SetupScreen with mock data."""
-    
+
     def __init__(self):
         # Create mock services
         self.config_service = MockConfigurationService()
@@ -200,7 +200,7 @@ class SampleSetupApp(SetupApp):
             config_service=self.config_service,
             project_root=self.project_root
         )
-    
+
     def on_mount(self) -> None:
         """Override to use mock services."""
         mcp_config_service = MockMCPConfigService(self.project_root)
@@ -209,10 +209,10 @@ class SampleSetupApp(SetupApp):
             mcp_config_service=mcp_config_service,
             project_root=self.project_root
         )
-        
+
         # Create a mock API service
         api_service = MockNautexAPIService()
-        
+
         # Create and push the setup screen with mock services
         setup_screen = SetupScreen(
             config_service=self.config_service,
@@ -220,10 +220,10 @@ class SampleSetupApp(SetupApp):
             integration_status_service=integration_status_service,
             api_service=api_service
         )
-        
+
         # Add debug indicator
         setup_screen.sub_title = "🧪 Debug Mode - Mock Data"
-        
+
         self.push_screen(setup_screen)
 
 if __name__ == "__main__":
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     print("📋 This will show a mock setup screen with sample data")
     print("🎮 Controls: Press 'Ctrl+C' or 'Escape' to quit, 'Ctrl+S' to save")
     print("─" * 50)
-    
+
     try:
         app = SampleSetupApp()
         app.run()

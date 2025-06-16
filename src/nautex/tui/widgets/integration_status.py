@@ -6,7 +6,7 @@ from textual.reactive import reactive
 from textual.widgets import Static, Button, Digits
 from textual.containers import Horizontal, HorizontalGroup
 
-from src.nautex.models.api_models import MCPConfigStatus
+from src.nautex.services.mcp_config_service import MCPConfigStatus
 from src.nautex.services import IntegrationStatus
 
 

@@ -12,17 +12,18 @@ sys.path.insert(0, str(project_root))
 
 from src.nautex.tui.screens.status_screen import StatusScreen
 from src.nautex.services.integration_status_service import IntegrationStatus, IntegrationStatusService
-from src.nautex.models.api_models import MCPConfigStatus
+from src.nautex.services.mcp_config_service import MCPConfigStatus
+
 
 # --- MOCK INTEGRATION STATUS SERVICE ---
 class MockIntegrationStatusService:
     """Mock integration status service for testing."""
-    
+
     async def get_integration_status(self) -> IntegrationStatus:
         """Return mock integration status."""
         # Simulate some delay like a real API call
         await asyncio.sleep(0.2)
-        
+
         return IntegrationStatus(
             config_loaded=True,
             config_path=Path("/home/user/dev/phoenix-ui/nautex.toml"),
@@ -70,14 +71,14 @@ mock_plan_context = SimpleNamespace(
 
 class SampleStatusApp(StatusScreen):
     """A sample app to run the StatusScreen with mock data."""
-    
+
     def __init__(self):
         mock_integration_service = MockIntegrationStatusService()
         super().__init__(
             plan_context=mock_plan_context,
             integration_status_service=mock_integration_service,
         )
-    
+
     def on_mount(self) -> None:
         """Override to add debug info."""
         self.sub_title = "🧪 Debug Mode - Mock Data"
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     print("📋 This will show a mock status screen with sample data")
     print("🎮 Controls: Press 'q', 'Ctrl+C', or 'Escape' to quit")
     print("─" * 50)
-    
+
     try:
         app = SampleStatusApp()
         app.run()

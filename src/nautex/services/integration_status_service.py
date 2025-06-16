@@ -6,11 +6,10 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 
-from ..models.api_models import MCPConfigStatus
 from ..models.config_models import NautexConfig, AccountInfo
 from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
-from .mcp_config_service import MCPConfigService
+from .mcp_config_service import MCPConfigService, MCPConfigStatus
 from ..api.client import NautexAPIError
 
 # Set up logging

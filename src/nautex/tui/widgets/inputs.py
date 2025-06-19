@@ -2,7 +2,7 @@
 
 from typing import Callable, Optional, Union, Awaitable
 
-from textual.widgets import Input, Label
+from textual.widgets import Input, Label, Button
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static, Markdown
 
@@ -16,42 +16,57 @@ class ValidatedTextInput(Vertical):
         margin: 0;
         padding: 0;
         border: solid $primary;
-        padding: 0;
     }
-
+    
+    /* ───────────────── title ───────────────── */
     ValidatedTextInput > .title-row {
         height: 1;
         margin: 0 0 1 0;
-        padding: 0;
     }
-
+    
+    /* ───────────────── input row ───────────────── */
     ValidatedTextInput > .input-row {
-        height: 3;
-        margin: 0;
-        padding: 0;
-    }
-
-    ValidatedTextInput > .error-row {
         height: auto;
-        margin: 1 0 0 0;
-        padding: 0;
-        color: $error;
     }
-
-    ValidatedTextInput .check-mark {
-        width: 1;
-        height: 1;
+    
+    ValidatedTextInput .input-field {
+        width: 1fr;          /* fill remaining space */
+    }
+    
+    /* status icon as a button so it is clickable / focusable */
+    ValidatedTextInput .status-button {
+        width: 3;
+        height: 3;
+        background: transparent;
+        border: none;
         margin: 0;
         padding: 0;
+    }
+    
+    ValidatedTextInput .status-button-success {
         color: $success;
     }
-
-    ValidatedTextInput .error-mark {
-        width: 1;
-        height: 1;
-        margin: 0;
-        padding: 0;
+    
+    ValidatedTextInput .status-button-error {
         color: $error;
+    }
+    
+    /* ───────────────── footer (error + hint) ───────────────── */
+    ValidatedTextInput > .footer-row {
+        height: 1;           /* single terminal row */
+        margin-top: 1;
+    }
+    
+    ValidatedTextInput .error-row {
+        width: 1fr;          /* stretch; pushes hint to the right */
+        color: $error;
+    }
+    
+    ValidatedTextInput .save-message {
+        width: auto;
+        align-horizontal: right;
+        color: $text-muted;
+        display: none;       /* shown only when value changes */
     }
     """
 
@@ -62,6 +77,7 @@ class ValidatedTextInput(Vertical):
         validator: Optional[Callable[[str], Awaitable[tuple[bool, str]]]] = None,
         title_extra: Optional[Union[Static, Markdown]] = None,
         default_value: str = "",
+        on_change: Optional[Callable[[str], Awaitable[None]]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -70,27 +86,40 @@ class ValidatedTextInput(Vertical):
         self.validator = validator
         self.title_extra = title_extra
         self.default_value = default_value
+        self.on_change = on_change
 
         # Create widgets
-        self.input_field = Input(placeholder=placeholder, value=default_value)
-        self.status_mark = Static("a", classes="check-mark")
+        self.title_label = Label(title)
+        self.input_field = Input(placeholder=placeholder, value=default_value, classes="input-field")
+
+        # Create a button for the status icon
+        self.status_button = Button("✓", classes="status-button status-button-success")
+
+        # Add a message for when value changes
+        self.save_message = Static("press enter to save", classes="save-message")
+        self.save_message.display = False
+
         self.error_text = Static("", classes="error-row")
 
         # Track validation state
         self.is_valid = True
         self.error_message = ""
+        self.value_changed = False
 
     def compose(self):
         """Compose the validated input layout."""
         with Horizontal(classes="title-row"):
+            yield self.title_label
             if self.title_extra:
                 yield self.title_extra
 
         with Horizontal(classes="input-row"):
             yield self.input_field
-            yield self.status_mark
+            yield self.status_button
 
-        yield self.error_text
+        with Horizontal(classes="footer-row"):
+            yield self.error_text  # left
+            yield self.save_message  # right
 
     def on_mount(self):
         """Called when the widget is mounted."""
@@ -102,10 +131,26 @@ class ValidatedTextInput(Vertical):
         if self.validator:
             await self.validate()
 
-    async def on_input_value_changed(self, event):
-        """Handle input value changes and validate."""
+    def on_input_changed(self, event):
+        """Handle input value changes."""
+        # Show the save message when the value changes
+        self.value_changed = True
+        self.save_message.display = True
+
+        # Validate the input
         if self.validator:
-            await self.validate()
+            self.app.call_later(self.validate)
+
+    async def on_input_submitted(self, event):
+        """Handle input submission (Enter key)."""
+        # Always hide the save message when Enter is pressed
+        self.save_message.display = False
+
+        if self.value_changed and self.on_change and self.is_valid:
+            self.value_changed = False
+
+            # Call the on_change callback
+            await self.on_change(self.value)
 
     async def validate(self) -> bool:
         """Validate the current input value."""
@@ -113,14 +158,14 @@ class ValidatedTextInput(Vertical):
             self.is_valid, self.error_message = await self.validator(self.value)
 
             if self.is_valid:
-                self.status_mark.update("✓")
-                self.status_mark.remove_class("error-mark")
-                self.status_mark.add_class("check-mark")
+                self.status_button.label = "✓"
+                self.status_button.remove_class("status-button-error")
+                self.status_button.add_class("status-button-success")
                 self.error_text.update("")
             else:
-                self.status_mark.update("✗")
-                self.status_mark.remove_class("check-mark")
-                self.status_mark.add_class("error-mark")
+                self.status_button.label = "✗"
+                self.status_button.remove_class("status-button-success")
+                self.status_button.add_class("status-button-error")
                 self.error_text.update(self.error_message)
 
         return self.is_valid
@@ -133,6 +178,14 @@ class ValidatedTextInput(Vertical):
     def set_value(self, value: str) -> None:
         """Set the input value."""
         self.input_field.value = value
+
+        # Reset the value_changed flag and hide the save message
+        self.value_changed = False
+        self.save_message.display = False
+
+        # Validate the new value
+        if self.validator:
+            self.app.call_later(self.validate)
 
     def focus(self) -> None:
         """Focus the input field."""

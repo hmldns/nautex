@@ -53,10 +53,16 @@ class SetupScreen(Screen):
         height: 1fr;           /* occupy remaining vertical space */
     }
 
+    #input_and_sysinfo {
+        height: 15;            /* fixed height to leave space for lists */
+        margin-bottom: 0;
+    }
+
     #loadable_lists_container {
-        height: 1fr;           /* allow lists to grow */
-        margin: 1 0 0 0;
+        height: 1fr;           /* take all remaining space */
+        margin: 0;
         padding: 0;
+        min-height: 10;        /* ensure lists are visible */
     }
 
     #loadable_lists_container > LoadableList {
@@ -72,6 +78,7 @@ class SetupScreen(Screen):
     #toggle_button, #reload_button {
         margin: 1 0;
         width: auto;
+        height: 1fr;
     }
 
     #reload_button {
@@ -148,7 +155,7 @@ class SetupScreen(Screen):
 
         # Create loadable list widgets
         self.loadable_list1 = LoadableList(
-            title="List 1",
+            title="Projects",
             data_loader=list1_loader,
             on_change=self.on_list1_selection_change,
         )
@@ -156,7 +163,7 @@ class SetupScreen(Screen):
         # For List 2 we provide the loader that references the first list's
         # selection so it can include it on each reload.
         self.loadable_list2 = LoadableList(
-            title="List 2",
+            title="Implementation plans",
             data_loader=list2_loader,
             on_change=self.on_list2_selection_change,
         )
@@ -188,7 +195,7 @@ class SetupScreen(Screen):
         # with Vertical(id="system_info_section"):
         #     yield self.system_info_widget
         with Vertical(id="main_content"):
-            with Horizontal():
+            with Horizontal(id="input_and_sysinfo"):
                 with Vertical(id="input_section"):
                     yield self.api_token_input
                     yield self.agent_name_input

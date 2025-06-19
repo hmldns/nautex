@@ -12,6 +12,7 @@ class NautexConfig(BaseSettings):
     This model manages all configuration settings for the Nautex CLI,
     supporting both JSON file storage and environment variable overrides.
     """
+    api_host: str = Field("https://api.nautex.ai", description="Base URL for the Nautex.ai API")
     api_token: SecretStr = Field(..., description="Bearer token for Nautex.ai API authentication")
     agent_instance_name: str = Field("Coding Agent", description="User-defined name for this CLI instance")
     project_id: Optional[str] = Field(None, description="Selected Nautex.ai project ID")
@@ -28,6 +29,7 @@ class NautexConfig(BaseSettings):
         extra = "ignore"  # Ignore extra environment variables that don't match our model
         json_schema_extra = {
             "example": {
+                "api_host": "http://localhost:8000",
                 "api_token": "your-secret-token-here",
                 "agent_instance_name": "my-dev-agent",
                 "project_id": "PROJ-123",

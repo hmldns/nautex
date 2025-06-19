@@ -7,6 +7,7 @@ from .views import ConfigurationSummaryView
 from .integration import IntegrationStatusWidget
 from .plan_context import PlanContextWidget
 from .loadable_list import LoadableList
+from .system_info import SystemInfoWidget
 
 __all__ = [
     "ConfirmationDialog",
@@ -18,4 +19,5 @@ __all__ = [
     "IntegrationStatusWidget",
     "PlanContextWidget",
     "LoadableList",
+    "SystemInfoWidget",
 ]

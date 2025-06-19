@@ -14,7 +14,7 @@ class ValidatedTextInput(Vertical):
     ValidatedTextInput {
         height: auto;
         margin: 0;
-        padding: 0;
+        padding: 0 1;
         border: solid $primary;
     }
 

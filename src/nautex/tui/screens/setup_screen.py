@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
+from pygments.styles.dracula import yellow
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -14,6 +15,7 @@ from ..widgets import (
     ValidatedTextInput,
     IntegrationStatusWidget,
     LoadableList,
+    SystemInfoWidget,
 )
 from ...services.config_service import ConfigurationService, ConfigurationError
 from ...services.integration_status_service import IntegrationStatusService
@@ -36,7 +38,13 @@ class SetupScreen(Screen):
     #status_section {
         height: auto;
         margin: 0;
-        padding: 0;
+        padding: 0 1;         /* match main content padding for alignment */
+    }
+
+    #system_info_section {
+        height: auto;
+        margin: 0;
+        padding: 0 1;         /* match main content padding for alignment */
     }
 
     #main_content {
@@ -93,6 +101,10 @@ class SetupScreen(Screen):
 
         # Widget references
         self.integration_status_widget = IntegrationStatusWidget()
+        self.system_info_widget = SystemInfoWidget(
+            config_service=self.config_service,
+            integration_status_service=self.integration_status_service
+        )
         self.api_token_input = ValidatedTextInput(
             title="API Token",
             placeholder="Enter your Nautex.ai API token...",
@@ -173,21 +185,30 @@ class SetupScreen(Screen):
     def compose(self) -> ComposeResult:
         with Vertical(id="status_section"):
             yield self.integration_status_widget
+        # with Vertical(id="system_info_section"):
+        #     yield self.system_info_widget
         with Vertical(id="main_content"):
-            with Vertical(id="input_section"):
-                yield self.api_token_input
-                yield self.agent_name_input
-                # Add toggle button and reload button
-                yield self.toggle_button
-                yield self.reload_button
-                # Add loadable lists side by side in a horizontal container
-                with Horizontal(id="loadable_lists_container"):
-                    yield self.loadable_list1
-                    yield self.loadable_list2
+            with Horizontal():
+                with Vertical(id="input_section"):
+                    yield self.api_token_input
+                    yield self.agent_name_input
+                    # Add toggle button and reload button
+                    # yield self.toggle_button
+                    # yield self.reload_button
+                    # yield self.refresh_system_info_button
+                    # Add loadable lists side by side in a horizontal container
+
+                yield self.system_info_widget
+
+            with Horizontal(id="loadable_lists_container"):
+                yield self.loadable_list1
+                yield self.loadable_list2
+
         yield Footer()
 
     async def on_mount(self) -> None:
         await self._update_integration_status()
+        await self._update_system_info()
         self.api_token_input.focus()
 
     def _load_existing_config(self) -> None:
@@ -223,6 +244,10 @@ class SetupScreen(Screen):
             return False, "API token is required"
         if len(value.strip()) < 8:
             return False, "API token must be at least 8 characters"
+        
+        # Update system info when API token changes
+        await self._update_system_info()
+        
         return True, ""
 
     async def validate_agent_name(self, value: str) -> tuple[bool, str]:
@@ -235,6 +260,13 @@ class SetupScreen(Screen):
         try:
             status = await self.integration_status_service.get_integration_status()
             self.integration_status_widget.update_from_integration_status(status)
+        except Exception:
+            pass
+
+    async def _update_system_info(self) -> None:
+        """Update the system info widget with current data."""
+        try:
+            await self.system_info_widget.refresh_data()
         except Exception:
             pass
 

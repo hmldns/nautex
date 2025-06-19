@@ -64,6 +64,12 @@ class LoadableList(Vertical):
     LoadableList .loading-item > LoadingIndicator {
         color: $primary;
     }
+
+    /* Add vertical breathing room between border and first/last item */
+    LoadableList .list-view {
+        padding-top: 1;
+        padding-bottom: 1;
+    }
     """
 
     # Define a message class for selection changes

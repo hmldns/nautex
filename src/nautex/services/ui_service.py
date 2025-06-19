@@ -13,7 +13,6 @@ from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig, AccountInfo
 from ..models.api_models import Project, ImplementationPlan
 from ..models.plan_context import PlanContext
-from ..tui.screens import SetupApp
 
 
 class UIService:
@@ -71,6 +70,7 @@ class UIService:
         """
         try:
             # Create the setup app with the necessary services
+            from ..tui.screens import SetupApp
             setup_app = SetupApp(
                 config_service=self.config_service,
                 project_root=self.project_root
@@ -175,8 +175,9 @@ class UIService:
             plan_context: The plan context data to display
         """
         # Use the injected integration status service
+        from ..tui.screens import StatusScreen
         status_app = StatusScreen(
             plan_context, 
             integration_status_service=self.integration_status_service
         )
-        await status_app.run_async() 
+        await status_app.run_async()

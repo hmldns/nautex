@@ -6,6 +6,7 @@ from .integration_status import StatusDisplay, IntegrationStatusPanel, AccountSt
 from .views import ConfigurationSummaryView
 from .integration import IntegrationStatusWidget
 from .plan_context import PlanContextWidget
+from .loadable_list import LoadableList
 
 __all__ = [
     "ConfirmationDialog",
@@ -16,4 +17,5 @@ __all__ = [
     "ConfigurationSummaryView",
     "IntegrationStatusWidget",
     "PlanContextWidget",
+    "LoadableList",
 ]

@@ -1,5 +1,6 @@
 """TUI screen for the interactive setup process."""
 
+import asyncio
 from pathlib import Path
 from typing import Optional
 
@@ -105,23 +106,51 @@ class SetupScreen(Screen):
             validator=self.validate_agent_name
         )
 
-        # Create loadable list widgets with mock data and test lambda
-        mock_data_loader = lambda: ["Loaded 1", "Loaded 2", "Loaded 3"]
+        # ------------------------------------------------------------------
+        # Data loaders for the two lists - with mock data and artificial delays
+        # ------------------------------------------------------------------
 
+        async def list1_loader() -> list[str]:
+            """Return demo data for List 1 asynchronously with artificial delay."""
+            # Simulate network delay or processing time
+            await asyncio.sleep(1.0)  # 1 second delay for testing
+
+            # Mock data that would normally come from an API or database
+            mock_data = ["Loaded 1", "Loaded 2", "Loaded 3", "Item A", "Item B", "Item C"]
+            return mock_data
+
+        async def list2_loader() -> list[str]:
+            """Return demo data for List 2 asynchronously with artificial delay, appending currently selected item from List 1 if available."""
+            # Simulate network delay or processing time (slightly longer than list1)
+            await asyncio.sleep(1.5)  # 1.5 second delay for testing
+
+            # Mock data that would normally come from an API or database
+            mock_data = ["Data 1", "Data 2", "Data 3"]
+
+            # Add the selected item from list1 if available
+            selected = self.loadable_list1.selected_item if hasattr(self, "loadable_list1") else None
+            if selected:
+                mock_data.append(f"Selected from List 1: {selected}")
+
+            return mock_data
+
+        # Create loadable list widgets
         self.loadable_list1 = LoadableList(
             title="List 1",
-            data_loader=mock_data_loader,  # Use lambda for loading
-            mock_data=["Item A", "Item B", "Item C"],
-            on_change=self.on_list1_selection_change
-        )
-        self.loadable_list2 = LoadableList(
-            title="List 2",
-            mock_data=["Data 1", "Data 2", "Data 3"],
-            on_change=self.on_list2_selection_change
+            data_loader=list1_loader,
+            on_change=self.on_list1_selection_change,
         )
 
-        # Create a button to toggle the disabled state of the first list
-        self.toggle_button = Button("Toggle List 1", id="toggle_button")
+        # For List 2 we provide the loader that references the first list's
+        # selection so it can include it on each reload.
+        self.loadable_list2 = LoadableList(
+            title="List 2",
+            data_loader=list2_loader,
+            on_change=self.on_list2_selection_change,
+        )
+
+        # Create a button to enable/disable the first list (toggles label)
+        self.toggle_button = Button("Disable List 1", id="toggle_button")
         self.toggle_button.on_click = self.on_toggle_button_click
 
         # Create a button to reload both lists
@@ -210,16 +239,22 @@ class SetupScreen(Screen):
             pass
 
     async def on_toggle_button_click(self) -> None:
-        """Toggle the disabled state of the first loadable list."""
-        self.loadable_list1.toggle_disabled()
+        """Enable or disable List 1 based on its current state."""
+        if self.loadable_list1.is_disabled:
+            self.loadable_list1.enable()
+            self.toggle_button.label = "Disable List 1"
+        else:
+            self.loadable_list1.disable()
+            self.toggle_button.label = "Enable List 1"
 
-        # Reload the list data to ensure the loading indicator is properly displayed
+        # Reload List 1 so the UI updates accordingly (shows disabled msg if needed)
         self.loadable_list1.reload()
 
     async def on_list1_selection_change(self, selected_item: str) -> None:
         """Handle selection change in the first list."""
         self.app.log(f"List 1 selection changed: {selected_item}")
-        # You can add your own logic here to handle the selection change
+        # Refresh List 2 so it can include the latest selection in its data
+        self.loadable_list2.reload()
 
     async def on_list2_selection_change(self, selected_item: str) -> None:
         """Handle selection change in the second list."""

@@ -1,6 +1,7 @@
 """Loadable list widget for the Nautex TUI."""
 
 import asyncio
+import inspect
 from typing import Callable, List, Optional, Any, Union, Awaitable, Iterable
 
 from textual.app import ComposeResult
@@ -68,8 +69,7 @@ class LoadableList(Vertical):
     def __init__(
         self,
         title: str,
-        data_loader: Optional[Callable[[], Any]] = None,
-        mock_data: Optional[List[str]] = None,
+        data_loader: Optional[Union[Callable[[], Any], Callable[[], Awaitable[Any]]]] = None,
         on_change: Optional[Callable[[Any], Awaitable[None]]] = None,
         **kwargs
     ):
@@ -77,14 +77,12 @@ class LoadableList(Vertical):
 
         Args:
             title: The title of the list widget
-            data_loader: A callable that returns data to be displayed in the list
-            mock_data: Mock data to display in the list (used if data_loader is None)
+            data_loader: A callable that returns data to be displayed in the list (can be async)
             on_change: Async callback function called when the selection changes and Enter is pressed
         """
         super().__init__(**kwargs)
         self.border_title = title
         self.data_loader = data_loader
-        self.mock_data = mock_data or ["Item 1", "Item 2", "Item 3"]
         self.on_change = on_change
 
         # Create widgets
@@ -106,12 +104,20 @@ class LoadableList(Vertical):
         yield self.save_message
 
     def on_mount(self):
-        """Called when the widget is mounted."""
+        """Called when the widget is mounted.
+
+        This method schedules the load_data method to be called in the next event loop iteration.
+        It works with both synchronous and asynchronous data loaders.
+        """
         # Load initial data
         self.app.call_later(self.load_data)
 
     def reload(self):
-        """Reload the list data."""
+        """Reload the list data.
+
+        This method schedules the load_data method to be called in the next event loop iteration.
+        It works with both synchronous and asynchronous data loaders.
+        """
         # Set loading state immediately to provide visual feedback
         self.is_loading = True
         # Schedule the load_data method to be called in the next event loop iteration
@@ -139,25 +145,27 @@ class LoadableList(Vertical):
         # Check if the list is disabled
         if self.is_disabled:
             # If disabled, show a message and don't load data
-            await asyncio.sleep(1)  # Short delay for visual feedback
             self.is_loading = False
             await self.list_view.clear()
             await self.list_view.append(ListItem(Label("List is disabled")))
             return
 
-        # Load data (with artificial delay for testing)
+        # Load data
         if self.data_loader:
             try:
-                # Use lambda with sleep for testing
-                await asyncio.sleep(1)  # 1 second delay for testing
-                data = self.data_loader()
+                # Check if the data_loader is a coroutine function
+                if inspect.iscoroutinefunction(self.data_loader):
+                    # If it's async, await it
+                    data = await self.data_loader()
+                else:
+                    # If it's not async, call it directly
+                    data = self.data_loader()
             except Exception as e:
                 self.app.log(f"Error loading data: {str(e)}")
                 data = ["Error loading data"]
         else:
-            # Use mock data with delay
-            await asyncio.sleep(1)  # 1 second delay for testing
-            data = self.mock_data
+            # No data loader provided
+            data = []
 
         # Update UI with data
         self.is_loading = False
@@ -179,16 +187,30 @@ class LoadableList(Vertical):
 
     def toggle_disabled(self):
         """Toggle the disabled state of the widget."""
-        self.is_disabled = not self.is_disabled
-        # Update the disabled property of the ListView
-        self.list_view.disabled = self.is_disabled
+        # Deprecated in favour of explicit enable/disable helpers
         if self.is_disabled:
-            self.add_class("disabled")
-            self.app.log("List disabled")
+            self.enable()
         else:
-            self.remove_class("disabled")
+            self.disable()
 
-        # Force a refresh to ensure the disabled state is applied
+    # ---------------------------------------------------------------------
+    # New explicit helpers for clarity when controlling the list externally
+    # ---------------------------------------------------------------------
+
+    def disable(self):
+        """Disable interaction with the list and apply disabled styles."""
+        self.is_disabled = True
+        self.list_view.disabled = True
+        self.add_class("disabled")
+        self.app.log("List disabled")
+        self.refresh()
+
+    def enable(self):
+        """Enable interaction with the list and remove disabled styles."""
+        self.is_disabled = False
+        self.list_view.disabled = False
+        self.remove_class("disabled")
+        self.app.log("List enabled")
         self.refresh()
 
     def watch_is_disabled(self, is_disabled: bool):

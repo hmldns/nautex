@@ -21,7 +21,7 @@ class ValidatedTextInput(Vertical):
     /* ───────────────── title ───────────────── */
     ValidatedTextInput > .title-row {
         height: 1;
-        margin: 0 0 1 0;
+        margin-left: 1;
     }
 
     /* ───────────────── input row ───────────────── */
@@ -38,7 +38,7 @@ class ValidatedTextInput(Vertical):
         width: 3;
         height: 3;
         border: none;
-        margin: 0;
+        margin: 0 1 0 0;
         padding: 0;
         color: $text;
     }
@@ -58,12 +58,13 @@ class ValidatedTextInput(Vertical):
     /* ───────────────── footer (error + hint) ───────────────── */
     ValidatedTextInput > .footer-row {
         height: 1;           /* single terminal row */
-        margin-top: 1;
+        margin-top: 0;
     }
 
     ValidatedTextInput .error-row {
         width: 1fr;          /* stretch; pushes hint to the right */
         color: $error;
+        margin-left: 1;
     }
 
     ValidatedTextInput .save-message {
@@ -71,6 +72,7 @@ class ValidatedTextInput(Vertical):
         align-horizontal: right;
         color: $text-muted;
         display: none;       /* shown only when value changes */
+        margin-right: 1;
     }
     """
 

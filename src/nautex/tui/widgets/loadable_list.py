@@ -40,6 +40,7 @@ class LoadableList(Vertical):
         height: 3;
         align: center middle;
         background: $surface-lighten-1;
+        width: 100%;
     }
 
     LoadableList .save-message {
@@ -50,6 +51,18 @@ class LoadableList(Vertical):
         margin-top: 0;
         height: 1;
         padding: 0 1;
+    }
+
+    /* Taller item to show animated LoadingIndicator clearly */
+    LoadableList .loading-item {
+        height: 3;
+        align: center middle;  /* centers children both ways */
+        background: $surface-lighten-1;
+    }
+
+    /* Style the spinner for visibility */
+    LoadableList .loading-item > LoadingIndicator {
+        color: $primary;
     }
     """
 
@@ -86,7 +99,6 @@ class LoadableList(Vertical):
         self.on_change = on_change
 
         # Create widgets
-        self.loading_indicator = LoadingIndicator()
         self.save_message = Static("press enter to save", classes="save-message")
         self.save_message.display = False
         self.item_data = []
@@ -131,16 +143,13 @@ class LoadableList(Vertical):
         # Clear existing items
         await self.list_view.clear()
 
-        # Create a loading indicator item with a clear label
-        loading_container = Horizontal(classes="loading-container")
-        loading_item = ListItem(loading_container)
+        # Create loading indicator dynamically to avoid re-mounting issues
+        loading_spinner = LoadingIndicator()
+        loading_item = ListItem(loading_spinner, classes="loading-item")
         await self.list_view.append(loading_item)
-        # Now that loading_container is mounted, we can mount the loading indicator to it
-        await loading_container.mount(self.loading_indicator)
 
-        # Add a "Loading..." label to make it more visible
-        loading_label = ListItem(Label("Loading..."))
-        await self.list_view.append(loading_label)
+        # Disable interaction while loading
+        self.list_view.disabled = True
 
         # Check if the list is disabled
         if self.is_disabled:
@@ -170,7 +179,7 @@ class LoadableList(Vertical):
         # Update UI with data
         self.is_loading = False
 
-        # Clear the loading indicator
+        # Clear previous items (loading indicator)
         await self.list_view.clear()
 
         # Add items to the list
@@ -184,6 +193,9 @@ class LoadableList(Vertical):
         else:
             # If no data, show a message
             await self.list_view.append(ListItem(Label("No items found")))
+
+        # Re-enable interaction
+        self.list_view.disabled = self.is_disabled  # remain disabled only if explicitly disabled
 
     def toggle_disabled(self):
         """Toggle the disabled state of the widget."""

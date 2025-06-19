@@ -12,6 +12,7 @@ from textual.widgets import Button, Footer, Static
 from ..widgets import (
     ValidatedTextInput,
     IntegrationStatusWidget,
+    LoadableList,
 )
 from ...services.config_service import ConfigurationService, ConfigurationError
 from ...services.integration_status_service import IntegrationStatusService
@@ -40,6 +41,32 @@ class SetupScreen(Screen):
     #main_content {
         padding: 1;
         margin: 0;
+        height: 1fr;           /* occupy remaining vertical space */
+    }
+
+    #loadable_lists_container {
+        height: 1fr;           /* allow lists to grow */
+        margin: 1 0 0 0;
+        padding: 0;
+    }
+
+    #loadable_lists_container > LoadableList {
+        width: 1fr;           /* even horizontal distribution */
+        height: 1fr;          /* fill vertical space */
+        margin-right: 1;
+    }
+
+    #loadable_lists_container > LoadableList:last-of-type {
+        margin-right: 0;
+    }
+
+    #toggle_button, #reload_button {
+        margin: 1 0;
+        width: auto;
+    }
+
+    #reload_button {
+        background: $success;
     }
     """
 
@@ -78,10 +105,37 @@ class SetupScreen(Screen):
             validator=self.validate_agent_name
         )
 
+        # Create loadable list widgets with mock data and test lambda
+        mock_data_loader = lambda: ["Loaded 1", "Loaded 2", "Loaded 3"]
+
+        self.loadable_list1 = LoadableList(
+            title="List 1",
+            data_loader=mock_data_loader,  # Use lambda for loading
+            mock_data=["Item A", "Item B", "Item C"],
+            on_change=self.on_list1_selection_change
+        )
+        self.loadable_list2 = LoadableList(
+            title="List 2",
+            mock_data=["Data 1", "Data 2", "Data 3"],
+            on_change=self.on_list2_selection_change
+        )
+
+        # Create a button to toggle the disabled state of the first list
+        self.toggle_button = Button("Toggle List 1", id="toggle_button")
+        self.toggle_button.on_click = self.on_toggle_button_click
+
+        # Create a button to reload both lists
+        self.reload_button = Button("Reload Lists", id="reload_button")
+        self.reload_button.on_click = self.on_reload_button_click
+
         # Create a list of focusable widgets for tab/enter navigation
         self.focusable_widgets = [
             self.api_token_input,
             self.agent_name_input,
+            self.loadable_list1,
+            self.loadable_list2,
+            # self.toggle_button,
+            # self.reload_button,
         ]
         self.current_focus_index = 0
 
@@ -94,6 +148,13 @@ class SetupScreen(Screen):
             with Vertical(id="input_section"):
                 yield self.api_token_input
                 yield self.agent_name_input
+                # Add toggle button and reload button
+                yield self.toggle_button
+                yield self.reload_button
+                # Add loadable lists side by side in a horizontal container
+                with Horizontal(id="loadable_lists_container"):
+                    yield self.loadable_list1
+                    yield self.loadable_list2
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -147,6 +208,29 @@ class SetupScreen(Screen):
             self.integration_status_widget.update_from_integration_status(status)
         except Exception:
             pass
+
+    async def on_toggle_button_click(self) -> None:
+        """Toggle the disabled state of the first loadable list."""
+        self.loadable_list1.toggle_disabled()
+
+        # Reload the list data to ensure the loading indicator is properly displayed
+        self.loadable_list1.reload()
+
+    async def on_list1_selection_change(self, selected_item: str) -> None:
+        """Handle selection change in the first list."""
+        self.app.log(f"List 1 selection changed: {selected_item}")
+        # You can add your own logic here to handle the selection change
+
+    async def on_list2_selection_change(self, selected_item: str) -> None:
+        """Handle selection change in the second list."""
+        self.app.log(f"List 2 selection changed: {selected_item}")
+        # You can add your own logic here to handle the selection change
+
+    async def on_reload_button_click(self) -> None:
+        """Reload both lists."""
+        self.app.log("Reloading lists...")
+        self.loadable_list1.reload()
+        self.loadable_list2.reload()
 
 
 class SetupApp(App):

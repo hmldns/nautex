@@ -16,7 +16,7 @@ class LoadableList(Vertical):
 
     DEFAULT_CSS = """
     LoadableList {
-        height: 10;
+        height: 1fr;
         margin: 0;
         padding: 0;
         border: solid $primary;
@@ -187,7 +187,6 @@ class LoadableList(Vertical):
             self.app.log("List disabled")
         else:
             self.remove_class("disabled")
-            self.app.log("List enabled")
 
         # Force a refresh to ensure the disabled state is applied
         self.refresh()

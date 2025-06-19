@@ -213,6 +213,6 @@ class ValidatedTextInput(Vertical):
         if self.validator and self.validate_on_init:
             self.app.call_later(self.validate)
 
-    def focus(self) -> None:
+    def focus(self, scroll_visible: bool = True) -> None:
         """Focus the input field."""
         self.input_field.focus()

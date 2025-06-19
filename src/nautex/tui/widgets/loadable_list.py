@@ -11,22 +11,25 @@ from textual.binding import Binding
 from textual.message import Message
 
 
-class LoadableList(ListView):
+class LoadableList(Vertical):
     """A list widget that can load data asynchronously and display a loading indicator."""
 
     DEFAULT_CSS = """
     LoadableList {
-        height: auto;
+        height: 10;
         margin: 0;
         padding: 0;
         border: solid $primary;
+        border-bottom: solid $primary;
     }
 
     LoadableList.disabled {
         opacity: 0.5;
+        border: solid $error;
+        border-bottom: solid $error;
     }
 
-    LoadableList > ListItem {
+    LoadableList .list-view > ListItem {
         height: 1;
         margin: 0;
         padding: 0 1;
@@ -35,6 +38,7 @@ class LoadableList(ListView):
     LoadableList .loading-container {
         height: 3;
         align: center middle;
+        background: $surface-lighten-1;
     }
 
     LoadableList .save-message {
@@ -42,6 +46,9 @@ class LoadableList(ListView):
         align-horizontal: right;
         color: $text-muted;
         display: none;       /* shown only when value changes */
+        margin-top: 0;
+        height: 1;
+        padding: 0 1;
     }
     """
 
@@ -74,10 +81,6 @@ class LoadableList(ListView):
             mock_data: Mock data to display in the list (used if data_loader is None)
             on_change: Async callback function called when the selection changes and Enter is pressed
         """
-        # Set initial_index to None to start with no selection
-        if "initial_index" not in kwargs:
-            kwargs["initial_index"] = None
-
         super().__init__(**kwargs)
         self.border_title = title
         self.data_loader = data_loader
@@ -90,18 +93,28 @@ class LoadableList(ListView):
         self.save_message.display = False
         self.item_data = []
 
+        # Create the ListView
+        self.list_view = ListView(classes="list-view", initial_index=None)
+
     def compose(self) -> ComposeResult:
         """Compose the loadable list layout."""
         # Set the border title
         self.styles.border_title = self.border_title
 
-        # ListView will be populated with ListItems in load_data
-        # Add the save message below the list
+        # Yield the ListView and the save message
+        yield self.list_view
         yield self.save_message
 
     def on_mount(self):
         """Called when the widget is mounted."""
         # Load initial data
+        self.app.call_later(self.load_data)
+
+    def reload(self):
+        """Reload the list data."""
+        # Set loading state immediately to provide visual feedback
+        self.is_loading = True
+        # Schedule the load_data method to be called in the next event loop iteration
         self.app.call_later(self.load_data)
 
     async def load_data(self):
@@ -110,16 +123,27 @@ class LoadableList(ListView):
         self.is_loading = True
 
         # Clear existing items
-        await self.clear()
+        await self.list_view.clear()
 
-        # Create a loading indicator item
-        loading_item = ListItem(
-            Horizontal(
-                self.loading_indicator,
-                classes="loading-container"
-            )
-        )
-        await self.append(loading_item)
+        # Create a loading indicator item with a clear label
+        loading_container = Horizontal(classes="loading-container")
+        loading_item = ListItem(loading_container)
+        await self.list_view.append(loading_item)
+        # Now that loading_container is mounted, we can mount the loading indicator to it
+        await loading_container.mount(self.loading_indicator)
+
+        # Add a "Loading..." label to make it more visible
+        loading_label = ListItem(Label("Loading..."))
+        await self.list_view.append(loading_label)
+
+        # Check if the list is disabled
+        if self.is_disabled:
+            # If disabled, show a message and don't load data
+            await asyncio.sleep(1)  # Short delay for visual feedback
+            self.is_loading = False
+            await self.list_view.clear()
+            await self.list_view.append(ListItem(Label("List is disabled")))
+            return
 
         # Load data (with artificial delay for testing)
         if self.data_loader:
@@ -127,7 +151,8 @@ class LoadableList(ListView):
                 # Use lambda with sleep for testing
                 await asyncio.sleep(1)  # 1 second delay for testing
                 data = self.data_loader()
-            except Exception:
+            except Exception as e:
+                self.app.log(f"Error loading data: {str(e)}")
                 data = ["Error loading data"]
         else:
             # Use mock data with delay
@@ -138,34 +163,46 @@ class LoadableList(ListView):
         self.is_loading = False
 
         # Clear the loading indicator
-        await self.clear()
+        await self.list_view.clear()
 
         # Add items to the list
         self.item_data = []
-        for item in data:
-            item_str = str(item)
-            list_item = ListItem(Label(item_str))
-            self.item_data.append(item)
-            await self.append(list_item)
+        if data:
+            for item in data:
+                item_str = str(item)
+                list_item = ListItem(Label(item_str))
+                self.item_data.append(item)
+                await self.list_view.append(list_item)
+        else:
+            # If no data, show a message
+            await self.list_view.append(ListItem(Label("No items found")))
 
     def toggle_disabled(self):
         """Toggle the disabled state of the widget."""
         self.is_disabled = not self.is_disabled
         # Update the disabled property of the ListView
-        self.disabled = self.is_disabled
+        self.list_view.disabled = self.is_disabled
         if self.is_disabled:
             self.add_class("disabled")
+            self.app.log("List disabled")
         else:
             self.remove_class("disabled")
+            self.app.log("List enabled")
+
+        # Force a refresh to ensure the disabled state is applied
+        self.refresh()
 
     def watch_is_disabled(self, is_disabled: bool):
         """React to changes in the disabled state."""
         # Update the disabled property of the ListView
-        self.disabled = is_disabled
+        self.list_view.disabled = is_disabled
         if is_disabled:
             self.add_class("disabled")
         else:
             self.remove_class("disabled")
+
+        # Force a refresh to ensure the disabled state is applied
+        self.refresh()
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """Handle the highlighted event from ListView."""
@@ -175,10 +212,12 @@ class LoadableList(ListView):
         # Show the save message when the selection changes
         self.value_changed = True
         self.save_message.display = True
+        # Force a refresh to ensure the save message is displayed
+        self.save_message.refresh()
 
         # Post a message about the selection change
-        if event.item is not None and self.index is not None and 0 <= self.index < len(self.item_data):
-            selected_item = self.item_data[self.index]
+        if event.item is not None and self.list_view.index is not None and 0 <= self.list_view.index < len(self.item_data):
+            selected_item = self.item_data[self.list_view.index]
             self.post_message(self.SelectionChanged(self, selected_item))
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -190,15 +229,19 @@ class LoadableList(ListView):
         self.save_message.display = False
 
         # Call the on_change callback if provided
-        if self.value_changed and self.on_change and self.index is not None and 0 <= self.index < len(self.item_data):
+        if self.value_changed and self.on_change and self.list_view.index is not None and 0 <= self.list_view.index < len(self.item_data):
             self.value_changed = False
-            selected_item = self.item_data[self.index]
+            selected_item = self.item_data[self.list_view.index]
             if callable(self.on_change):
                 await self.on_change(selected_item)
 
     @property
     def selected_item(self) -> Optional[Any]:
         """Get the currently selected item."""
-        if self.index is not None and 0 <= self.index < len(self.item_data):
-            return self.item_data[self.index]
+        if self.list_view.index is not None and 0 <= self.list_view.index < len(self.item_data):
+            return self.item_data[self.list_view.index]
         return None
+
+    def focus(self, scroll_visible: bool = True) -> None:
+        """Focus the input field."""
+        self.list_view.focus()

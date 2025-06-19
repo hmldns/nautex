@@ -1,14 +1,17 @@
 """Loadable list widget for the Nautex TUI."""
 
 import asyncio
-from typing import Callable, List, Optional, Any
+from typing import Callable, List, Optional, Any, Union, Awaitable, Iterable
 
+from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
-from textual.widgets import Static, Button, LoadingIndicator
+from textual.widgets import Static, Button, LoadingIndicator, ListView, ListItem, Label
 from textual.reactive import reactive
+from textual.binding import Binding
+from textual.message import Message
 
 
-class LoadableList(Vertical):
+class LoadableList(ListView):
     """A list widget that can load data asynchronously and display a loading indicator."""
 
     DEFAULT_CSS = """
@@ -19,44 +22,48 @@ class LoadableList(Vertical):
         border: solid $primary;
     }
 
-    /* ───────────────── title ───────────────── */
-    LoadableList > .title-row {
-        height: 1;
-        margin: 0 0 1 0;
-    }
-
-    /* ───────────────── content ───────────────── */
-    LoadableList > .content {
-        height: auto;
-        margin: 0;
-        padding: 0 1;
-    }
-
     LoadableList.disabled {
         opacity: 0.5;
     }
 
-    LoadableList .list-item {
+    LoadableList > ListItem {
         height: 1;
         margin: 0;
-        padding: 0;
+        padding: 0 1;
     }
 
     LoadableList .loading-container {
         height: 3;
         align: center middle;
     }
+
+    LoadableList .save-message {
+        width: auto;
+        align-horizontal: right;
+        color: $text-muted;
+        display: none;       /* shown only when value changes */
+    }
     """
+
+    # Define a message class for selection changes
+    class SelectionChanged(Message):
+        """Message sent when the selection changes."""
+
+        def __init__(self, sender, selected_item: Optional[Any] = None):
+            self.selected_item = selected_item
+            super().__init__()
 
     # Reactive properties
     is_loading = reactive(False)
     is_disabled = reactive(False)
+    value_changed = reactive(False)
 
     def __init__(
         self,
         title: str,
         data_loader: Optional[Callable[[], Any]] = None,
         mock_data: Optional[List[str]] = None,
+        on_change: Optional[Callable[[Any], Awaitable[None]]] = None,
         **kwargs
     ):
         """Initialize the LoadableList widget.
@@ -65,25 +72,32 @@ class LoadableList(Vertical):
             title: The title of the list widget
             data_loader: A callable that returns data to be displayed in the list
             mock_data: Mock data to display in the list (used if data_loader is None)
+            on_change: Async callback function called when the selection changes and Enter is pressed
         """
+        # Set initial_index to None to start with no selection
+        if "initial_index" not in kwargs:
+            kwargs["initial_index"] = None
+
         super().__init__(**kwargs)
         self.border_title = title
         self.data_loader = data_loader
         self.mock_data = mock_data or ["Item 1", "Item 2", "Item 3"]
+        self.on_change = on_change
 
         # Create widgets
         self.loading_indicator = LoadingIndicator()
-        self.content = Vertical(classes="content")
-        self.items = []
+        self.save_message = Static("press enter to save", classes="save-message")
+        self.save_message.display = False
+        self.item_data = []
 
-    def compose(self):
+    def compose(self) -> ComposeResult:
         """Compose the loadable list layout."""
         # Set the border title
         self.styles.border_title = self.border_title
 
-        with Vertical(classes="content"):
-            # This will be populated with list items or loading indicator
-            yield self.content
+        # ListView will be populated with ListItems in load_data
+        # Add the save message below the list
+        yield self.save_message
 
     def on_mount(self):
         """Called when the widget is mounted."""
@@ -92,14 +106,20 @@ class LoadableList(Vertical):
 
     async def load_data(self):
         """Load data into the list."""
-        # Show loading indicator
+        # Show loading state
         self.is_loading = True
-        await self.content.remove_children()
 
-        # Create loading container and mount it directly
-        loading_container = Horizontal(classes="loading-container")
-        await self.content.mount(loading_container)
-        await loading_container.mount(self.loading_indicator)
+        # Clear existing items
+        await self.clear()
+
+        # Create a loading indicator item
+        loading_item = ListItem(
+            Horizontal(
+                self.loading_indicator,
+                classes="loading-container"
+            )
+        )
+        await self.append(loading_item)
 
         # Load data (with artificial delay for testing)
         if self.data_loader:
@@ -116,18 +136,23 @@ class LoadableList(Vertical):
 
         # Update UI with data
         self.is_loading = False
-        await self.content.remove_children()
+
+        # Clear the loading indicator
+        await self.clear()
 
         # Add items to the list
-        self.items = []
+        self.item_data = []
         for item in data:
-            item_widget = Static(str(item), classes="list-item")
-            self.items.append(item_widget)
-            await self.content.mount(item_widget)
+            item_str = str(item)
+            list_item = ListItem(Label(item_str))
+            self.item_data.append(item)
+            await self.append(list_item)
 
     def toggle_disabled(self):
         """Toggle the disabled state of the widget."""
         self.is_disabled = not self.is_disabled
+        # Update the disabled property of the ListView
+        self.disabled = self.is_disabled
         if self.is_disabled:
             self.add_class("disabled")
         else:
@@ -135,7 +160,45 @@ class LoadableList(Vertical):
 
     def watch_is_disabled(self, is_disabled: bool):
         """React to changes in the disabled state."""
+        # Update the disabled property of the ListView
+        self.disabled = is_disabled
         if is_disabled:
             self.add_class("disabled")
         else:
             self.remove_class("disabled")
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Handle the highlighted event from ListView."""
+        if self.is_disabled:
+            return
+
+        # Show the save message when the selection changes
+        self.value_changed = True
+        self.save_message.display = True
+
+        # Post a message about the selection change
+        if event.item is not None and self.index is not None and 0 <= self.index < len(self.item_data):
+            selected_item = self.item_data[self.index]
+            self.post_message(self.SelectionChanged(self, selected_item))
+
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Handle the selected event from ListView."""
+        if self.is_disabled:
+            return
+
+        # Hide the save message
+        self.save_message.display = False
+
+        # Call the on_change callback if provided
+        if self.value_changed and self.on_change and self.index is not None and 0 <= self.index < len(self.item_data):
+            self.value_changed = False
+            selected_item = self.item_data[self.index]
+            if callable(self.on_change):
+                await self.on_change(selected_item)
+
+    @property
+    def selected_item(self) -> Optional[Any]:
+        """Get the currently selected item."""
+        if self.index is not None and 0 <= self.index < len(self.item_data):
+            return self.item_data[self.index]
+        return None

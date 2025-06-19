@@ -2,7 +2,6 @@
 
 import time
 import logging
-from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 
@@ -11,25 +10,10 @@ from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
 from .mcp_config_service import MCPConfigService, MCPConfigStatus
 from ..api.client import NautexAPIError
+from ..models.integration_status import IntegrationStatus
 
 # Set up logging
 logger = logging.getLogger(__name__)
-
-
-@dataclass(kw_only=True)
-class IntegrationStatus:
-    """Data class representing current integration status."""
-
-    config_loaded: bool = False
-    config_path: Optional[Path] = None
-    config_summary: Optional[Dict[str, Any]] = None
-    api_connected: bool = False
-    api_response_time: Optional[float] = None
-    account_info: Optional[AccountInfo] = None
-    mcp_status: MCPConfigStatus = MCPConfigStatus.NOT_FOUND
-    mcp_config_path: Optional[Path] = None
-    integration_ready: bool = False
-    status_message: str = ""
 
 
 class IntegrationStatusService:
@@ -150,7 +134,7 @@ class IntegrationStatusService:
         if not config.project_id:
             return False, "Project ID must be selected"
 
-        if not config.implementation_plan_id:
+        if not config.plan_id:
             return False, "Implementation plan must be selected"
 
         return True, "Configuration is complete"
@@ -241,7 +225,7 @@ class IntegrationStatusService:
         return {
             "agent_instance_name": config.agent_instance_name,
             "project_id": config.project_id,
-            "plan_id": config.implementation_plan_id,
+            "plan_id": config.plan_id,
             "has_token": bool(config.api_token)
         }
 

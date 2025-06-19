@@ -12,7 +12,8 @@ sys.path.insert(0, str(project_root))
 
 from src.nautex.tui.screens.setup_screen import SetupScreen, SetupApp
 from src.nautex.services.config_service import ConfigurationService
-from src.nautex.services.integration_status_service import IntegrationStatus, IntegrationStatusService
+from src.nautex.services.integration_status_service import IntegrationStatusService
+from src.nautex.models.integration_status import IntegrationStatus
 from src.nautex.services.mcp_config_service import MCPConfigService, MCPConfigStatus
 from src.nautex.services.nautex_api_service import NautexAPIService
 from src.nautex.models.api_models import Project, ImplementationPlan, AccountInfo
@@ -36,7 +37,7 @@ class MockConfigurationService:
             agent_instance_name="debug-agent",
             api_token=SecretStr("mock-api-token"),
             project_id="mock-project-id",
-            implementation_plan_id="mock-plan-id"
+            plan_id="mock-plan-id"
         )
 
     def save_configuration(self, config_data: NautexConfig) -> None:

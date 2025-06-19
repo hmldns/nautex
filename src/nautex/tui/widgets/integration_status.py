@@ -7,8 +7,7 @@ from textual.widgets import Static, Button, Digits
 from textual.containers import Horizontal, HorizontalGroup
 
 from src.nautex.services.mcp_config_service import MCPConfigStatus
-from src.nautex.services import IntegrationStatus
-
+from src.nautex.models.integration_status import IntegrationStatus
 
 
 class StatusDisplay(Static):

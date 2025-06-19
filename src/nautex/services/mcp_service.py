@@ -131,7 +131,7 @@ async def nautex_next_task() -> Dict[str, Any]:
                 "configured": False
             }
 
-        if not service.config.project_id or not service.config.implementation_plan_id:
+        if not service.config.project_id or not service.config.plan_id:
             return {
                 "success": False,
                 "error": "Project ID and implementation plan ID must be configured"
@@ -139,7 +139,7 @@ async def nautex_next_task() -> Dict[str, Any]:
 
         next_task = await service.nautex_api_service.get_next_task(
             project_id=service.config.project_id,
-            plan_id=service.config.implementation_plan_id
+            plan_id=service.config.plan_id
         )
 
         if next_task:
@@ -371,7 +371,7 @@ async def nautex_task_info(task_designators: List[str]) -> Dict[str, Any]:
                 "configured": False
             }
 
-        if not service.config.project_id or not service.config.implementation_plan_id:
+        if not service.config.project_id or not service.config.plan_id:
             return {
                 "success": False,
                 "error": "Project ID and implementation plan ID must be configured"
@@ -379,7 +379,7 @@ async def nautex_task_info(task_designators: List[str]) -> Dict[str, Any]:
 
         tasks = await service.nautex_api_service.get_tasks_info(
             project_id=service.config.project_id,
-            plan_id=service.config.implementation_plan_id,
+            plan_id=service.config.plan_id,
             task_designators=task_designators
         )
 

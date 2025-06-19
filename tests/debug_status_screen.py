@@ -11,7 +11,8 @@ sys.path.insert(0, str(project_root))
 
 
 from src.nautex.tui.screens.status_screen import StatusScreen
-from src.nautex.services.integration_status_service import IntegrationStatus, IntegrationStatusService
+from src.nautex.services.integration_status_service import IntegrationStatusService
+from src.nautex.models.integration_status import IntegrationStatus
 from src.nautex.services.mcp_config_service import MCPConfigStatus
 
 

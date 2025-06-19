@@ -11,8 +11,8 @@ from ..widgets import (
 )
 from ...services.integration_status_service import (
     IntegrationStatusService,
-    IntegrationStatus,
 )
+from ...models.integration_status import IntegrationStatus
 
 
 class StatusScreen(App):

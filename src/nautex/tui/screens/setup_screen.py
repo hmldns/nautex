@@ -44,7 +44,7 @@ class SetupScreen(Screen):
         margin: 0;
         padding: 0;
     }
-    
+
     #main_content {
         padding: 1;
         margin: 0;
@@ -131,65 +131,108 @@ class SetupScreen(Screen):
                     self.setup_data["agent_instance_name"] = config.agent_instance_name
                 if hasattr(config, "project_id") and config.project_id:
                     self.setup_data["project_id"] = config.project_id
-                if hasattr(config, "implementation_plan_id") and config.implementation_plan_id:
-                    self.setup_data["implementation_plan_id"] = config.implementation_plan_id
+                if hasattr(config, "implementation_plan_id") and config.plan_id:
+                    self.setup_data["implementation_plan_id"] = config.plan_id
                 # Account info is now retrieved directly from the API when needed
         except ConfigurationError:
             pass
 
     async def _update_display(self) -> None:
-        self.api_token_input.display = False
-        self.agent_name_input.display = False
-        self.account_panel.display = False
-        self.projects_list_widget.display = False
-        self.plans_list_widget.display = False
-        self.config_summary.display = False
-        self.back_button.display = False
-        self.next_button.display = False
-        self.save_button.display = False
+        # Check if there's no initial configuration
+        has_initial_config = bool(self.setup_data.get("api_token"))
 
-        await self._update_integration_status()
-
-        if self.current_step == "token":
-            self.api_token_input.display = True
-            if self.setup_data.get("api_token"):
-                self.api_token_input.set_value(self.setup_data["api_token"])
-            self.next_button.display = True
-            self.next_button.label = "Next"
-            self.api_token_input.focus()
-        elif self.current_step == "agent_name":
+        if not has_initial_config:
+            # Make all layout elements visible but disabled if no initial configuration
             self.api_token_input.display = True
             self.agent_name_input.display = True
-            if self.setup_data.get("agent_instance_name"):
-                self.agent_name_input.set_value(self.setup_data["agent_instance_name"])
-            self.back_button.display = True
-            self.next_button.display = True
-            self.next_button.label = "Validate"
-            self.agent_name_input.focus()
-        elif self.current_step == "validate":
-            self.api_token_input.display = True
-            self.agent_name_input.display = True
-            self.account_panel.display = True
-            self.back_button.display = True
-            self.next_button.display = True
-            self.next_button.label = "Continue"
-        elif self.current_step == "projects":
-            self.account_panel.display = True
-            self.projects_list_widget.display = True
-            self.back_button.display = True
-            self.next_button.display = True
-            self.next_button.label = "Select Project"
-        elif self.current_step == "plans":
             self.account_panel.display = True
             self.projects_list_widget.display = True
             self.plans_list_widget.display = True
-            self.back_button.display = True
-            self.next_button.display = True
-            self.next_button.label = "Select Plan"
-        elif self.current_step == "summary":
             self.config_summary.display = True
             self.back_button.display = True
+            self.next_button.display = True
             self.save_button.display = True
+
+            # Disable all elements except the first step
+            self.agent_name_input.disabled = True
+            self.account_panel.disabled = True
+            self.projects_list_widget.disabled = True
+            self.plans_list_widget.disabled = True
+            self.config_summary.disabled = True
+            self.back_button.disabled = True
+            self.save_button.disabled = True
+
+            # Only enable the first step
+            self.api_token_input.disabled = False
+            self.next_button.disabled = False
+            self.next_button.label = "Next"
+            self.api_token_input.focus()
+        else:
+            # Reset all disabled states
+            self.api_token_input.disabled = False
+            self.agent_name_input.disabled = False
+            self.account_panel.disabled = False
+            self.projects_list_widget.disabled = False
+            self.plans_list_widget.disabled = False
+            self.config_summary.disabled = False
+            self.back_button.disabled = False
+            self.next_button.disabled = False
+            self.save_button.disabled = False
+
+            # Hide all elements first
+            self.api_token_input.display = False
+            self.agent_name_input.display = False
+            self.account_panel.display = False
+            self.projects_list_widget.display = False
+            self.plans_list_widget.display = False
+            self.config_summary.display = False
+            self.back_button.display = False
+            self.next_button.display = False
+            self.save_button.display = False
+
+            # Show only the elements relevant to the current step
+            if self.current_step == "token":
+                self.api_token_input.display = True
+                if self.setup_data.get("api_token"):
+                    self.api_token_input.set_value(self.setup_data["api_token"])
+                self.next_button.display = True
+                self.next_button.label = "Next"
+                self.api_token_input.focus()
+            elif self.current_step == "agent_name":
+                self.api_token_input.display = True
+                self.agent_name_input.display = True
+                if self.setup_data.get("agent_instance_name"):
+                    self.agent_name_input.set_value(self.setup_data["agent_instance_name"])
+                self.back_button.display = True
+                self.next_button.display = True
+                self.next_button.label = "Validate"
+                self.agent_name_input.focus()
+            elif self.current_step == "validate":
+                self.api_token_input.display = True
+                self.agent_name_input.display = True
+                self.account_panel.display = True
+                self.back_button.display = True
+                self.next_button.display = True
+                self.next_button.label = "Continue"
+            elif self.current_step == "projects":
+                self.account_panel.display = True
+                self.projects_list_widget.display = True
+                self.back_button.display = True
+                self.next_button.display = True
+                self.next_button.label = "Select Project"
+            elif self.current_step == "plans":
+                self.account_panel.display = True
+                self.projects_list_widget.display = True
+                self.plans_list_widget.display = True
+                self.back_button.display = True
+                self.next_button.display = True
+                self.next_button.label = "Select Plan"
+            elif self.current_step == "summary":
+                self.config_summary.display = True
+                self.back_button.display = True
+                self.save_button.display = True
+
+        await self._update_integration_status()
 
     async def action_handle_enter(self) -> None:
         if self.next_button.display:

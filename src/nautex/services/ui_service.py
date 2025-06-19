@@ -13,6 +13,7 @@ from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig, AccountInfo
 from ..models.api_models import Project, ImplementationPlan
 from ..models.plan_context import PlanContext
+from ..tui.screens import SetupApp
 
 
 class UIService:

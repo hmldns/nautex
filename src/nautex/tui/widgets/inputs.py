@@ -102,6 +102,8 @@ class ValidatedTextInput(Vertical):
         # Create a button for the status icon
         self.status_button = Button(" ", classes="status-button status-button-neutral")
 
+        self.status_button.styles.max_width = 7
+
         # Add a message for when value changes
         self.save_message = Static("press enter to save", classes="save-message")
         self.save_message.display = False

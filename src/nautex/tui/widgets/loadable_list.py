@@ -2,7 +2,7 @@
 
 import asyncio
 import inspect
-from typing import Callable, List, Optional, Any, Union, Awaitable, Iterable
+from typing import Callable, List, Optional, Any, Union, Awaitable, Iterable, Tuple
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
@@ -88,7 +88,7 @@ class LoadableList(Vertical):
     def __init__(
         self,
         title: str,
-        data_loader: Optional[Union[Callable[[], Any], Callable[[], Awaitable[Any]]]] = None,
+        data_loader: Optional[Callable[[], Awaitable[Tuple[List, Optional[int]]]]] = None,
         on_change: Optional[Callable[[Any], Awaitable[None]]] = None,
         **kwargs
     ):
@@ -96,13 +96,16 @@ class LoadableList(Vertical):
 
         Args:
             title: The title of the list widget
-            data_loader: A callable that returns data to be displayed in the list (can be async)
+            data_loader: A callable that returns data to be displayed in the list (can be async).
+                         Can return either a list of items or a tuple of (items_list, selected_index)
+                         where selected_index is the index of the item to be selected after loading.
             on_change: Async callback function called when the selection changes and Enter is pressed
         """
         super().__init__(**kwargs)
         self.border_title = title
         self.data_loader = data_loader
         self.on_change = on_change
+        self.empty_message = "No items found"
 
         # Create widgets
         self.save_message = Static("press enter to save", classes="save-message")
@@ -142,7 +145,12 @@ class LoadableList(Vertical):
         self.app.call_later(self.load_data)
 
     async def load_data(self):
-        """Load data into the list."""
+        """Load data into the list.
+
+        If the data_loader returns a tuple of (items_list, selected_index),
+        the selected_index will be used to set the selected item after loading.
+        Otherwise, it expects the data_loader to return just a list of items.
+        """
         # Show loading state
         self.is_loading = True
 
@@ -171,16 +179,16 @@ class LoadableList(Vertical):
                 # Check if the data_loader is a coroutine function
                 if inspect.iscoroutinefunction(self.data_loader):
                     # If it's async, await it
-                    data = await self.data_loader()
+                    result = await self.data_loader()
                 else:
                     # If it's not async, call it directly
-                    data = self.data_loader()
+                    result = self.data_loader()
             except Exception as e:
                 self.app.log(f"Error loading data: {str(e)}")
-                data = ["Error loading data"]
+                result = ["Error loading data"]
         else:
             # No data loader provided
-            data = []
+            result = []
 
         # Update UI with data
         self.is_loading = False
@@ -188,17 +196,29 @@ class LoadableList(Vertical):
         # Clear previous items (loading indicator)
         await self.list_view.clear()
 
+        # Check if result is a tuple with (items_list, selected_index)
+        selected_index = None
+        if isinstance(result, tuple) and len(result) == 2:
+            data, selected_index = result
+        else:
+            data = result
+
         # Add items to the list
         self.item_data = []
         if data:
             for item in data:
-                item_str = str(item)
+                # Use name attribute if available, otherwise convert to string
+                item_str = item.name if hasattr(item, 'name') else str(item)
                 list_item = ListItem(Label(item_str))
                 self.item_data.append(item)
                 await self.list_view.append(list_item)
+
+            # Set selected item if provided
+            if selected_index is not None and 0 <= selected_index < len(self.item_data):
+                self.list_view.index = selected_index
         else:
-            # If no data, show a message
-            await self.list_view.append(ListItem(Label("No items found")))
+            # If no data, show the empty message
+            await self.list_view.append(ListItem(Label(self.empty_message)))
 
         # Re-enable interaction
         self.list_view.disabled = self.is_disabled  # remain disabled only if explicitly disabled
@@ -284,3 +304,14 @@ class LoadableList(Vertical):
     def focus(self, scroll_visible: bool = True) -> None:
         """Focus the input field."""
         self.list_view.focus()
+
+    def set_empty_message(self, message: str) -> None:
+        """Set the message to display when the list is empty.
+
+        Args:
+            message: The message to display
+        """
+        self.empty_message = message
+        # If the list is currently empty, reload to show the new message
+        if not self.item_data:
+            self.reload()

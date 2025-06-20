@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple, Callable
 import aiohttp
 import json
@@ -13,7 +14,7 @@ from ..models.api_models import (
     Project,
     ImplementationPlan,
     Task,
-    Requirement,
+    Requirement, APIResponse,
 )
 
 
@@ -233,7 +234,7 @@ class NautexAPIClient:
         else:
             raise NautexAPIError(f"Request failed after {max_retries} attempts")
 
-    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None) -> Dict[str, Any]:
+    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None) -> APIResponse:
         """Make a GET request.
 
         Args:
@@ -244,7 +245,8 @@ class NautexAPIClient:
         Returns:
             Parsed JSON response
         """
-        return await self._request("GET", endpoint_url, headers, timeout=timeout)
+        resp = await self._request("GET", endpoint_url, headers, timeout=timeout)
+        return APIResponse(**resp)
 
     async def post(
         self, 
@@ -411,11 +413,13 @@ class NautexAPIClient:
         url = self._get_full_api_url(self.ENDPOINT_ACCOUNT)
 
         try:
-            response_data = await self.get(url, headers, timeout=timeout)
+            response = await self.get(url, headers, timeout=timeout)
             logger.debug("Successfully retrieved account information")
 
+            acc_data = response.data.get('account')
+
             # Parse response into AccountInfo model
-            return AccountInfo.model_validate(response_data)
+            return AccountInfo.model_validate(acc_data)
 
         except NautexAPIError as e:
             logger.error(f"Failed to get account info: {e}")
@@ -437,11 +441,10 @@ class NautexAPIClient:
         url = self._get_full_api_url(self.ENDPOINT_PROJECTS)
 
         try:
-            response_data = await self.get(url, headers)
-            logger.debug(f"Successfully retrieved {len(response_data.get('projects', []))} projects")
+            response = await self.get(url, headers)
 
             # Parse response into list of Project models
-            projects_data = response_data.get('projects', [])
+            projects_data = response.data.get('projects', [])
             return [Project.model_validate(project) for project in projects_data]
 
         except NautexAPIError as e:

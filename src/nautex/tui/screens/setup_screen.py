@@ -1,8 +1,9 @@
 """TUI screen for the interactive setup process."""
 
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from pydantic import SecretStr
 from pygments.styles.dracula import yellow
@@ -23,6 +24,15 @@ from ...services.integration_status_service import IntegrationStatusService
 from ...services.mcp_config_service import MCPConfigService
 from ...services.nautex_api_service import NautexAPIService
 from ...models.config_models import NautexConfig
+
+
+@dataclass(kw_only=True)
+class ProjectItem:
+    id: str
+    name: str
+
+    def __str__(self):
+        return self.name
 
 
 class SetupScreen(Screen):
@@ -129,48 +139,20 @@ class SetupScreen(Screen):
             on_change=self.set_agent_name
         )
 
-        # ------------------------------------------------------------------
-        # Data loaders for the two lists - with mock data and artificial delays
-        # ------------------------------------------------------------------
-
-        async def list1_loader() -> list[str]:
-            """Return demo data for List 1 asynchronously with artificial delay."""
-            # Simulate network delay or processing time
-            await asyncio.sleep(1.0)  # 1 second delay for testing
-
-            # Mock data that would normally come from an API or database
-            mock_data = ["Loaded 1", "Loaded 2", "Loaded 3", "Item A", "Item B", "Item C"]
-            return mock_data
-
-        async def list2_loader() -> list[str]:
-            """Return demo data for List 2 asynchronously with artificial delay, appending currently selected item from List 1 if available."""
-            # Simulate network delay or processing time (slightly longer than list1)
-            await asyncio.sleep(1.5)  # 1.5 second delay for testing
-
-            # Mock data that would normally come from an API or database
-            mock_data = ["Data 1", "Data 2", "Data 3"]
-
-            # Add the selected item from list1 if available
-            selected = self.loadable_list1.selected_item if hasattr(self, "loadable_list1") else None
-            if selected:
-                mock_data.append(f"Selected from List 1: {selected}")
-
-            return mock_data
-
         # Create loadable list widgets
-        self.loadable_list1 = LoadableList(
+        self.projects_list = LoadableList(
             title="Projects",
-            data_loader=list1_loader,
-            on_change=self.on_list1_selection_change,
+            data_loader=self.projects_loader,
+            on_change=self.on_project_selection_change,
         )
 
-        # For List 2 we provide the loader that references the first list's
-        # selection so it can include it on each reload.
-        self.loadable_list2 = LoadableList(
+        # For List 2 we provide the loader that references the first list's selection
+        self.impl_plans_list = LoadableList(
             title="Implementation plans",
-            data_loader=list2_loader,
-            on_change=self.on_list2_selection_change,
+            data_loader=self.implementation_plans_loader,
+            on_change=self.on_impl_plan_selection_change,
         )
+        self.impl_plans_list.set_empty_message("Select a project to view implementation plans.")
 
         # Create a button to enable/disable the first list (toggles label)
         self.toggle_button = Button("Disable List 1", id="toggle_button")
@@ -184,14 +166,15 @@ class SetupScreen(Screen):
         self.focusable_widgets = [
             self.api_token_input,
             self.agent_name_input,
-            self.loadable_list1,
-            self.loadable_list2,
+            self.projects_list,
+            self.impl_plans_list,
             # self.toggle_button,
             # self.reload_button,
         ]
         self.current_focus_index = 0
 
         self._load_existing_config()
+
 
 
     async def validate_api_token(self, value: str) -> tuple[bool, str]:
@@ -221,9 +204,64 @@ class SetupScreen(Screen):
         tkm = self.config_service.config.api_token.get_secret_value()
         self.config_service.save_configuration()
 
+        # Refresh the projects list when token is set
+        if token:
+            self.projects_list.reload()
+
     async def set_agent_name(self, name: str) -> None:
         self.config_service.config.agent_instance_name = name
         self.config_service.save_configuration()
+
+        # ------------------------------------------------------------------
+        # Data loaders for projects and implementation plans
+        # ------------------------------------------------------------------
+
+    async def projects_loader(self) -> Tuple[list, Optional[int]]:
+        """Load projects from the API.
+
+        Returns:
+            A tuple of (projects_list, selected_index) where selected_index
+            is the index of the project to be selected after loading (if any).
+        """
+        try:
+            # Get projects from the API
+            projects_resp = await self.api_service.list_projects()
+            selected_index = None
+
+            projects = [ProjectItem(id=pr.project_id, name=pr.name) for pr in projects_resp]
+
+            # If we have a project_id in config, find its index to mark it as selected
+            if self.config_project_id:
+                for i, project in enumerate(projects):
+                    if project.id == self.config_project_id:
+                        selected_index = i
+                        break
+
+            return projects, selected_index
+        except Exception as e:
+            self.app.log(f"Error loading projects: {str(e)}")
+            self.projects_list.set_empty_message("No projects available. Ensure API connectivity")
+            return [], None
+
+    async def implementation_plans_loader(self) -> Tuple[list, Optional[int]]:
+        """Load implementation plans for the selected project."""
+        try:
+            # Check if we have a valid token and selected project
+            token = self.config_service.config.api_token.get_secret_value() if self.config_service.config.api_token else None
+            if not token:
+                return [], None
+
+            selected_project = self.projects_list.selected_item if hasattr(self, "loadable_list1") else None
+            if not selected_project:
+                return [], None
+
+            # Get implementation plans from the API
+            plans = await self.api_service.list_implementation_plans(selected_project.id)
+            return plans, None
+        except Exception as e:
+            self.app.log(f"Error loading implementation plans: {str(e)}")
+            return [], None
+
 
     def compose(self) -> ComposeResult:
         with Vertical(id="status_section"):
@@ -244,8 +282,8 @@ class SetupScreen(Screen):
                 yield self.system_info_widget
 
             with Horizontal(id="loadable_lists_container"):
-                yield self.loadable_list1
-                yield self.loadable_list2
+                yield self.projects_list
+                yield self.impl_plans_list
 
         yield Footer()
 
@@ -256,6 +294,9 @@ class SetupScreen(Screen):
 
         # Start polling for integration status updates
         self._start_polling_integration_status()
+
+        # Load projects on start
+        self.projects_list.reload()
 
     async def on_unmount(self) -> None:
         """Called when the screen is unmounted."""
@@ -291,6 +332,9 @@ class SetupScreen(Screen):
     def _load_existing_config(self) -> None:
         self.api_token_input.set_value(str(self.config_service.config.api_token))
         self.agent_name_input.set_value(str(self.config_service.config.agent_instance_name))
+
+        # Store the project_id from config to mark it as selected when projects are loaded
+        self.config_project_id = getattr(self.config_service.config, 'project_id', None)
 
     def action_quit(self) -> None:
         self.app.exit()
@@ -328,32 +372,42 @@ class SetupScreen(Screen):
 
     async def on_toggle_button_click(self) -> None:
         """Enable or disable List 1 based on its current state."""
-        if self.loadable_list1.is_disabled:
-            self.loadable_list1.enable()
+        if self.projects_list.is_disabled:
+            self.projects_list.enable()
             self.toggle_button.label = "Disable List 1"
         else:
-            self.loadable_list1.disable()
+            self.projects_list.disable()
             self.toggle_button.label = "Enable List 1"
 
         # Reload List 1 so the UI updates accordingly (shows disabled msg if needed)
-        self.loadable_list1.reload()
+        self.projects_list.reload()
 
-    async def on_list1_selection_change(self, selected_item: str) -> None:
+    async def on_project_selection_change(self, selected_item) -> None:
         """Handle selection change in the first list."""
-        self.app.log(f"List 1 selection changed: {selected_item}")
-        # Refresh List 2 so it can include the latest selection in its data
-        self.loadable_list2.reload()
+        self.app.log(f"Project selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
 
-    async def on_list2_selection_change(self, selected_item: str) -> None:
-        """Handle selection change in the second list."""
-        self.app.log(f"List 2 selection changed: {selected_item}")
-        # You can add your own logic here to handle the selection change
+        # Save the selected project ID to the configuration
+        if hasattr(selected_item, 'id'):
+            self.config_service.config.project_id = selected_item.id
+            self.config_service.save_configuration()
+
+        # Refresh the implementation plans list
+        self.impl_plans_list.reload()
+
+    async def on_impl_plan_selection_change(self, selected_item) -> None:
+        """Handle selection change in the implementation plans list."""
+        self.app.log(f"Implementation plan selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
+
+        # Save the selected implementation plan ID to the configuration
+        if hasattr(selected_item, 'id'):
+            self.config_service.config.implementation_plan_id = selected_item.id
+            self.config_service.save_configuration()
 
     async def on_reload_button_click(self) -> None:
         """Reload both lists."""
         self.app.log("Reloading lists...")
-        self.loadable_list1.reload()
-        self.loadable_list2.reload()
+        self.projects_list.reload()
+        self.impl_plans_list.reload()
 
 
 class SetupApp(App):

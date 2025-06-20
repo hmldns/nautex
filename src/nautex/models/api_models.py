@@ -254,7 +254,6 @@ class APIResponse(BaseModel):
     status: str = Field(..., description="Response status: success or error")
     data: Optional[Any] = Field(None, description="Response data payload")
     message: Optional[str] = Field(None, description="Human-readable message")
-    details: Optional[Any] = Field(None, description="Additional error details")
 
     @validator('status')
     def validate_status(cls, v):

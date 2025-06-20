@@ -21,7 +21,6 @@ class IntegrationStatus:
     
     # API connectivity status
     api_connected: bool = False
-    api_response_time: Optional[float] = None
     account_info: Optional[AccountInfo] = None
     
     # MCP integration status

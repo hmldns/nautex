@@ -25,7 +25,7 @@ class NautexConfig(BaseSettings):
         """Pydantic configuration for environment variables and JSON files."""
         env_file = ".env"
         env_file_encoding = "utf-8"
-        env_prefix = "NAUTEX_"  # Environment variables should be prefixed with NAUTEX_
+        env_prefix = "NAUTEX_"  # Environment variables should be prefixed with NAUTEX_k
         case_sensitive = False
         extra = "ignore"  # Ignore extra environment variables that don't match our model
         json_schema_extra = {

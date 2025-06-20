@@ -86,6 +86,7 @@ class IntegrationStatusPanel(HorizontalGroup):
         # Network status
 
         self.status_network.update_status("🟢" if integration_status.network_connected else "🔴")
+        self.status_api.update_status("🟢" if integration_status.api_connected else "🔴")
 
         # self.update_status("network", "🟢" if integration_status.network_connected
         # else "🔴" if integration_status.config_loaded and integration_status.config_summary and integration_status.config_summary.get(

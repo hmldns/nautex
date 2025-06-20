@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 from pydantic import SecretStr
 import time
 
+from . import ConfigurationService
 from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig
 from ..models.api_models import (
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 class NautexAPIService:
     """Business logic layer for interacting with the Nautex.ai API."""
 
-    def __init__(self, api_client: NautexAPIClient, config: NautexConfig):
+    def __init__(self, api_client: NautexAPIClient, config_service: ConfigurationService):
         """Initialize the API service.
 
         Args:
@@ -38,15 +39,15 @@ class NautexAPIService:
             config: Application configuration containing API settings
         """
         self.api_client = api_client
-        self.config = config
-        self.api_client.setup_token(self.config.get_token)
+        self.config_service = config_service
+        self.api_client.setup_token(self.get_token)
 
         logger.debug("NautexAPIService initialized")
 
-    # Network status detection
+    def get_token(self):
+        rv = self.config_service.config.get_token()
+        return rv
 
-    def setup_token(self, token: str):
-        self.api_client.setup_token(token)
 
     async def check_network_connectivity(self, timeout: float = 3.0) -> Tuple[bool, Optional[float], Optional[str]]:
         """Check network connectivity to the API host with short timeout.
@@ -126,39 +127,6 @@ class NautexAPIService:
 
     # API endpoint implementations
 
-    async def verify_token(self, token: Optional[str] = None) -> bool:
-        """Verify if the API token is valid.
-
-        Args:
-            token: API token to verify (uses config token if not provided)
-            timeout: Optional custom timeout in seconds
-
-        Returns:
-            True if token is valid, False otherwise
-
-        Raises:
-            NautexAPIError: For unexpected API errors
-        """
-        if token:
-            # Temporarily set the token for verification
-            original_token = self.api_client._token
-            self.api_client.setup_token(token)
-
-            try:
-                result = await self.api_client.verify_token()
-
-                # If verification succeeded and this was a new token, update config
-                if result and token != original_token:
-                    self.config.api_token = SecretStr(token)
-
-                return result
-            finally:
-                # Restore original token if verification was for a different token
-                if original_token != token:
-                    self.api_client.setup_token(original_token)
-        else:
-            # Use the current token
-            return await self.api_client.verify_token()
 
     async def get_account_info(self, *, token_override: Optional[str] = None, timeout: Optional[float] = None) -> AccountInfo:
         """Retrieve account information using the current token.
@@ -176,6 +144,7 @@ class NautexAPIService:
             raise
 
     async def verify_token_and_get_account_info(self, token: Optional[str] = None) -> AccountInfo:
+        # TODO update
         """Verify API token and retrieve account information.
 
         This method is maintained for backward compatibility.

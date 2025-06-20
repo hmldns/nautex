@@ -218,6 +218,7 @@ class SetupScreen(Screen):
 
     async def set_token(self, token: str) -> None:
         self.config_service.config.api_token = SecretStr(token)
+        tkm = self.config_service.config.api_token.get_secret_value()
         self.config_service.save_configuration()
 
     async def set_agent_name(self, name: str) -> None:

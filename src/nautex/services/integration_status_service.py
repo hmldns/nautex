@@ -67,6 +67,8 @@ class IntegrationStatusService:
         # if status.config_loaded:
         await self._check_network_connectivity(status)
 
+        await self._check_api_connectivity(status)
+
         # 5. Determine overall integration readiness
         self._determine_integration_readiness(status)
 
@@ -104,7 +106,8 @@ class IntegrationStatusService:
             config = self.config_service.load_configuration()
             status.config_loaded = True
             status.config_path = self.config_service.get_config_path()
-            status.config_summary = self._create_config_summary(config)
+
+
 
             logger.debug(f"Configuration loaded from {status.config_path}")
 
@@ -142,6 +145,18 @@ class IntegrationStatusService:
             status.network_connected = False
             status.network_response_time = None
             status.network_error = str(e)
+
+    async def _check_api_connectivity(self, status: IntegrationStatus) -> None:
+        """Test API connectivity with a longer timeout."""
+        try:
+            logger.debug("Testing API connectivity...")
+            acc_info = await self._nautex_api_service.get_account_info(timeout=5.0)
+            status.api_connected = bool(acc_info)
+            status.account_info = acc_info
+        except Exception as e:
+            logger.warning(f"API connectivity check failed: {e}")
+            status.api_connected = False
+            status.api_response_time = None
 
     def _determine_integration_readiness(self, status: IntegrationStatus) -> None:
         """Determine overall integration readiness and status message."""
@@ -196,11 +211,3 @@ class IntegrationStatusService:
             "plan_id": config.plan_id,
             "has_token": bool(config.api_token)
         }
-
-    def get_nautex_api_service(self) -> Optional[NautexAPIService]:
-        """Get the configured Nautex API service if available.
-
-        Returns:
-            NautexAPIService instance or None if not configured
-        """
-        return self._nautex_api_service 

@@ -24,6 +24,7 @@ class UIService:
         config_service: ConfigurationService,
         plan_context_service: PlanContextService,
         integration_status_service: IntegrationStatusService,
+        api_service: NautexAPIService,
         project_root: Optional[Path] = None
     ):
         """Initialize the UI service.
@@ -38,6 +39,7 @@ class UIService:
         self.config_service = config_service
         self.plan_context_service = plan_context_service
         self.integration_status_service = integration_status_service
+        self.api_service = api_service
 
 
     # def launch_status(self):
@@ -66,7 +68,8 @@ class UIService:
             app = SetupApp(
                 config_service=self.config_service,
                 project_root=self.project_root,
-                integration_status_service=self.integration_status_service
+                integration_status_service=self.integration_status_service,
+                api_service=self.api_service
             )
             await app.run_async()
 

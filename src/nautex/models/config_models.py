@@ -42,3 +42,8 @@ class NautexConfig(BaseSettings):
                 }
             }
         }
+
+
+    def get_token(self):
+        """Get the API token from the config."""
+        return self.api_token.get_secret_value() if self.api_token else None

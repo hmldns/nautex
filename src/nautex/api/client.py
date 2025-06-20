@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
 import aiohttp
 import json
 from urllib.parse import urljoin
@@ -264,7 +264,7 @@ class NautexAPIClient:
         """
         return await self._request("POST", endpoint_url, headers, json_payload)
 
-    def setup_token(self, token: str) -> None:
+    def setup_token(self, token: str | Callable[[], None]) -> None:
         """Set or update the API token.
 
         Args:
@@ -273,7 +273,13 @@ class NautexAPIClient:
         self._token = token
         logger.debug("API token updated")
 
-    def _get_auth_headers(self) -> Dict[str, str]:
+    def _get_token(self):
+        if callable(self._token):
+            return self._token()
+        else:
+            return self._token
+
+    def _get_auth_headers(self, token_override: Optional[str] = None) -> Dict[str, str]:
         """Get authentication headers for API requests.
 
         Returns:
@@ -282,11 +288,14 @@ class NautexAPIClient:
         Raises:
             NautexAPIError: If no token is set
         """
-        if not self._token:
+
+        tkn = self._get_token() if not token_override else token_override
+
+        if not tkn:
             raise NautexAPIError("No API token set. Call setup_token() first.")
 
         return {
-            "Authorization": f"Bearer {self._token}"
+            "Authorization": f"Bearer {tkn}"
         }
 
     def _get_full_api_url(self, endpoint_path: str) -> str:
@@ -385,10 +394,11 @@ class NautexAPIClient:
                 # Re-raise for unexpected errors
                 raise
 
-    async def get_account_info(self, timeout: Optional[float] = None) -> AccountInfo:
+    async def get_account_info(self, *, token_override: Optional[str] = None, timeout: Optional[float] = None) -> AccountInfo:
         """Retrieve account information using the current token.
 
         Args:
+            token_override: Optional token override to use instead of the current token (for token pre-validation)
             timeout: Optional custom timeout in seconds
 
         Returns:
@@ -397,7 +407,7 @@ class NautexAPIClient:
         Raises:
             NautexAPIError: If token is invalid or API call fails
         """
-        headers = self._get_auth_headers()
+        headers = self._get_auth_headers(token_override=token_override)
         url = self._get_full_api_url(self.ENDPOINT_ACCOUNT)
 
         try:

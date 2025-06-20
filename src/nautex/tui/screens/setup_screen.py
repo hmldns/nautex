@@ -92,7 +92,7 @@ class SetupScreen(Screen):
         config_service: ConfigurationService,
         project_root: Path,
         integration_status_service: IntegrationStatusService,
-        api_service: NautexAPIService = None,
+        api_service: NautexAPIService,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -201,9 +201,14 @@ class SetupScreen(Screen):
         if len(value.strip()) < 8:
             return False, "API token must be at least 8 characters"
 
-        await asyncio.sleep(1.0)
-
-        return True, ""
+        try:
+            acc_info = await self.api_service.get_account_info(token_override=value, timeout=1.0)
+            self.system_info_widget.update_system_info(
+                email=acc_info.profile_email,
+            )
+            return True, ""
+        except Exception as e:
+            return False, f"{e}"
 
     async def validate_agent_name(self, value: str) -> tuple[bool, str]:
         """Validate the agent name."""
@@ -353,11 +358,15 @@ class SetupScreen(Screen):
 class SetupApp(App):
     """TUI application for the setup command."""
 
-    def __init__(self, config_service: ConfigurationService, project_root: Path,
+    def __init__(self,
+                 config_service: ConfigurationService,
+                 project_root: Path,
+                 api_service: NautexAPIService,
                  integration_status_service: IntegrationStatusService, **kwargs):
         super().__init__(**kwargs)
         self.config_service = config_service
         self.project_root = project_root
+        self.api_service = api_service
         self.integration_status_service = integration_status_service
 
     def on_mount(self) -> None:
@@ -367,5 +376,6 @@ class SetupApp(App):
             config_service=self.config_service,
             project_root=self.project_root,
             integration_status_service=self.integration_status_service,
+            api_service=self.api_service,
         )
         self.push_screen(setup_screen)

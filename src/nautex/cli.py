@@ -74,6 +74,7 @@ def main() -> None:
         config_service=config_service,
         plan_context_service=plan_context_service,
         integration_status_service=integration_status_service,
+        api_service=nautex_api_service,
         project_root=project_root
     )
 

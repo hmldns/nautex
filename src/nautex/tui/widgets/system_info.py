@@ -17,7 +17,7 @@ class SystemInfoWidget(Vertical):
     DEFAULT_CSS = """
     SystemInfoWidget {
         height: auto;
-        width: 40;
+        width: 50;
         min-height: 8;
         max-height: 14;
         border: solid $primary;

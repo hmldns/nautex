@@ -39,10 +39,7 @@ class NautexAPIService:
         """
         self.api_client = api_client
         self.config = config
-
-        # Set up the API client with the token from config
-        if self.config.api_token:
-            self.api_client.setup_token(self.config.api_token)
+        self.api_client.setup_token(self.config.get_token)
 
         logger.debug("NautexAPIService initialized")
 
@@ -163,7 +160,7 @@ class NautexAPIService:
             # Use the current token
             return await self.api_client.verify_token()
 
-    async def get_account_info(self) -> AccountInfo:
+    async def get_account_info(self, *, token_override: Optional[str] = None, timeout: Optional[float] = None) -> AccountInfo:
         """Retrieve account information using the current token.
 
         Returns:
@@ -173,7 +170,7 @@ class NautexAPIService:
             NautexAPIError: If token is invalid or API call fails
         """
         try:
-            return await self.api_client.get_account_info()
+            return await self.api_client.get_account_info(token_override=token_override, timeout=timeout)
         except NautexAPIError as e:
             logger.error(f"Failed to get account info: {e}")
             raise

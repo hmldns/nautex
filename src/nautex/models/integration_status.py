@@ -13,10 +13,21 @@ class IntegrationStatus:
     config_loaded: bool = False
     config_path: Optional[Path] = None
     config_summary: Optional[Dict[str, Any]] = None
+    
+    # Network connectivity status
+    network_connected: bool = False
+    network_response_time: Optional[float] = None
+    network_error: Optional[str] = None
+    
+    # API connectivity status
     api_connected: bool = False
     api_response_time: Optional[float] = None
     account_info: Optional[AccountInfo] = None
+    
+    # MCP integration status
     mcp_status: MCPConfigStatus = MCPConfigStatus.NOT_FOUND
     mcp_config_path: Optional[Path] = None
+    
+    # Overall integration status
     integration_ready: bool = False
     status_message: str = ""

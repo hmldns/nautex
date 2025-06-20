@@ -14,6 +14,7 @@ from .services.plan_context_service import PlanContextService
 from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run
 from .services.mcp_config_service import MCPConfigService
 from .api.client import NautexAPIClient
+from .api import create_api_client
 
 
 def main() -> None:
@@ -48,22 +49,13 @@ def main() -> None:
     config_service = ConfigurationService(project_root)
     mcp_config_service = MCPConfigService()
 
-    # 2. Load configuration (but don't fail if not available)
-    config = None
-    try:
-        config = config_service.load_configuration()
-    except ConfigurationError as e:
-        if args.command != "setup":  # Only show warning if not in setup command
-            print(f"Warning: Configuration not available: {e}", file=sys.stderr)
-    except Exception as e:
-        if args.command != "setup":  # Only show warning if not in setup command
-            print(f"Warning: Unexpected error loading configuration: {e}", file=sys.stderr)
+    # 2. Load configuration or set default
+    config = config_service.load_configuration()
 
     # 3. Initialize API client and service if config is available
-    nautex_api_service = None
-    if config and config.api_token:
-        api_client = NautexAPIClient(base_url="https://api.nautex.ai")
-        nautex_api_service = NautexAPIService(api_client, config)
+
+    api_client = create_api_client(base_url=config.api_host, test_mode=config.api_test_mode)
+    nautex_api_service = NautexAPIService(api_client, config)
 
     # 4. Services that depend on other services
     integration_status_service = IntegrationStatusService(

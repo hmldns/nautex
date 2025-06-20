@@ -2,8 +2,11 @@
 
 from typing import Optional, List, Dict, Any, Tuple
 import logging
+import asyncio
+import aiohttp
 from urllib.parse import urljoin
 from pydantic import SecretStr
+import time
 
 from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig
@@ -39,9 +42,49 @@ class NautexAPIService:
 
         # Set up the API client with the token from config
         if self.config.api_token:
-            self.api_client.setup_token(self.config.api_token.get_secret_value())
+            self.api_client.setup_token(self.config.api_token)
 
         logger.debug("NautexAPIService initialized")
+
+    # Network status detection
+
+    def setup_token(self, token: str):
+        self.api_client.setup_token(token)
+
+    async def check_network_connectivity(self, timeout: float = 3.0) -> Tuple[bool, Optional[float], Optional[str]]:
+        """Check network connectivity to the API host with short timeout.
+
+        Args:
+            timeout: Request timeout in seconds (default: 3.0)
+
+        Returns:
+            Tuple of (is_connected, response_time, error_message)
+        """
+
+        start_time = time.time()
+        try:
+            # Use get_account_info with the specified timeout to check connectivity
+            await self.api_client.get_account_info(timeout=timeout)
+
+            response_time = time.time() - start_time
+            return True, response_time, None
+
+        except NautexAPIError as e:
+            response_time = time.time() - start_time
+            # Even if we get an API error (like 401 unauthorized), it means network is reachable
+            if e.status_code is not None and e.status_code < 500:
+                return True, response_time, None
+            else:
+                return False, response_time, f"API error: {str(e)}"
+        except asyncio.TimeoutError:
+            response_time = time.time() - start_time
+            return False, response_time, "Connection timeout"
+        except aiohttp.ClientConnectorError as e:
+            response_time = time.time() - start_time
+            return False, response_time, f"Connection failed: {str(e)}"
+        except Exception as e:
+            response_time = time.time() - start_time
+            return False, response_time, f"Network error: {str(e)}"
 
     # Latency properties
 
@@ -91,6 +134,7 @@ class NautexAPIService:
 
         Args:
             token: API token to verify (uses config token if not provided)
+            timeout: Optional custom timeout in seconds
 
         Returns:
             True if token is valid, False otherwise

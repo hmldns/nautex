@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
+from pydantic import SecretStr
 from pygments.styles.dracula import yellow
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -100,6 +101,10 @@ class SetupScreen(Screen):
         self.integration_status_service = integration_status_service
         self.api_service = api_service
 
+        # Task for polling integration status
+        self._polling_task = None
+        self._polling_interval = 5.0  # seconds
+
         # Setup state
         self.setup_data = {}
 
@@ -108,21 +113,20 @@ class SetupScreen(Screen):
 
         # Widget references
         self.integration_status_widget = IntegrationStatusWidget()
-        self.system_info_widget = SystemInfoWidget(
-            config_service=self.config_service,
-            integration_status_service=self.integration_status_service
-        )
+        self.system_info_widget = SystemInfoWidget()
         self.api_token_input = ValidatedTextInput(
             title="API Token",
             placeholder="Enter your Nautex.ai API token...",
             validator=self.validate_api_token,
-            title_extra=api_token_link
+            title_extra=api_token_link,
+            on_change=self.set_token
         )
         self.agent_name_input = ValidatedTextInput(
             title="Agent Instance Name",
             placeholder="e.g., my-dev-agent",
             default_value="My Agent",
-            validator=self.validate_agent_name
+            validator=self.validate_agent_name,
+            on_change=self.set_agent_name
         )
 
         # ------------------------------------------------------------------
@@ -189,6 +193,32 @@ class SetupScreen(Screen):
 
         self._load_existing_config()
 
+
+    async def validate_api_token(self, value: str) -> tuple[bool, str]:
+        """Validate the API token."""
+        if not value.strip():
+            return False, "API token is required"
+        if len(value.strip()) < 8:
+            return False, "API token must be at least 8 characters"
+
+        await asyncio.sleep(1.0)
+
+        return True, ""
+
+    async def validate_agent_name(self, value: str) -> tuple[bool, str]:
+        """Validate the agent name."""
+        if not value.strip():
+            return False, "Agent name is required"
+        return True, ""
+
+    async def set_token(self, token: str) -> None:
+        self.config_service.config.api_token = SecretStr(token)
+        self.config_service.save_configuration()
+
+    async def set_agent_name(self, name: str) -> None:
+        self.config_service.config.agent_instance_name = name
+        self.config_service.save_configuration()
+
     def compose(self) -> ComposeResult:
         with Vertical(id="status_section"):
             yield self.integration_status_widget
@@ -218,18 +248,43 @@ class SetupScreen(Screen):
         await self._update_system_info()
         self.api_token_input.focus()
 
-    def _load_existing_config(self) -> None:
+        # Start polling for integration status updates
+        self._start_polling_integration_status()
+
+    async def on_unmount(self) -> None:
+        """Called when the screen is unmounted."""
+        # Stop polling when screen is unmounted
+        self._stop_polling_integration_status()
+
+    def _start_polling_integration_status(self) -> None:
+        """Start a background task to poll for integration status updates."""
+        if self._polling_task is None:
+            self._polling_task = asyncio.create_task(self._poll_integration_status())
+
+    def _stop_polling_integration_status(self) -> None:
+        """Stop the polling task if it's running."""
+        if self._polling_task is not None:
+            self._polling_task.cancel()
+            self._polling_task = None
+
+    async def _poll_integration_status(self) -> None:
+        """Continuously poll for integration status updates."""
         try:
-            if self.config_service.config_exists():
-                config = self.config_service.load_configuration()
-                if hasattr(config, "api_token") and config.api_token:
-                    self.setup_data["api_token"] = config.api_token.get_secret_value()
-                    self.api_token_input.set_value(self.setup_data["api_token"])
-                if hasattr(config, "agent_instance_name") and config.agent_instance_name:
-                    self.setup_data["agent_instance_name"] = config.agent_instance_name
-                    self.agent_name_input.set_value(self.setup_data["agent_instance_name"])
-        except ConfigurationError:
+            while True:
+                await asyncio.sleep(self._polling_interval)
+                await self._update_integration_status()
+        except asyncio.CancelledError:
+            # Task was cancelled, clean up
             pass
+        except Exception as e:
+            self.app.log(f"Error in integration status polling: {e}")
+            # Attempt to restart polling after a brief delay
+            await asyncio.sleep(1.0)
+            self._start_polling_integration_status()
+
+    def _load_existing_config(self) -> None:
+        self.api_token_input.set_value(str(self.config_service.config.api_token))
+        self.agent_name_input.set_value(str(self.config_service.config.agent_instance_name))
 
     def action_quit(self) -> None:
         self.app.exit()
@@ -245,37 +300,25 @@ class SetupScreen(Screen):
         # Focus the next widget
         self.focusable_widgets[self.current_focus_index].focus()
 
-    async def validate_api_token(self, value: str) -> tuple[bool, str]:
-        """Validate the API token."""
-        if not value.strip():
-            return False, "API token is required"
-        if len(value.strip()) < 8:
-            return False, "API token must be at least 8 characters"
-        
-        # Update system info when API token changes
-        await self._update_system_info()
-        
-        return True, ""
-
-    async def validate_agent_name(self, value: str) -> tuple[bool, str]:
-        """Validate the agent name."""
-        if not value.strip():
-            return False, "Agent name is required"
-        return True, ""
 
     async def _update_integration_status(self) -> None:
         try:
             status = await self.integration_status_service.get_integration_status()
+
             self.integration_status_widget.update_from_integration_status(status)
+            self.system_info_widget.update_system_info(
+                email=status.account_info.profile_email if status.account_info else None,
+                network_delay=status.network_response_time
+            )
+
         except Exception:
             pass
 
     async def _update_system_info(self) -> None:
         """Update the system info widget with current data."""
-        try:
-            await self.system_info_widget.refresh_data()
-        except Exception:
-            pass
+        self.system_info_widget.update_system_info(
+            host=self.config_service.config.api_host
+        )
 
     async def on_toggle_button_click(self) -> None:
         """Enable or disable List 1 based on its current state."""
@@ -310,22 +353,19 @@ class SetupScreen(Screen):
 class SetupApp(App):
     """TUI application for the setup command."""
 
-    def __init__(self, config_service: ConfigurationService, project_root: Path, **kwargs):
+    def __init__(self, config_service: ConfigurationService, project_root: Path,
+                 integration_status_service: IntegrationStatusService, **kwargs):
         super().__init__(**kwargs)
         self.config_service = config_service
         self.project_root = project_root
+        self.integration_status_service = integration_status_service
 
     def on_mount(self) -> None:
         """Called when the app starts."""
         mcp_config_service = MCPConfigService()
-        integration_status_service = IntegrationStatusService(
-            config_service=self.config_service,
-            mcp_config_service=mcp_config_service,
-            project_root=self.project_root,
-        )
         setup_screen = SetupScreen(
             config_service=self.config_service,
             project_root=self.project_root,
-            integration_status_service=integration_status_service,
+            integration_status_service=self.integration_status_service,
         )
         self.push_screen(setup_screen)

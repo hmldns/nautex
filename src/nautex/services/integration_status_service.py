@@ -30,8 +30,8 @@ class IntegrationStatusService:
         self,
         config_service: ConfigurationService,
         mcp_config_service: MCPConfigService,
-        nautex_api_service: Optional[NautexAPIService] = None,
-        project_root: Optional[Path] = None
+        nautex_api_service: Optional[NautexAPIService],
+        project_root: Optional[Path]
     ):
         """Initialize the integration status service.
 
@@ -63,58 +63,16 @@ class IntegrationStatusService:
         # 2. Check MCP integration
         self._check_mcp_status(status)
 
-        # 3. Test API connectivity (if config is available)
-        if status.config_loaded:
-            await self._check_api_connectivity(status)
+        # 3. Test network connectivity first (quick check)
+        # if status.config_loaded:
+        await self._check_network_connectivity(status)
 
-        # 4. Determine overall integration readiness
+        # 5. Determine overall integration readiness
         self._determine_integration_readiness(status)
 
         logger.info(f"Integration status: {status.status_message}")
         return status
 
-    async def validate_api_token(self, token: str, api_client_factory=None) -> Tuple[bool, Optional[AccountInfo], Optional[str]]:
-        """Validate an API token without requiring full configuration.
-
-        Args:
-            token: API token to validate
-            api_client_factory: Function to create API client (if None, uses default)
-
-        Returns:
-            Tuple of (is_valid, account_info, error_message)
-        """
-        try:
-            from pydantic import SecretStr
-            import os
-
-            # Create temporary config for validation
-            temp_config = NautexConfig(
-                agent_instance_name="validation-temp",
-                api_token=SecretStr(token)
-            )
-
-            # Create API client using factory or default
-            if api_client_factory is None:
-                from ..api import create_api_client
-                # Check for test mode from environment or config default
-                test_mode = os.getenv('NAUTEX_API_TEST_MODE', 'true').lower() == 'true'
-                api_client = create_api_client(base_url="https://api.nautex.ai", test_mode=test_mode)
-            else:
-                api_client = api_client_factory()
-
-            # Create temporary service for validation
-            api_service = NautexAPIService(api_client, temp_config)
-
-            # Test the token
-            account_info = await api_service.verify_token_and_get_account_info()
-            return True, account_info, None
-
-        except NautexAPIError as e:
-            logger.warning(f"API token validation failed: {e}")
-            return False, None, str(e)
-        except Exception as e:
-            logger.error(f"Unexpected error during token validation: {e}")
-            return False, None, f"Unexpected error: {str(e)}"
 
     def validate_configuration_completeness(self, config: NautexConfig) -> Tuple[bool, str]:
         """Validate if configuration has all required fields for operation.
@@ -160,26 +118,30 @@ class IntegrationStatusService:
         status.mcp_status, status.mcp_config_path = self.mcp_config_service.check_mcp_configuration()
         logger.debug(f"MCP status: {status.mcp_status}, path: {status.mcp_config_path}")
 
-    async def _check_api_connectivity(self, status: IntegrationStatus) -> None:
-        """Test API connectivity and get account information."""
-        if not self._nautex_api_service or not status.config_summary:
-            return
+    async def _check_network_connectivity(self, status: IntegrationStatus) -> None:
+        """Test network connectivity to API host with short timeout."""
 
         try:
-            logger.debug("Testing API connectivity...")
-            start_time = time.time()
+            logger.debug("Testing network connectivity...")
+            
+            # Quick network connectivity check with 3 second timeout
+            network_ok, response_time, error_msg = await self._nautex_api_service.check_network_connectivity(timeout=1.0)
+            
+            # Store network status as a custom attribute
+            status.network_connected = network_ok
+            status.network_response_time = response_time
+            status.network_error = error_msg
 
-            # Test connectivity with account info fetch
-            status.account_info = await self._nautex_api_service.verify_token_and_get_account_info()
-            status.api_response_time = time.time() - start_time
-            status.api_connected = True
+            if network_ok:
+                logger.debug(f"Network connectivity verified in {response_time:.3f}s")
+            else:
+                logger.warning(f"Network connectivity failed: {error_msg}")
 
-            logger.debug(f"API connectivity verified in {status.api_response_time:.3f}s")
-
-        except NautexAPIError as e:
-            logger.warning(f"API connectivity test failed: {e}")
-            status.api_connected = False
-            status.api_response_time = None
+        except Exception as e:
+            logger.warning(f"Network connectivity check failed: {e}")
+            status.network_connected = False
+            status.network_response_time = None
+            status.network_error = str(e)
 
     def _determine_integration_readiness(self, status: IntegrationStatus) -> None:
         """Determine overall integration readiness and status message."""
@@ -189,13 +151,19 @@ class IntegrationStatusService:
             status.status_message = "Configuration not found - run 'nautex setup'"
             return
 
-        # Priority 2: API connectivity issues  
-        if not status.api_connected:
+        # Priority 2: Network connectivity issues
+        if hasattr(status, 'network_connected') and not status.network_connected:
             status.integration_ready = False
-            status.status_message = "API connectivity failed - check token and network"
+            status.status_message = f"Network connectivity failed - check connection to {getattr(status, 'network_error', 'API host')}"
             return
 
-        # Priority 3: Missing project/plan configuration
+        # Priority 3: API connectivity issues  
+        if not status.api_connected:
+            status.integration_ready = False
+            status.status_message = "API connectivity failed - check token and API host"
+            return
+
+        # Priority 4: Missing project/plan configuration
         if not status.config_summary or not status.config_summary.get("project_id"):
             status.integration_ready = False
             status.status_message = "Project not selected - run 'nautex setup'"

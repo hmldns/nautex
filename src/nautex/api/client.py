@@ -77,10 +77,18 @@ class NautexAPIClient:
         """Async context manager exit."""
         await self.close()
 
-    async def _ensure_session(self):
-        """Ensure aiohttp session is created."""
+    async def _ensure_session(self, custom_timeout: Optional[float] = None):
+        """Ensure aiohttp session is created.
+
+        Args:
+            custom_timeout: Optional custom timeout in seconds
+        """
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            if custom_timeout is not None:
+                timeout = aiohttp.ClientTimeout(total=custom_timeout, connect=min(custom_timeout/2, 10))
+            else:
+                timeout = aiohttp.ClientTimeout(total=30, connect=10)
+
             self._session = aiohttp.ClientSession(
                 timeout=timeout,
                 headers={'Content-Type': 'application/json'}
@@ -97,7 +105,8 @@ class NautexAPIClient:
         method: str, 
         endpoint_url: str, 
         headers: Optional[Dict[str, str]] = None, 
-        json_payload: Optional[Dict[str, Any]] = None
+        json_payload: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None
     ) -> Dict[str, Any]:
         """Make an HTTP request with retry logic.
 
@@ -106,6 +115,7 @@ class NautexAPIClient:
             endpoint_url: Full endpoint URL
             headers: Request headers
             json_payload: JSON request body
+            timeout: Optional custom timeout in seconds
 
         Returns:
             Parsed JSON response
@@ -113,7 +123,7 @@ class NautexAPIClient:
         Raises:
             NautexAPIError: For API errors
         """
-        await self._ensure_session()
+        await self._ensure_session(timeout)
 
         # Merge headers
         request_headers = {}
@@ -223,17 +233,18 @@ class NautexAPIClient:
         else:
             raise NautexAPIError(f"Request failed after {max_retries} attempts")
 
-    async def get(self, endpoint_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
+    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None) -> Dict[str, Any]:
         """Make a GET request.
 
         Args:
             endpoint_url: Full endpoint URL
             headers: Request headers
+            timeout: Optional custom timeout in seconds
 
         Returns:
             Parsed JSON response
         """
-        return await self._request("GET", endpoint_url, headers)
+        return await self._request("GET", endpoint_url, headers, timeout=timeout)
 
     async def post(
         self, 
@@ -351,8 +362,11 @@ class NautexAPIClient:
 
     # API endpoint implementations
 
-    async def verify_token(self) -> bool:
+    async def verify_token(self, timeout: Optional[float] = None) -> bool:
         """Verify if the current API token is valid.
+
+        Args:
+            timeout: Optional custom timeout in seconds
 
         Returns:
             True if token is valid, False otherwise
@@ -361,7 +375,7 @@ class NautexAPIClient:
             NautexAPIError: For unexpected API errors
         """
         try:
-            await self.get_account_info()
+            await self.get_account_info(timeout=timeout)
             return True
         except NautexAPIError as e:
             if e.status_code == 401:
@@ -371,8 +385,11 @@ class NautexAPIClient:
                 # Re-raise for unexpected errors
                 raise
 
-    async def get_account_info(self) -> AccountInfo:
+    async def get_account_info(self, timeout: Optional[float] = None) -> AccountInfo:
         """Retrieve account information using the current token.
+
+        Args:
+            timeout: Optional custom timeout in seconds
 
         Returns:
             Account information
@@ -384,7 +401,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(self.ENDPOINT_ACCOUNT)
 
         try:
-            response_data = await self.get(url, headers)
+            response_data = await self.get(url, headers, timeout=timeout)
             logger.debug("Successfully retrieved account information")
 
             # Parse response into AccountInfo model

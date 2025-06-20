@@ -35,6 +35,12 @@ class ConfigurationService:
         self.config_file = self.config_dir / "config.json"
         self.env_file = self.project_root / ".env"
 
+        self._config: Optional[NautexConfig] = None
+
+    @property
+    def config(self) -> NautexConfig:
+        return self._config
+
     def load_configuration(self) -> NautexConfig:
         """Load configuration from .nautex/config.json and environment variables.
 
@@ -78,6 +84,8 @@ class ConfigurationService:
                 config = NautexConfig(**merged_config)
             except ValidationError as e:
                 raise ConfigurationError(f"Invalid configuration data: {e}")
+
+            self._config = config
 
             return config
 
@@ -132,15 +140,10 @@ class ConfigurationService:
 
         return env_vars
 
-    def save_configuration(self, config_data: NautexConfig) -> None:
-        """Save configuration to .nautex/config.json with proper file permissions.
+    def save_configuration(self, config_data: Optional[NautexConfig] = None) -> None:
+        if config_data is None:
+            config_data = self._config
 
-        Args:
-            config_data: Configuration to save
-
-        Raises:
-            ConfigurationError: If configuration cannot be saved
-        """
         try:
             # Ensure .nautex directory exists
             self.config_dir.mkdir(exist_ok=True)
@@ -164,23 +167,13 @@ class ConfigurationService:
             raise ConfigurationError(f"Unexpected error saving configuration: {e}")
 
     def _prepare_config_for_saving(self, config_data: NautexConfig) -> Dict[str, Any]:
-        """Prepare configuration data for JSON serialization.
-
-        Args:
-            config_data: Configuration to prepare
-
-        Returns:
-            Dictionary ready for JSON serialization
-        """
-        # Use model_dump to get dict representation
-        config_dict = config_data.model_dump()
+        config_dict = config_data.model_dump(exclude_none=True)
 
         # Handle SecretStr fields - extract the actual secret value for storage
         if 'api_token' in config_dict:
             config_dict['api_token'] = config_data.api_token.get_secret_value()
 
-        # Remove any None values to keep the file clean
-        return {k: v for k, v in config_dict.items() if v is not None}
+        return config_dict
 
     def _set_secure_file_permissions(self, file_path: Path) -> None:
         """Set secure file permissions on the configuration file.
@@ -238,19 +231,18 @@ class ConfigurationService:
                 raise ConfigurationError(f"Cannot delete config file: {e}")
 
     def create_api_client(self, config: NautexConfig):
-        """Create the appropriate API client based on test mode configuration.
+        """Create a nautex API client configured for the given config.
 
         Args:
-            config: Nautex configuration containing test mode flag
+            config: Configuration to create client for
 
         Returns:
-            Either NautexAPIClient or NautexTestAPIClient based on config
+            Configured NautexAPIClient
         """
-        if config.api_test_mode:
-            from ..api.test_client import NautexTestAPIClient
-            return NautexTestAPIClient()
-        else:
-            from ..api.client import NautexAPIClient
-            # You'll need to determine the base_url from config or environment
-            base_url = os.environ.get('NAUTEX_API_BASE_URL', 'https://api.nautex.ai')
-            return NautexAPIClient(base_url) 
+        # Import the client here to avoid circular imports
+        from ..api.client import NautexAPIClient
+        import os
+
+        # Use API host from config instead of hardcoded URL
+        api_host = config.api_host
+        return NautexAPIClient(api_host) 

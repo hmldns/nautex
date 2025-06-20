@@ -13,6 +13,7 @@ from ..api.client import NautexAPIClient, NautexAPIError
 from ..models.config_models import NautexConfig, AccountInfo
 from ..models.api_models import Project, ImplementationPlan
 from ..models.plan_context import PlanContext
+from ..tui.screens import SetupApp
 
 
 class UIService:
@@ -38,24 +39,16 @@ class UIService:
         self.plan_context_service = plan_context_service
         self.integration_status_service = integration_status_service
 
-    def launch_setup(self):
-        """Launch the interactive setup TUI."""
-        from ..tui.screens import SetupApp
-        app = SetupApp(
-            config_service=self.config_service,
-            project_root=self.project_root
-        )
-        app.run()
 
-    def launch_status(self):
-        """Launch the status TUI."""
-        from ..tui.screens import StatusScreen
-        plan_context = self.plan_context_service.get_plan_context()
-        app = StatusScreen(
-            plan_context=plan_context,
-            integration_status_service=self.integration_status_service
-        )
-        app.run()
+    # def launch_status(self):
+    #     """Launch the status TUI."""
+    #     from ..tui.screens import StatusScreen
+    #     plan_context = self.plan_context_service.get_plan_context()
+    #     app = StatusScreen(
+    #         plan_context=plan_context,
+    #         integration_status_service=self.integration_status_service
+    #     )
+    #     app.run()
 
     async def handle_setup_command(self) -> None:
         """Handle the setup command by launching the interactive SetupScreen TUI.
@@ -70,14 +63,12 @@ class UIService:
         """
         try:
             # Create the setup app with the necessary services
-            from ..tui.screens import SetupApp
-            setup_app = SetupApp(
+            app = SetupApp(
                 config_service=self.config_service,
-                project_root=self.project_root
+                project_root=self.project_root,
+                integration_status_service=self.integration_status_service
             )
-
-            # Run the TUI app
-            await setup_app.run_async()
+            await app.run_async()
 
         except Exception as e:
             # If the TUI fails, fall back to a simple error message

@@ -161,15 +161,49 @@ class ValidatedTextInput(Vertical):
         self.save_message.display = False
 
         # Validate the input when Enter is pressed
+        self.set_status("wait")
+
         if self.validator:
-            await self.validate()
+            valid = await self.validate()
+        else:
+            valid = True
+
+        self.set_status("valid" if valid else "invalid")
 
         # Only call on_change if the value has changed and validation passed
-        if self.value_changed and self.on_change and self.is_valid:
+        if self.value_changed and self.on_change and valid:
             self.value_changed = False
-
             # Call the on_change callback
             await self.on_change(self.value)
+
+
+    def set_status(self, status: str):
+        if status == "valid":
+            self.status_button.label = "✓"
+            self.status_button.remove_class("status-button-error")
+            self.status_button.remove_class("status-button-neutral")
+            self.status_button.add_class("status-button-success")
+            self.error_text.update("")
+        elif status == "wait":
+            self.status_button.label = "⌛"
+            self.status_button.remove_class("status-button-error")
+            self.status_button.remove_class("status-button-success")
+
+            self.status_button.add_class("status-button-neutral")
+            self.error_text.update("")
+        elif status == "invalid":
+            self.status_button.label = "✗"
+            self.status_button.remove_class("status-button-success")
+            self.status_button.remove_class("status-button-neutral")
+            self.status_button.add_class("status-button-error")
+            self.error_text.update(self.error_message)
+        else:
+            self.status_button.label = ""
+            self.status_button.remove_class("status-button-success")
+            self.status_button.remove_class("status-button-error")
+            self.status_button.add_class("status-button-neutral")
+            self.error_text.update("")
+
 
     async def validate(self) -> bool:
         """Validate the current input value."""
@@ -179,17 +213,6 @@ class ValidatedTextInput(Vertical):
 
             # Remove neutral state if this is the first validation
             self.status_button.remove_class("status-button-neutral")
-
-            if self.is_valid:
-                self.status_button.label = "✓"
-                self.status_button.remove_class("status-button-error")
-                self.status_button.add_class("status-button-success")
-                self.error_text.update("")
-            else:
-                self.status_button.label = "✗"
-                self.status_button.remove_class("status-button-success")
-                self.status_button.add_class("status-button-error")
-                self.error_text.update(self.error_message)
 
         return self.is_valid
 

@@ -13,12 +13,13 @@ class NautexConfig(BaseSettings):
     supporting both JSON file storage and environment variable overrides.
     """
     api_host: str = Field("https://api.nautex.ai", description="Base URL for the Nautex.ai API")
-    api_token: SecretStr = Field(..., description="Bearer token for Nautex.ai API authentication")
+    api_token: Optional[SecretStr] = Field(None, description="Bearer token for Nautex.ai API authentication")
     agent_instance_name: str = Field("Coding Agent", description="User-defined name for this CLI instance")
     project_id: Optional[str] = Field(None, description="Selected Nautex.ai project ID")
     plan_id: Optional[str] = Field(None, description="Selected implementation plan ID")
 
-    api_test_mode: bool = Field(True, description="Enable test mode for API client to use dummy responses")
+    api_test_mode: bool = Field(False, description="Enable test mode for API client to use dummy responses",
+                                exclude=True)
 
     class Config:
         """Pydantic configuration for environment variables and JSON files."""

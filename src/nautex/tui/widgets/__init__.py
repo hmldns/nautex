@@ -2,7 +2,7 @@
 
 from .dialogs import ConfirmationDialog
 from .inputs import ValidatedTextInput
-from .integration_status import StatusDisplay, IntegrationStatusPanel, AccountStatusPanel
+from .integration_status import StatusDisplay, IntegrationStatusPanel
 from .views import ConfigurationSummaryView
 from .integration import IntegrationStatusWidget
 from .plan_context import PlanContextWidget
@@ -14,7 +14,6 @@ __all__ = [
     "ValidatedTextInput",
     "StatusDisplay",
     "IntegrationStatusPanel",
-    "AccountStatusPanel",
     "ConfigurationSummaryView",
     "IntegrationStatusWidget",
     "PlanContextWidget",

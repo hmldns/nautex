@@ -34,6 +34,14 @@ class ProjectItem:
     def __str__(self):
         return self.name
 
+@dataclass(kw_only=True)
+class ImplementationPlanItem:
+    id: str
+    name: str
+
+    def __str__(self):
+        return self.name
+
 
 class SetupScreen(Screen):
     """Interactive setup screen for configuring the Nautex CLI."""
@@ -261,7 +269,8 @@ class SetupScreen(Screen):
                 return [], None
 
             # Get implementation plans from the API
-            plans = await self.api_service.list_implementation_plans(selected_project.id)
+            plans_resp = await self.api_service.list_implementation_plans(selected_project.id)
+            plans = [ImplementationPlanItem(id=p.plan_id, name=p.name) for p in plans_resp]
             selected_index = None
 
             if self.config_service.config.plan_id:
@@ -280,6 +289,25 @@ class SetupScreen(Screen):
             self.app.log(f"Error loading implementation plans: {str(e)}")
             self.impl_plans_list.set_empty_message(f"Error loading plans: {str(e)}")
             return [], None
+
+
+    async def on_project_selection_change(self, selected_item: ProjectItem) -> None:
+        """Handle selection change in the first list."""
+        self.app.log(f"Project selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
+
+        self.config_service.config.project_id = selected_item.id
+        self.config_service.save_configuration()
+
+        # Refresh the implementation plans list
+        self.impl_plans_list.reload()
+
+
+    async def on_impl_plan_selection_change(self, selected_item: ImplementationPlanItem) -> None:
+        """Handle selection change in the implementation plans list."""
+        self.app.log(f"Implementation plan selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
+
+        self.config_service.config.plan_id = selected_item.id
+        self.config_service.save_configuration()
 
 
     def compose(self) -> ComposeResult:
@@ -400,26 +428,7 @@ class SetupScreen(Screen):
         # Reload List 1 so the UI updates accordingly (shows disabled msg if needed)
         self.projects_list.reload()
 
-    async def on_project_selection_change(self, selected_item) -> None:
-        """Handle selection change in the first list."""
-        self.app.log(f"Project selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
 
-        # Save the selected project ID to the configuration
-        if hasattr(selected_item, 'id'):
-            self.config_service.config.project_id = selected_item.id
-            self.config_service.save_configuration()
-
-        # Refresh the implementation plans list
-        self.impl_plans_list.reload()
-
-    async def on_impl_plan_selection_change(self, selected_item) -> None:
-        """Handle selection change in the implementation plans list."""
-        self.app.log(f"Implementation plan selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
-
-        # Save the selected implementation plan ID to the configuration
-        if hasattr(selected_item, 'id'):
-            self.config_service.config.implementation_plan_id = selected_item.id
-            self.config_service.save_configuration()
 
     async def on_reload_button_click(self) -> None:
         """Reload both lists."""

@@ -312,6 +312,3 @@ class LoadableList(Vertical):
             message: The message to display
         """
         self.empty_message = message
-        # If the list is currently empty, reload to show the new message
-        if not self.item_data:
-            self.reload()

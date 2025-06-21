@@ -471,10 +471,9 @@ class NautexAPIClient:
 
         try:
             response_data = await self.get(url, headers)
-            logger.debug(f"Successfully retrieved {len(response_data.get('plans', []))} implementation plans for project {project_id}")
 
             # Parse response into list of ImplementationPlan models
-            plans_data = response_data.get('plans', [])
+            plans_data = response_data.data.get('plans', [])
             return [ImplementationPlan.model_validate(plan) for plan in plans_data]
 
         except NautexAPIError as e:

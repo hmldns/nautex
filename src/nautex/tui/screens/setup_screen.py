@@ -175,8 +175,6 @@ class SetupScreen(Screen):
 
         self._load_existing_config()
 
-
-
     async def validate_api_token(self, value: str) -> tuple[bool, str]:
         """Validate the API token."""
         if not value.strip():
@@ -231,9 +229,9 @@ class SetupScreen(Screen):
             projects = [ProjectItem(id=pr.project_id, name=pr.name) for pr in projects_resp]
 
             # If we have a project_id in config, find its index to mark it as selected
-            if self.config_project_id:
+            if self.config_service.config.project_id:
                 for i, project in enumerate(projects):
-                    if project.id == self.config_project_id:
+                    if project.id == self.config_service.config.project_id:
                         selected_index = i
                         break
 
@@ -244,22 +242,43 @@ class SetupScreen(Screen):
             return [], None
 
     async def implementation_plans_loader(self) -> Tuple[list, Optional[int]]:
-        """Load implementation plans for the selected project."""
+        """Load implementation plans for the selected project.
+
+        Returns:
+            A tuple of (plans_list, selected_index) where selected_index
+            is the index of the plan to be selected after loading (if any).
+        """
         try:
             # Check if we have a valid token and selected project
             token = self.config_service.config.api_token.get_secret_value() if self.config_service.config.api_token else None
             if not token:
+                self.impl_plans_list.set_empty_message("No API token provided")
                 return [], None
 
-            selected_project = self.projects_list.selected_item if hasattr(self, "loadable_list1") else None
+            selected_project = self.projects_list.selected_item
             if not selected_project:
+                self.impl_plans_list.set_empty_message("Select a project to view implementation plans")
                 return [], None
 
             # Get implementation plans from the API
             plans = await self.api_service.list_implementation_plans(selected_project.id)
-            return plans, None
+            selected_index = None
+
+            if self.config_service.config.plan_id:
+                for i, plan in enumerate(plans):
+                    if plan.id == self.config_service.config.plan_id:
+                        selected_index = i
+                        break
+
+            # If no plans were found but no error occurred, show a message to create one
+            if not plans:
+                self.impl_plans_list.set_empty_message("No implementation plans found. Create one in the Nautex app.")
+
+            return plans, selected_index
+
         except Exception as e:
             self.app.log(f"Error loading implementation plans: {str(e)}")
+            self.impl_plans_list.set_empty_message(f"Error loading plans: {str(e)}")
             return [], None
 
 
@@ -333,8 +352,7 @@ class SetupScreen(Screen):
         self.api_token_input.set_value(str(self.config_service.config.api_token))
         self.agent_name_input.set_value(str(self.config_service.config.agent_instance_name))
 
-        # Store the project_id from config to mark it as selected when projects are loaded
-        self.config_project_id = getattr(self.config_service.config, 'project_id', None)
+
 
     def action_quit(self) -> None:
         self.app.exit()

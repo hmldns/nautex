@@ -1,12 +1,11 @@
 """Plan Context dataclass for aggregated plan status."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Any
 from pathlib import Path
-from datetime import datetime
 
 from ..services.mcp_config_service import MCPConfigStatus
-from .api_models import Task
+from src.nautex.api.api_models import Task
 
 
 @dataclass

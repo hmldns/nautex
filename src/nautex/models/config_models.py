@@ -1,9 +1,8 @@
 """Pydantic models for configuration management."""
 
 from typing import Optional
-from pydantic import BaseModel, SecretStr, Field
+from pydantic import SecretStr, Field
 from pydantic_settings import BaseSettings
-from .api_models import AccountInfo
 
 
 class NautexConfig(BaseSettings):

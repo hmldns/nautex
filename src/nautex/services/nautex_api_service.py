@@ -4,24 +4,17 @@ from typing import Optional, List, Dict, Any, Tuple
 import logging
 import asyncio
 import aiohttp
-from urllib.parse import urljoin
 from pydantic import SecretStr
 import time
 
 from . import ConfigurationService
 from ..api.client import NautexAPIClient, NautexAPIError
-from ..models.config_models import NautexConfig
-from ..models.api_models import (
+from src.nautex.api.api_models import (
     AccountInfo,
     Project,
     ImplementationPlan,
     Task,
     Requirement,
-    APIResponse,
-    ProjectListRequest,
-    PlanGetRequest,
-    TaskActionRequest,
-    RequirementActionRequest,
 )
 
 # Set up logging

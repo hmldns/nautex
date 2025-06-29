@@ -2,8 +2,7 @@
 
 import asyncio
 import logging
-import time
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 
 # Set up logging
@@ -89,7 +88,7 @@ class NautexTestAPIClient:
         self._latency_measurements["account"].append(0.123)
         
         # Return test account info
-        from ..models.api_models import AccountInfo
+        from src.nautex.api.api_models import AccountInfo
         return AccountInfo(
             profile_email="test.user@example.com",
             api_version="1.0.0"
@@ -106,7 +105,7 @@ class NautexTestAPIClient:
         # Record latency
         self._latency_measurements["projects"].append(0.156)
         
-        from ..models.api_models import Project
+        from src.nautex.api.api_models import Project
         return [
             Project(
                 id="PROJ-001",
@@ -134,7 +133,7 @@ class NautexTestAPIClient:
         # Record latency
         self._latency_measurements["plans"].append(0.189)
         
-        from ..models.api_models import ImplementationPlan
+        from src.nautex.api.api_models import ImplementationPlan
         return [
             ImplementationPlan(
                 id="PLAN-001",

@@ -1,17 +1,12 @@
 """UI Service for managing TUI applications and interactions."""
 
-import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional
 from pathlib import Path
 
 from ..services.config_service import ConfigurationService
 from ..services.plan_context_service import PlanContextService
-from ..services.mcp_config_service import MCPConfigService
 from ..services.integration_status_service import IntegrationStatusService
 from ..services.nautex_api_service import NautexAPIService
-from ..api.client import NautexAPIClient, NautexAPIError
-from ..models.config_models import NautexConfig, AccountInfo
-from ..models.api_models import Project, ImplementationPlan
 from ..models.plan_context import PlanContext
 from ..tui.screens import SetupApp
 

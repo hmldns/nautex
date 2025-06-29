@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from src.nautex.models.api_models import AccountInfo
+from src.nautex.api.api_models import AccountInfo
 from src.nautex.services.mcp_config_service import MCPConfigStatus
 
 

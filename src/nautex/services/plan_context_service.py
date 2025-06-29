@@ -5,9 +5,8 @@ from datetime import datetime
 from typing import Optional
 
 from ..models.plan_context import PlanContext
-from ..models.api_models import Task
+from src.nautex.api.api_models import Task
 from .integration_status_service import IntegrationStatusService
-from .nautex_api_service import NautexAPIService
 from ..api.client import NautexAPIError
 
 # Set up logging

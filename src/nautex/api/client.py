@@ -3,13 +3,12 @@
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple, Callable
 import aiohttp
 import json
 from urllib.parse import urljoin
 
-from ..models.api_models import (
+from src.nautex.api.api_models import (
     AccountInfo,
     Project,
     ImplementationPlan,

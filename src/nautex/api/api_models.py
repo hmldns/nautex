@@ -4,12 +4,13 @@ from typing import List, Optional, Any, Union
 from enum import Enum
 from pathlib import Path
 from pydantic import BaseModel, Field, validator
+from starlette.responses import JSONResponse
 
 
 class AccountInfo(BaseModel):
     """Account information from Nautex.ai API.
 
-    This model represents the account details returned from the 
+    This model represents the account details returned from the
     Nautex.ai /d/v1/info/account endpoint after successful token validation.
     """
     profile_email: str = Field(..., description="User's profile email address")
@@ -26,12 +27,11 @@ class AccountInfo(BaseModel):
 
 
 class TaskStatus(str, Enum):
-    """Valid task status values."""
-    TODO = "todo"
-    IN_PROGRESS = "in_progress"
-    REVIEW = "review"
-    DONE = "done"
-    BLOCKED = "blocked"
+    """Valid task status values aligned with PromptTaxonomy.Domain.Plan.StatusEnum."""
+    NOT_STARTED = "Not started"
+    IN_PROGRESS = "In progress"
+    DONE = "Done"
+    BLOCKED = "Blocked"
 
 
 class RequirementStatus(str, Enum):
@@ -92,10 +92,10 @@ class Task(BaseModel):
     plan_id: str = Field(..., description="Parent plan identifier")
     task_designator: str = Field(..., description="Unique task identifier like TASK-123")
     name: str = Field(..., description="Human-readable task name")
-    description: str = Field(..., description="Detailed task description")
+    description: Optional[str] = Field(..., description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
-    requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
-    notes: List[str] = Field(default_factory=list, description="List of task notes")
+    requirements: Optional[List[str]] = Field(None, description="List of requirement designators")
+    notes: Optional[List[str]] = Field(None, description="List of task notes")
 
     class Config:
         json_schema_extra = {
@@ -158,6 +158,67 @@ class PlanGetRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "project_id": "PROJ-123"
+            }
+        }
+
+
+class TaskOperation(BaseModel):
+    """Model representing a single operation on a task."""
+    task_designator: str = Field(..., description="Unique task identifier like TASK-123")
+    updated_status: Optional[TaskStatus] = Field(None, description="New status for the task")
+    new_note: Optional[str] = Field(None, description="New note content to add to the task")
+
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "task_designator": "TASK-789",
+                    "updated_status": "in_progress"
+                },
+                {
+                    "task_designator": "TASK-789",
+                    "new_note": "Implementation notes here"
+                },
+                {
+                    "task_designator": "TASK-789",
+                    "updated_status": "done",
+                    "new_note": "Task completed with additional notes"
+                }
+            ]
+        }
+
+
+class ErrorMessage(BaseModel):
+    # designator: Optional[str] = Field(..., description="")
+    message: str = Field(..., description="Error message")
+
+
+class TaskOperationRequest(BaseModel):
+    """Request model for batch task operations."""
+    operations: List[TaskOperation] = Field(..., description="List of operations to perform")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "operations": [
+                    {
+                        "task_designator": "TASK-789",
+                        "updated_status": "in_progress"
+                    },
+                    {
+                        "task_designator": "TASK-790",
+                        "updated_status": "done"
+                    },
+                    {
+                        "task_designator": "TASK-789",
+                        "new_note": "Implementation notes here"
+                    },
+                    {
+                        "task_designator": "TASK-791",
+                        "updated_status": "review",
+                        "new_note": "Ready for code review"
+                    }
+                ]
             }
         }
 
@@ -276,4 +337,12 @@ class APIResponse(BaseModel):
                     "details": {"code": 401, "reason": "Invalid token"}
                 }
             ]
-        } 
+        }
+
+
+    def to_dict(self):
+        rv = self.model_dump(exclude_none=True)
+        return rv
+
+    def to_json_response(self) -> JSONResponse:
+        return JSONResponse(self.to_dict())

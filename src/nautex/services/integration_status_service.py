@@ -5,7 +5,7 @@ import logging
 from typing import Optional, Tuple, Dict, Any
 from pathlib import Path
 
-from ..models.config_models import NautexConfig, AccountInfo
+from ..models.config_models import NautexConfig
 from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
 from .mcp_config_service import MCPConfigService, MCPConfigStatus

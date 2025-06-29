@@ -654,6 +654,94 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in add_task_note: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
+    async def update_tasks_batch(
+        self, 
+        project_id: str, 
+        plan_id: str, 
+        operations: List["TaskOperation"]
+    ) -> Dict[str, Any]:
+        """Update multiple tasks in a batch operation.
+
+        Args:
+            project_id: ID of the project
+            plan_id: ID of the implementation plan
+            operations: List of TaskOperation objects, each containing:
+                - task_designator: The designator of the task to update
+                - updated_status: Optional new status for the task
+                - new_note: Optional new note to add to the task
+
+        Returns:
+            API response containing the results of the operations
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        from src.nautex.api.api_models import TaskOperationRequest
+
+        headers = self._get_auth_headers()
+        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}/tasks_update")
+
+        # Create request payload
+        request_data = TaskOperationRequest(operations=operations).model_dump()
+
+        try:
+            response_data = await self.post(url, headers, request_data)
+            logger.debug(f"Successfully executed batch update for {len(operations)} tasks")
+
+            # Return the API response
+            return response_data
+
+        except NautexAPIError as e:
+            logger.error(f"Failed to execute batch task update: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in update_tasks_batch: {e}")
+            raise NautexAPIError(f"Unexpected error: {str(e)}")
+
+    async def get_next_scope(self, project_id: str, plan_id: str) -> Optional["ScopeContext"]:
+        """Get the next scope for a specific project and plan.
+
+        Args:
+            project_id: ID of the project
+            plan_id: ID of the implementation plan
+
+        Returns:
+            A ScopeContext object containing the next scope information, or None if no scope is available
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        from src.nautex.api.scope_context_model import ScopeContext
+
+        headers = self._get_auth_headers()
+        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}/scope/next")
+
+        try:
+            response = await self.get(url, headers)
+
+            # Handle case where no scope is available
+            if not response.data or 'scope' not in response.data:
+                logger.debug(f"No next scope available for project {project_id}, plan {plan_id}")
+                return None
+
+            scope_data = response.data.get('scope')
+            if not scope_data:
+                return None
+
+            logger.debug(f"Successfully retrieved next scope for project {project_id}, plan {plan_id}")
+            return ScopeContext.model_validate(scope_data)
+
+        except NautexAPIError as e:
+            if e.status_code == 404:
+                # No next scope found
+                logger.debug(f"No next scope available for project {project_id}, plan {plan_id}")
+                return None
+            logger.error(f"Failed to get next scope for project {project_id}, plan {plan_id}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in get_next_scope: {e}")
+            raise NautexAPIError(f"Unexpected error: {str(e)}")
+
     async def get_requirements_info(
         self, 
         project_id: str, 

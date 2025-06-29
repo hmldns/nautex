@@ -205,148 +205,49 @@ class NautexAPIService:
             logger.error(f"Failed to list implementation plans for project {project_id}: {e}")
             raise
 
-    async def get_next_task(self, project_id: str, plan_id: str) -> Optional[Task]:
-        """Get the next available task for a project/plan.
+    async def next_scope(self, project_id: str, plan_id: str) -> Optional["ScopeContext"]:
+        """Get the next scope for a specific project and plan.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
 
         Returns:
-            Next task or None if no tasks available
+            A ScopeContext object containing the next scope information, or None if no scope is available
 
         Raises:
             NautexAPIError: If API call fails
         """
+        from src.nautex.api.scope_context_model import ScopeContext
+
         try:
-            return await self.api_client.get_next_task(project_id, plan_id)
+            return await self.api_client.get_next_scope(project_id, plan_id)
         except NautexAPIError as e:
-            logger.error(f"Failed to get next task for project {project_id}, plan {plan_id}: {e}")
+            logger.error(f"Failed to get next scope for project {project_id}, plan {plan_id}: {e}")
             raise
 
-    async def get_tasks_info(
-        self, 
-        project_id: str, 
-        plan_id: str, 
-        task_designators: List[str]
-    ) -> List[Task]:
-        """Get information for specific tasks.
+    async def update_tasks(self, project_id: str, plan_id: str, operations: List["TaskOperation"]) -> Dict[str, Any]:
+        """Update multiple tasks in a batch operation.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
-            task_designators: List of task identifiers
+            operations: List of TaskOperation objects, each containing:
+                - task_designator: The designator of the task to update
+                - updated_status: Optional new status for the task
+                - new_note: Optional new note to add to the task
 
         Returns:
-            List of tasks
+            API response containing the results of the operations
 
         Raises:
             NautexAPIError: If API call fails
         """
+        from src.nautex.api.api_models import TaskOperation, APIResponse
+
         try:
-            return await self.api_client.get_tasks_info(project_id, plan_id, task_designators)
+            response_data = await self.api_client.update_tasks_batch(project_id, plan_id, operations)
+            return APIResponse.model_validate(response_data)
         except NautexAPIError as e:
-            logger.error(f"Failed to get tasks info for project {project_id}, plan {plan_id}: {e}")
-            raise
-
-    async def update_task_status(
-        self, 
-        project_id: str, 
-        plan_id: str, 
-        task_designator: str, 
-        status: str
-    ) -> Task:
-        """Update the status of a task.
-
-        Args:
-            project_id: ID of the project
-            plan_id: ID of the implementation plan
-            task_designator: Task identifier
-            status: New status for the task
-
-        Returns:
-            Updated task
-
-        Raises:
-            NautexAPIError: If API call fails
-        """
-        try:
-            return await self.api_client.update_task_status(project_id, plan_id, task_designator, status)
-        except NautexAPIError as e:
-            logger.error(f"Failed to update task {task_designator} status: {e}")
-            raise
-
-    async def add_task_note(
-        self, 
-        project_id: str, 
-        plan_id: str, 
-        task_designator: str, 
-        content: str
-    ) -> Dict[str, Any]:
-        """Add a note to a task.
-
-        Args:
-            project_id: ID of the project
-            plan_id: ID of the implementation plan
-            task_designator: Task identifier
-            content: Note content
-
-        Returns:
-            Confirmation dictionary
-
-        Raises:
-            NautexAPIError: If API call fails
-        """
-        try:
-            return await self.api_client.add_task_note(project_id, plan_id, task_designator, content)
-        except NautexAPIError as e:
-            logger.error(f"Failed to add note to task {task_designator}: {e}")
-            raise
-
-    async def get_requirements_info(
-        self, 
-        project_id: str, 
-        requirement_designators: List[str]
-    ) -> List[Requirement]:
-        """Get information for specific requirements.
-
-        Args:
-            project_id: ID of the project
-            requirement_designators: List of requirement identifiers
-
-        Returns:
-            List of requirements
-
-        Raises:
-            NautexAPIError: If API call fails
-        """
-        try:
-            return await self.api_client.get_requirements_info(project_id, requirement_designators)
-        except NautexAPIError as e:
-            logger.error(f"Failed to get requirements info for project {project_id}: {e}")
-            raise
-
-    async def add_requirement_note(
-        self, 
-        project_id: str, 
-        requirement_designator: str, 
-        content: str
-    ) -> Dict[str, Any]:
-        """Add a note to a requirement.
-
-        Args:
-            project_id: ID of the project
-            requirement_designator: Requirement identifier
-            content: Note content
-
-        Returns:
-            Confirmation dictionary
-
-        Raises:
-            NautexAPIError: If API call fails
-        """
-        try:
-            return await self.api_client.add_requirement_note(project_id, requirement_designator, content)
-        except NautexAPIError as e:
-            logger.error(f"Failed to add note to requirement {requirement_designator}: {e}")
+            logger.error(f"Failed to execute batch task update: {e}")
             raise

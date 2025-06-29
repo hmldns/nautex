@@ -19,10 +19,11 @@ from ..api.client import NautexAPIError
 logger = logging.getLogger(__name__)
 
 # Create FastMCP server instance
-mcp = FastMCP("Nautex CLI")
+mcp = FastMCP("Nautex AI")
 
 # Global instance variable
-_instance = None
+_instance: Optional['MCPService'] = None
+
 
 def mcp_server_set_service_instance(service_instance):
     """Set the global MCP service instance.
@@ -45,6 +46,14 @@ def mcp_server_run():
     except Exception as e:
         logger.error(f"MCP server error: {e}")
         raise
+
+
+def mcp_service() -> 'MCPService':
+    """Get the global MCP service instance."""
+    if not _instance:
+        raise RuntimeError("MCP service is not initialized. Call mcp_server_set_service_instance() first.")
+    return _instance
+
 
 class MCPService:
     """MCP server service using FastMCP library.
@@ -117,62 +126,6 @@ async def nautex_status() -> Dict[str, Any]:
             "error": str(e)
         }
 
-@mcp.tool
-async def nautex_next_task() -> Dict[str, Any]:
-    """Get the next available task to work on."""
-    try:
-        logger.debug("Executing next task tool")
-        service = _instance
-
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
-
-        if not service.config.project_id or not service.config.plan_id:
-            return {
-                "success": False,
-                "error": "Project ID and implementation plan ID must be configured"
-            }
-
-        next_task = await service.nautex_api_service.get_next_task(
-            project_id=service.config.project_id,
-            plan_id=service.config.plan_id
-        )
-
-        if next_task:
-            return {
-                "success": True,
-                "data": {
-                    "task_designator": next_task.task_designator,
-                    "name": next_task.name,
-                    "description": next_task.description,
-                    "status": next_task.status,
-                    "requirements": next_task.requirements,
-                    "notes": next_task.notes
-                }
-            }
-        else:
-            return {
-                "success": True,
-                "data": None,
-                "message": "No next task available"
-            }
-
-    except NautexAPIError as e:
-        logger.error(f"API error in next task tool: {e}")
-        return {
-            "success": False,
-            "error": f"API error: {str(e)}"
-        }
-    except Exception as e:
-        logger.error(f"Error in next task tool: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
 
 @mcp.tool
 async def nautex_list_projects() -> Dict[str, Any]:
@@ -214,6 +167,7 @@ async def nautex_list_projects() -> Dict[str, Any]:
             "success": False,
             "error": str(e)
         }
+
 
 @mcp.tool
 async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
@@ -261,107 +215,12 @@ async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
             "error": str(e)
         }
 
-@mcp.tool
-async def nautex_update_task(
-    project_id: str, 
-    plan_id: str, 
-    task_designator: str,
-    action: str,
-    status: Optional[str] = None,
-    content: Optional[str] = None
-) -> Dict[str, Any]:
-    """Update task status or add notes to a task.
-
-    Args:
-        project_id: ID of the project
-        plan_id: ID of the implementation plan
-        task_designator: Task designator (e.g., TASK-123)
-        action: Action to perform (update_status or add_note)
-        status: New status for update_status action
-        content: Note content for add_note action
-    """
-    try:
-        logger.debug(f"Executing update task tool: {action} for {task_designator}")
-        service = _instance
-
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
-
-        if action == "update_status":
-            if not status:
-                return {
-                    "success": False,
-                    "error": "Status is required for update_status action"
-                }
-
-            task = await service.nautex_api_service.update_task_status(
-                project_id=project_id,
-                plan_id=plan_id,
-                task_designator=task_designator,
-                status=status
-            )
-
-            return {
-                "success": True,
-                "data": {
-                    "task_designator": task.task_designator,
-                    "name": task.name,
-                    "status": task.status,
-                    "message": f"Task status updated to {status}"
-                }
-            }
-
-        elif action == "add_note":
-            if not content:
-                return {
-                    "success": False,
-                    "error": "Content is required for add_note action"
-                }
-
-            result = await service.nautex_api_service.add_task_note(
-                project_id=project_id,
-                plan_id=plan_id,
-                task_designator=task_designator,
-                content=content
-            )
-
-            return {
-                "success": True,
-                "data": result,
-                "message": "Note added to task successfully"
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Unknown action: {action}"
-            }
-
-    except NautexAPIError as e:
-        logger.error(f"API error in update task tool: {e}")
-        return {
-            "success": False,
-            "error": f"API error: {str(e)}"
-        }
-    except Exception as e:
-        logger.error(f"Error in update task tool: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
 
 @mcp.tool
-async def nautex_task_info(task_designators: List[str]) -> Dict[str, Any]:
-    """Get detailed information for specific tasks by their designators.
-
-    Args:
-        task_designators: List of task designators to get info for (e.g., ['TASK-123', 'TASK-124'])
-    """
+async def nautex_next_scope() -> Dict[str, Any]:
+    """Get the next scope for the current project and plan."""
     try:
-        logger.debug(f"Executing task info tool for designators: {task_designators}")
+        logger.debug("Executing next scope tool")
         service = _instance
 
         if not service._is_configured():
@@ -377,49 +236,74 @@ async def nautex_task_info(task_designators: List[str]) -> Dict[str, Any]:
                 "error": "Project ID and implementation plan ID must be configured"
             }
 
-        tasks = await service.nautex_api_service.get_tasks_info(
+        next_scope = await service.nautex_api_service.next_scope(
             project_id=service.config.project_id,
-            plan_id=service.config.plan_id,
-            task_designators=task_designators
+            plan_id=service.config.plan_id
         )
 
-        return {
-            "success": True,
-            "data": [
-                {
+        if next_scope:
+            # Convert the scope to a dictionary representation
+            scope_dict = {
+                "tasks": [],
+                "project_id": next_scope.project_id,
+                "mode": next_scope.mode,
+                "focus_tasks": next_scope.focus_tasks
+            }
+
+            # Helper function to convert a task and its subtasks to dictionaries
+            def task_to_dict(task):
+                task_dict = {
                     "task_designator": task.task_designator,
                     "name": task.name,
                     "description": task.description,
                     "status": task.status,
-                    "requirements": task.requirements,
-                    "notes": task.notes
+                    "subtasks": [task_to_dict(subtask) for subtask in task.subtasks],
+                    "requirements": [{"requirement_designator": req.requirement_designator} for req in task.requirements],
+                    "files": [{"file_path": file.file_path} for file in task.files]
                 }
-                for task in tasks
-            ]
-        }
+                return task_dict
+
+            # Convert all root tasks
+            for task in next_scope.tasks:
+                scope_dict["tasks"].append(task_to_dict(task))
+
+            return {
+                "success": True,
+                "data": scope_dict
+            }
+        else:
+            return {
+                "success": True,
+                "data": None,
+                "message": "No next scope available"
+            }
 
     except NautexAPIError as e:
-        logger.error(f"API error in task info tool: {e}")
+        logger.error(f"API error in next scope tool: {e}")
         return {
             "success": False,
             "error": f"API error: {str(e)}"
         }
     except Exception as e:
-        logger.error(f"Error in task info tool: {e}")
+        logger.error(f"Error in next scope tool: {e}")
         return {
             "success": False,
             "error": str(e)
         }
 
+
 @mcp.tool
-async def nautex_requirement_info(requirement_designators: List[str]) -> Dict[str, Any]:
-    """Get detailed information for specific requirements by their designators.
+async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Update multiple tasks in a batch operation.
 
     Args:
-        requirement_designators: List of requirement designators to get info for (e.g., ['REQ-123', 'REQ-124'])
+        operations: List of operations, each containing:
+            - task_designator: The designator of the task to update
+            - updated_status: Optional new status for the task
+            - new_note: Optional new note to add to the task
     """
     try:
-        logger.debug(f"Executing requirement info tool for designators: {requirement_designators}")
+        logger.debug(f"Executing update tasks tool with {len(operations)} operations")
         service = _instance
 
         if not service._is_configured():
@@ -429,142 +313,44 @@ async def nautex_requirement_info(requirement_designators: List[str]) -> Dict[st
                 "configured": False
             }
 
-        if not service.config.project_id:
+        if not service.config.project_id or not service.config.plan_id:
             return {
                 "success": False,
-                "error": "Project ID must be configured"
+                "error": "Project ID and implementation plan ID must be configured"
             }
 
-        requirements = await service.nautex_api_service.get_requirements_info(
+        from src.nautex.api.api_models import TaskOperation
+
+        # Convert the operations to TaskOperation objects
+        task_operations = []
+        for op in operations:
+            task_operation = TaskOperation(
+                task_designator=op["task_designator"],
+                updated_status=op.get("updated_status"),
+                new_note=op.get("new_note")
+            )
+            task_operations.append(task_operation)
+
+        response = await service.nautex_api_service.update_tasks(
             project_id=service.config.project_id,
-            requirement_designators=requirement_designators
+            plan_id=service.config.plan_id,
+            operations=task_operations
         )
 
         return {
             "success": True,
-            "data": [
-                {
-                    "requirement_designator": req.requirement_designator,
-                    "name": req.name,
-                    "description": req.description,
-                    "status": req.status,
-                    "notes": req.notes
-                }
-                for req in requirements
-            ]
+            "data": response.data,
+            "message": response.message
         }
 
     except NautexAPIError as e:
-        logger.error(f"API error in requirement info tool: {e}")
+        logger.error(f"API error in update tasks tool: {e}")
         return {
             "success": False,
             "error": f"API error: {str(e)}"
         }
     except Exception as e:
-        logger.error(f"Error in requirement info tool: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-@mcp.tool
-async def nautex_requirement_add_note(
-    requirement_designator: str, 
-    content: str
-) -> Dict[str, Any]:
-    """Add a note to a specific requirement.
-
-    Args:
-        requirement_designator: Requirement designator (e.g., REQ-123)
-        content: Note content to add to the requirement
-    """
-    try:
-        logger.debug(f"Executing requirement add note tool for {requirement_designator}")
-        service = _instance
-
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
-
-        if not service.config.project_id:
-            return {
-                "success": False,
-                "error": "Project ID must be configured"
-            }
-
-        result = await service.nautex_api_service.add_requirement_note(
-            project_id=service.config.project_id,
-            requirement_designator=requirement_designator,
-            content=content
-        )
-
-        return {
-            "success": True,
-            "data": {
-                "requirement_designator": requirement_designator,
-                "status": "note_added",
-                "result": result
-            },
-            "message": "Note added to requirement successfully"
-        }
-
-    except NautexAPIError as e:
-        logger.error(f"API error in requirement add note tool: {e}")
-        return {
-            "success": False,
-            "error": f"API error: {str(e)}"
-        }
-    except Exception as e:
-        logger.error(f"Error in requirement add note tool: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-@mcp.tool
-async def nautex_verify_token(token: Optional[str] = None) -> Dict[str, Any]:
-    """Verify API token and get account information.
-
-    Args:
-        token: API token to verify (optional, uses config token if not provided)
-    """
-    try:
-        logger.debug("Executing verify token tool")
-        service = _instance
-
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
-
-        account_info = await service.nautex_api_service.verify_token_and_get_account_info(token)
-
-        # Get latency information from the API service
-        _, max_latency = service.nautex_api_service.api_latency
-
-        return {
-            "success": True,
-            "data": {
-                "profile_email": account_info.profile_email,
-                "api_version": account_info.api_version,
-                "response_latency": max_latency  # Use max latency from the API service
-            },
-            "message": "Token verification successful"
-        }
-
-    except NautexAPIError as e:
-        logger.error(f"API error in verify token tool: {e}")
-        return {
-            "success": False,
-            "error": f"Token verification failed: {str(e)}"
-        }
-    except Exception as e:
-        logger.error(f"Error in verify token tool: {e}")
+        logger.error(f"Error in update tasks tool: {e}")
         return {
             "success": False,
             "error": str(e)

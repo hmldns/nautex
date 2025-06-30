@@ -14,6 +14,7 @@ from .plan_context_service import PlanContextService
 from .config_service import ConfigurationService
 from .mcp_config_service import MCPConfigService
 from ..api.client import NautexAPIError
+from ..models.mcp_models import convert_scope_context_to_mcp_response
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -65,8 +66,8 @@ class MCPService:
 
     def __init__(
         self,
-        config: Optional[NautexConfig],
-        nautex_api_service: Optional[NautexAPIService],
+        config: NautexConfig,
+        nautex_api_service: NautexAPIService,
         plan_context_service: PlanContextService
     ):
         """Initialize the MCP service.
@@ -82,7 +83,7 @@ class MCPService:
 
         logger.debug("MCPService initialized with FastMCP server")
 
-    def _is_configured(self) -> bool:
+    def is_configured(self) -> bool:
         """Check if the service is properly configured.
 
         Returns:
@@ -92,9 +93,8 @@ class MCPService:
 
 # Tool implementations using decorators
 
-@mcp.tool
-async def nautex_status() -> Dict[str, Any]:
-    """Get comprehensive status and context information for Nautex CLI."""
+async def mcp_handle_status() -> Dict[str, Any]:
+    """Implementation of the status functionality."""
     try:
         logger.debug("Executing status tool")
         service = _instance
@@ -128,8 +128,13 @@ async def nautex_status() -> Dict[str, Any]:
 
 
 @mcp.tool
-async def nautex_list_projects() -> Dict[str, Any]:
-    """List all available projects."""
+async def nautex_status() -> Dict[str, Any]:
+    """Get comprehensive status and context information for Nautex CLI."""
+    return await mcp_handle_status()
+
+
+async def mcp_handle_list_projects() -> Dict[str, Any]:
+    """Implementation of the list projects functionality."""
     try:
         logger.debug("Executing list projects tool")
         service = _instance
@@ -170,24 +175,36 @@ async def nautex_list_projects() -> Dict[str, Any]:
 
 
 @mcp.tool
-async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
-    """List implementation plans for a project.
+async def nautex_list_projects() -> Dict[str, Any]:
+    """List all available projects."""
+    return await mcp_handle_list_projects()
+
+
+def _check_configured():
+    if not mcp_service().is_configured():
+        return False, {
+            "success": False,
+            "error": "Nautex MCP is not configured. Run 'nautex setup' to configure the CLI first.",
+            "configured": False
+        }
+
+    return True, None
+
+
+async def mcp_handle_list_plans(project_id: str) -> Dict[str, Any]:
+    """Implementation of the list plans functionality.
 
     Args:
         project_id: ID of the project to get plans for
     """
     try:
         logger.debug(f"Executing list plans tool for project {project_id}")
-        service = _instance
 
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
+        configured, error_response = _check_configured()
+        if not configured:
+            return error_response
 
-        plans = await service.nautex_api_service.list_implementation_plans(project_id)
+        plans = await mcp_service().nautex_api_service.list_implementation_plans(project_id)
 
         return {
             "success": True,
@@ -217,18 +234,24 @@ async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool
-async def nautex_next_scope() -> Dict[str, Any]:
-    """Get the next scope for the current project and plan."""
+async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
+    """List implementation plans for a project.
+
+    Args:
+        project_id: ID of the project to get plans for
+    """
+    return await mcp_handle_list_plans(project_id)
+
+
+async def mcp_handle_next_scope() -> Dict[str, Any]:
+    """Implementation of the next scope functionality."""
     try:
         logger.debug("Executing next scope tool")
         service = _instance
 
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
+        configured, error_response = _check_configured()
+        if not configured:
+            return error_response
 
         if not service.config.project_id or not service.config.plan_id:
             return {
@@ -243,33 +266,10 @@ async def nautex_next_scope() -> Dict[str, Any]:
 
         if next_scope:
             # Convert the scope to a dictionary representation
-            scope_dict = {
-                "tasks": [],
-                "project_id": next_scope.project_id,
-                "mode": next_scope.mode,
-                "focus_tasks": next_scope.focus_tasks
-            }
-
-            # Helper function to convert a task and its subtasks to dictionaries
-            def task_to_dict(task):
-                task_dict = {
-                    "task_designator": task.task_designator,
-                    "name": task.name,
-                    "description": task.description,
-                    "status": task.status,
-                    "subtasks": [task_to_dict(subtask) for subtask in task.subtasks],
-                    "requirements": [{"requirement_designator": req.requirement_designator} for req in task.requirements],
-                    "files": [{"file_path": file.file_path} for file in task.files]
-                }
-                return task_dict
-
-            # Convert all root tasks
-            for task in next_scope.tasks:
-                scope_dict["tasks"].append(task_to_dict(task))
-
+            response_scope = convert_scope_context_to_mcp_response(next_scope)
             return {
                 "success": True,
-                "data": scope_dict
+                "data": response_scope.model_dump(),
             }
         else:
             return {
@@ -293,8 +293,13 @@ async def nautex_next_scope() -> Dict[str, Any]:
 
 
 @mcp.tool
-async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Update multiple tasks in a batch operation.
+async def nautex_next_scope() -> Dict[str, Any]:
+    """Get the next scope for the current project and plan."""
+    return await mcp_handle_next_scope()
+
+
+async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Implementation of the update tasks functionality.
 
     Args:
         operations: List of operations, each containing:
@@ -306,12 +311,9 @@ async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any
         logger.debug(f"Executing update tasks tool with {len(operations)} operations")
         service = _instance
 
-        if not service._is_configured():
-            return {
-                "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
-                "configured": False
-            }
+        configured, error_response = _check_configured()
+        if not configured:
+            return error_response
 
         if not service.config.project_id or not service.config.plan_id:
             return {
@@ -355,3 +357,16 @@ async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any
             "success": False,
             "error": str(e)
         }
+
+
+@mcp.tool
+async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Update multiple tasks in a batch operation.
+
+    Args:
+        operations: List of operations, each containing:
+            - task_designator: The designator of the task to update
+            - updated_status: Optional new status for the task
+            - new_note: Optional new note to add to the task
+    """
+    return await mcp_handle_update_tasks(operations)

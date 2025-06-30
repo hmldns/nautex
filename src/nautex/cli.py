@@ -11,10 +11,32 @@ from .services.config_service import ConfigurationService, ConfigurationError
 from .services.nautex_api_service import NautexAPIService
 from .services.integration_status_service import IntegrationStatusService
 from .services.plan_context_service import PlanContextService
-from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run
+from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run, \
+    mcp_handle_next_scope
 from .services.mcp_config_service import MCPConfigService
 from .api.client import NautexAPIClient
 from .api import create_api_client
+import json
+
+
+def handle_test_commands(args):
+    """Handle test commands for MCP functionality.
+
+    Args:
+        args: Command line arguments
+    """
+    if hasattr(args, 'test_command') and args.test_command == "next_scope":
+        # Run the next_scope test command
+        # Call the next_scope function and get the result
+        result = asyncio.run(mcp_handle_next_scope())
+
+        # Print the result with proper indentation
+        if result["success"] and "data" in result:
+            print(json.dumps(result["data"], indent=4))
+        else:
+            print(json.dumps(result, indent=4))
+    else:
+        print("Please specify a test command. Available commands: next_scope")
 
 
 def main() -> None:
@@ -35,6 +57,16 @@ def main() -> None:
 
     # MCP command
     mcp_parser = subparsers.add_parser("mcp", help="Start MCP server for IDE integration")
+
+    # MCP subcommands
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command", help="MCP commands")
+
+    # MCP test command
+    mcp_test_parser = mcp_subparsers.add_parser("test", help="Test MCP functionality")
+    mcp_test_subparsers = mcp_test_parser.add_subparsers(dest="test_command", help="Test commands")
+
+    # MCP test next_scope command
+    mcp_test_next_scope_parser = mcp_test_subparsers.add_parser("next_scope", help="Test next_scope functionality")
 
     args = parser.parse_args()
 
@@ -88,12 +120,8 @@ def main() -> None:
         asyncio.run(ui_service.handle_status_command(noui=args.noui))
 
     elif args.command == "mcp":
-        # Handle MCP command without asyncio.run
-        if not nautex_api_service:
-            print("MCP server starting with limited functionality. Use 'nautex setup' to configure.", file=sys.stderr)
-
+        # Initialize MCP service
         try:
-            # Initialize MCP service
             mcp_service = MCPService(
                 config=config,  # This can be None
                 nautex_api_service=nautex_api_service,  # This can be None
@@ -103,8 +131,16 @@ def main() -> None:
             # Set the global MCP service instance
             mcp_server_set_service_instance(mcp_service)
 
-            # Run the MCP server in the main thread
-            mcp_server_run()
+            # Check for MCP subcommands
+            if hasattr(args, 'mcp_command') and args.mcp_command == "test":
+                handle_test_commands(args)
+            else:
+                # Handle regular MCP command without asyncio.run
+                if not nautex_api_service:
+                    print("MCP server starting with limited functionality. Use 'nautex setup' to configure.", file=sys.stderr)
+
+                # Run the MCP server in the main thread
+                mcp_server_run()
 
         except Exception as e:
             print(f"MCP server error: {e}", file=sys.stderr)

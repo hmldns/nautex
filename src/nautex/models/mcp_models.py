@@ -13,33 +13,18 @@ class MCPScopeTask(BaseModel):
     status: str = Field(..., description="Current task status")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
-    instructions: str = Field("", description="Instructions for this task") # TODO this is instructrion must be feel by context (heursitc func) and fur focus task it must be implementation instruction
-    context_note: str = Field("", description="Additional context for this task state") # TODO this is must be optional and filled for context tasks 
+    context_note: Optional[str] = Field(None, description="Additional context for this task state")
+    instructions: Optional[str] = Field(None, description="Instructions for this task")
+    subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
 
 
 class MCPScopeResponse(BaseModel):
     """Root model for MCP scope response."""
-    progress_context: str = Field("", description="Overall instructions of what is going on") # TODO fill it depending on scope context mode
-    instructions: str = Field("", description="Instructions based on the current context scope mode") # TODO fill it depending on scope context mode
+    progress_context: str = Field("", description="Overall instructions of what is going on")
+    instructions: str = Field("", description="Instructions based on the current context scope mode")
+    tasks: List[MCPScopeTask] = Field(default_factory=list, description="List of tasks in a tree structure")
 
-    context_tasks: List[MCPScopeTask] = Field(default_factory=list, description="List of tasks to better understand context") # TODO put here all tasks that are not if focus, create function for fill context_note by heuristics. implement heursitic putting infro in context about position in tree (if any), also fill instruction by heursitcs function
-    focus_tasks: List[MCPScopeTask] = Field(default_factory=dict, description="List of tasks to be focused on") # TODO put here tashs with deisgrangros in focus list
-
-
-
-def is_status_equal(task_status, status_enum):
-    """Compare task status with a TaskStatus enum value.
-
-    Args:
-        task_status: The task status to compare
-        status_enum: The TaskStatus enum value to compare with
-
-    Returns:
-        True if the task status equals the enum value, False otherwise
-    """
-    # Simply compare the enum values directly
-    return task_status == status_enum
-
+MCPScopeTask.model_rebuild()
 
 def get_task_type_description(task: ScopeTask) -> str:
     """Generate a description of the task type.
@@ -65,23 +50,22 @@ def get_task_instructions(task: ScopeTask) -> str:
     Returns:
         A string containing instructions for the task
     """
-    if is_status_equal(task.status, TaskStatus.NOT_STARTED):
+    if task.status == TaskStatus.NOT_STARTED:
         return "This task is not started yet. Review requirements and files before beginning work."
 
-    elif is_status_equal(task.status, TaskStatus.IN_PROGRESS):
+    elif task.status == TaskStatus.IN_PROGRESS:
         if task.subtasks:
             return "This task is in progress. Focus on completing subtasks in order."
         else:
             return "This task is in progress. Continue implementation according to requirements."
 
-    elif is_status_equal(task.status, TaskStatus.DONE):
+    elif task.status == TaskStatus.DONE:
         return "This task is completed. No further action needed."
 
-    elif is_status_equal(task.status, TaskStatus.BLOCKED):
+    elif task.status == TaskStatus.BLOCKED:
         return "This task is blocked. Resolve blocking issues before continuing."
 
     return ""
-
 
 
 def get_mode_instructions(mode: ScopeContextMode) -> str:
@@ -149,7 +133,8 @@ def create_mcp_task_from_scope_task(task: ScopeTask, is_focus: bool) -> MCPScope
         description=task.description,
         status=task.status.value,
         requirements=[req.requirement_designator for req in task.requirements if req.requirement_designator],
-        files=[file.file_path for file in task.files]
+        files=[file.file_path for file in task.files],
+        subtasks=[]  # Will be filled later
     )
 
     # Fill instructions based on task status
@@ -179,34 +164,35 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, base_path
     response.progress_context = f"Current mode: {scope_context.mode.value}"
     response.instructions = get_mode_instructions(scope_context.mode)
 
-    # Process all tasks recursively
-    focus_tasks = []
-    context_tasks = []
+    # Process all tasks recursively to build the task tree
+    task_map = {}  # Map of designator to MCPScopeTask
 
-    def process_task(task: ScopeTask, is_focus: bool = False):
+    def process_task(task: ScopeTask, is_focus: bool = False) -> MCPScopeTask:
         # Create MCPScopeTask from ScopeTask using the helper function
         task_state = create_mcp_task_from_scope_task(task, is_focus)
-
-        # Add to appropriate list
-        if is_focus:
-            focus_tasks.append(task_state)
-        else:
-            context_tasks.append(task_state)
-
-        # Process subtasks
+        
+        # Store in map for later reference
+        task_map[task.task_designator] = task_state
+        
+        # Process subtasks and add them to the task's subtasks list
         for subtask in task.subtasks:
             # A subtask is in focus if its designator is in the focus_tasks list
             subtask_in_focus = subtask.task_designator in scope_context.focus_tasks
-            process_task(subtask, subtask_in_focus)
+            subtask_state = process_task(subtask, subtask_in_focus)
+            task_state.subtasks.append(subtask_state)
+        
+        return task_state
 
     # Process all top-level tasks
+    top_level_tasks = []
     for task in scope_context.tasks:
         # A task is in focus if its designator is in the focus_tasks list
         task_in_focus = task.task_designator in scope_context.focus_tasks
-        process_task(task, task_in_focus)
+        top_level_task = process_task(task, task_in_focus)
+        top_level_tasks.append(top_level_task)
 
-    # Set the focus and context tasks in the response
-    response.focus_tasks = focus_tasks
-    response.context_tasks = context_tasks
+    # Set the tasks in the response
+    response.tasks = top_level_tasks
 
     return response
+

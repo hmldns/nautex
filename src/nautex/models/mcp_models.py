@@ -1,6 +1,6 @@
 """Pydantic models for MCP (Model-Controller-Presenter) response structures."""
 
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Tuple
 from enum import Enum
 from pydantic import BaseModel, Field
 from src.nautex.api.scope_context_model import ScopeContext, ScopeTask, ScopeContextMode, TaskStatus, TaskType
@@ -10,7 +10,7 @@ class MCPScopeTask(BaseModel):
     designator: str = Field(..., description="Unique task identifier like PRD-123")
     name: str = Field(..., description="Human-readable task name")
     description: Optional[str] = Field(None, description="Detailed task description")
-    status: str = Field(..., description="Current task status")
+    status: TaskStatus = Field(..., description="Current task status")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
     context_note: Optional[str] = Field(None, description="Additional context for this task state")
@@ -25,6 +25,7 @@ class MCPScopeResponse(BaseModel):
     tasks: List[MCPScopeTask] = Field(default_factory=list, description="List of tasks in a tree structure")
 
 MCPScopeTask.model_rebuild()
+
 
 def get_task_type_description(task: ScopeTask) -> str:
     """Generate a description of the task type.
@@ -116,7 +117,7 @@ def compose_context_task_note(task: ScopeTask) -> str:
     return " ".join(notes)
 
 
-def create_mcp_task_from_scope_task(task: ScopeTask, is_focus: bool) -> MCPScopeTask:
+def create_mcp_task_from_scope_task(task: ScopeTask) -> MCPScopeTask:
     """Create an MCPScopeTask from a ScopeTask.
 
     Args:
@@ -137,14 +138,89 @@ def create_mcp_task_from_scope_task(task: ScopeTask, is_focus: bool) -> MCPScope
         subtasks=[]  # Will be filled later
     )
 
-    # Fill instructions based on task status
-    task_state.instructions = get_task_instructions(task)
-
-    # Fill context_note for context tasks
-    if not is_focus:
-        task_state.context_note = compose_context_task_note(task)
-
     return task_state
+
+
+def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextMode, is_in_focus: bool) -> Tuple[str, str]:
+    """
+    Provides context and instructions for a task based on its state and the execution mode.
+
+    Args:
+        status: The current status of the task.
+        type: The type of the task.
+        mode: The current scope execution mode.
+        is_in_focus: A boolean indicating if the task is the current focus.
+
+    Returns:
+        A tuple containing the context note and the instruction string.
+    """
+    # --- Repetitive String Constants for Instructions and Notes ---
+    AWAIT_SUBTASK_COMPLETION_NOTE = "This is a master task awaiting completion of its subtasks."
+    SUBTASK_CONTEXT_NOTE = "This is a subtask of a larger master task."
+    IRRELEVANT_TASK_NOTE = "This task is not currently in focus and is provided for context only."
+
+    START_CODING_INST = "Implement the required code changes for this task."
+    CONTINUE_CODING_INST = "Continue the implementation of this coding task."
+    START_REVIEW_INST = "Review the code associated with this task."
+    CONTINUE_REVIEW_INST = "Continue reviewing the code for this task."
+    START_TESTING_INST = "Test the implementation of this task based on the requirements."
+    CONTINUE_TESTING_INST = "Continue testing the implementation."
+    PROVIDE_INPUT_INST = "Provide the required input or feedback for this task."
+    WAIT_FOR_INPUT_INST = "Awaiting user input to proceed."
+
+    FINALIZE_MASTER_TASK_INST = "All subtasks are complete. Finalize the master task by integrating the work and preparing for completion."
+    CONTINUE_FINALIZE_MASTER_TASK_INST = "Continue finalizing the master task."
+
+    TASK_DONE_INST = "This task is complete. No further action is needed."
+    TASK_BLOCKED_INST = "This task is blocked. Address the blocking issues before proceeding."
+
+    # --- Lookup Table for Task Instructions ---
+    # The table is structured as: (status, type, mode) -> (context_note, instruction)
+    # This table assumes the task is in focus (is_in_focus=True).
+    instruction_map = {
+        # --- Mode: ExecuteSubtasks ---
+        (TaskStatus.NOT_STARTED, TaskType.CODE, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, START_CODING_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.CODE, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, CONTINUE_CODING_INST),
+        (TaskStatus.NOT_STARTED, TaskType.REVIEW, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, START_REVIEW_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.REVIEW, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, CONTINUE_REVIEW_INST),
+        (TaskStatus.NOT_STARTED, TaskType.TEST, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, START_TESTING_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.TEST, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, CONTINUE_TESTING_INST),
+        (TaskStatus.NOT_STARTED, TaskType.INPUT, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, PROVIDE_INPUT_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.ExecuteSubtasks): (SUBTASK_CONTEXT_NOTE, WAIT_FOR_INPUT_INST),
+
+        # --- Mode: FinalizeMasterTask ---
+        (TaskStatus.NOT_STARTED, TaskType.CODE, ScopeContextMode.FinalizeMasterTask): ("", FINALIZE_MASTER_TASK_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.CODE, ScopeContextMode.FinalizeMasterTask): ("", CONTINUE_FINALIZE_MASTER_TASK_INST),
+        (TaskStatus.NOT_STARTED, TaskType.REVIEW, ScopeContextMode.FinalizeMasterTask): ("", FINALIZE_MASTER_TASK_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.REVIEW, ScopeContextMode.FinalizeMasterTask): ("", CONTINUE_FINALIZE_MASTER_TASK_INST),
+        (TaskStatus.NOT_STARTED, TaskType.TEST, ScopeContextMode.FinalizeMasterTask): ("", FINALIZE_MASTER_TASK_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.TEST, ScopeContextMode.FinalizeMasterTask): ("", CONTINUE_FINALIZE_MASTER_TASK_INST),
+        (TaskStatus.NOT_STARTED, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", PROVIDE_INPUT_INST),
+        (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", WAIT_FOR_INPUT_INST),
+    }
+
+    if not is_in_focus:
+        return (IRRELEVANT_TASK_NOTE, "")
+
+    if status == TaskStatus.DONE:
+        return ("", TASK_DONE_INST)
+    if status == TaskStatus.BLOCKED:
+        return ("", TASK_BLOCKED_INST)
+
+    key = (status, type, mode)
+    return instruction_map.get(key, ("", ""))
+
+
+def set_context_info(mcp_tasks: ScopeTask, scope_context: ScopeContext) -> None:
+    # Revisit mcp_tasks for setting context and instructions
+    finalize_master_task = scope_context.mode == ScopeContextMode.FinalizeMasterTask
+    tasks_execution = scope_context.mode == ScopeContextMode.ExecuteSubtasks
+    focus_tasks_designators = {td for td in scope_context.focus_tasks}
+
+    def _set_context_info(mcp_task: MCPScopeTask) -> None:
+        mcp_task.instructions =
+
+    pass
 
 
 def convert_scope_context_to_mcp_response(scope_context: ScopeContext, base_path: Optional[str] = None) -> MCPScopeResponse:
@@ -158,41 +234,33 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, base_path
         An MCPScopeResponse containing the converted data
     """
     # Create the response object
-    response = MCPScopeResponse()
-
-    # Fill progress_context and instructions based on scope context mode
-    response.progress_context = f"Current mode: {scope_context.mode.value}"
-    response.instructions = get_mode_instructions(scope_context.mode)
 
     # Process all tasks recursively to build the task tree
     task_map = {}  # Map of designator to MCPScopeTask
 
-    def process_task(task: ScopeTask, is_focus: bool = False) -> MCPScopeTask:
+    def process_task(task: ScopeTask) -> MCPScopeTask:
         # Create MCPScopeTask from ScopeTask using the helper function
-        task_state = create_mcp_task_from_scope_task(task, is_focus)
+        mcp_task = create_mcp_task_from_scope_task(task)
         
-        # Store in map for later reference
-        task_map[task.task_designator] = task_state
+        task_map[task.task_designator] = mcp_task
         
-        # Process subtasks and add them to the task's subtasks list
         for subtask in task.subtasks:
-            # A subtask is in focus if its designator is in the focus_tasks list
-            subtask_in_focus = subtask.task_designator in scope_context.focus_tasks
-            subtask_state = process_task(subtask, subtask_in_focus)
-            task_state.subtasks.append(subtask_state)
+            subtask_state = process_task(subtask)
+            mcp_task.subtasks.append(subtask_state)
         
-        return task_state
+        return mcp_task
 
     # Process all top-level tasks
     top_level_tasks = []
     for task in scope_context.tasks:
         # A task is in focus if its designator is in the focus_tasks list
-        task_in_focus = task.task_designator in scope_context.focus_tasks
-        top_level_task = process_task(task, task_in_focus)
+        top_level_task = process_task(task)
         top_level_tasks.append(top_level_task)
 
-    # Set the tasks in the response
-    response.tasks = top_level_tasks
+    response = MCPScopeResponse(
+        progress_context=f"Current mode: {scope_context.mode.value}",
+        instructions=get_mode_instructions(scope_context.mode),
+        tasks=top_level_tasks
+    )
 
     return response
-

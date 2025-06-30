@@ -27,19 +27,11 @@ class AccountInfo(BaseModel):
 
 
 class TaskStatus(str, Enum):
-    """Valid task status values aligned with PromptTaxonomy.Domain.Plan.StatusEnum."""
+    # FIXME duplicated in scope_context_model.py
     NOT_STARTED = "Not started"
     IN_PROGRESS = "In progress"
     DONE = "Done"
     BLOCKED = "Blocked"
-
-
-class RequirementStatus(str, Enum):
-    """Valid requirement status values."""
-    APPROVED = "approved"
-    PENDING_REVIEW = "pending_review"
-    DRAFT = "draft"
-    REJECTED = "rejected"
 
 
 # Core API Models

@@ -5,7 +5,6 @@ from enum import Enum
 
 
 class TaskStatus(str, Enum):
-    """Valid task status values aligned with PromptTaxonomy.Domain.Plan.StatusEnum."""
     NOT_STARTED = "Not started"
     IN_PROGRESS = "In progress"
     DONE = "Done"
@@ -13,7 +12,6 @@ class TaskStatus(str, Enum):
 
 
 class TaskType(str, Enum):
-    """Valid task type values aligned with PromptTaxonomy.Domain.Plan.TypeEnum."""
     CODE = "Code"
     REVIEW = "Review"
     TEST = "Test"

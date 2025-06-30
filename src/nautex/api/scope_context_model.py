@@ -1,16 +1,23 @@
-"""Pydantic models for representing task scope context in Nautex.ai."""
-
-from typing import List, Optional, Dict, Any, Union, Tuple, Awaitable
-from pathlib import Path
-from pydantic import BaseModel, Field, validator
+from typing import List, Optional
+from pydantic import BaseModel, Field
 import os
-import asyncio
 from enum import Enum
 
-from docproc import DocumentItem
-from docproc.designators import designator_compose
-from docproc.prompts.taxonomy import PromptTaxonomy
-from data_api.models import TaskStatus
+
+class TaskStatus(str, Enum):
+    """Valid task status values aligned with PromptTaxonomy.Domain.Plan.StatusEnum."""
+    NOT_STARTED = "Not started"
+    IN_PROGRESS = "In progress"
+    DONE = "Done"
+    BLOCKED = "Blocked"
+
+
+class TaskType(str, Enum):
+    """Valid task type values aligned with PromptTaxonomy.Domain.Plan.TypeEnum."""
+    CODE = "Code"
+    REVIEW = "Review"
+    TEST = "Test"
+    INPUT = "Input"
 
 
 class ScopeContextMode(str, Enum):
@@ -19,122 +26,26 @@ class ScopeContextMode(str, Enum):
     FinalizeMasterTask = "FinalizeMasterTask"
 
 
-def convert_status_from_impl_plan(item: DocumentItem) -> TaskStatus:
-
-    status_prop = item.properties_dict.get(PromptTaxonomy.Domain.Plan.STATUS)
-
-    if status_prop:
-        status = status_prop.value
-    else:
-        status = PromptTaxonomy.Domain.Plan.StatusEnum.NOT_STARTED
-
-    # The status values are identical, so we can directly convert
-    if status == PromptTaxonomy.Domain.Plan.StatusEnum.NOT_STARTED:
-        return TaskStatus.NOT_STARTED
-    elif status == PromptTaxonomy.Domain.Plan.StatusEnum.IN_PROGRESS:
-        return TaskStatus.IN_PROGRESS
-    elif status == PromptTaxonomy.Domain.Plan.StatusEnum.DONE:
-        return TaskStatus.DONE
-    elif status == PromptTaxonomy.Domain.Plan.StatusEnum.BLOCKED:
-        return TaskStatus.BLOCKED
-    else:
-        # Default to NOT_STARTED if status is not recognized
-        return TaskStatus.NOT_STARTED
-
-
 class Reference(BaseModel):
     """Base class for all references."""
-    root_id: str = Field(..., description="Root document ID", exclude=True)
-    item_id: str = Field(..., description="Item ID", exclude=True)
+    root_id: Optional[str] = Field(None, description="Root document ID", exclude=True)
+    item_id: Optional[str] = Field(None, description="Item ID", exclude=True)
 
-    def resolve(self, item: Any, document_designator: str, accessor) -> Optional[Awaitable[None]]:
-        """
-        Resolve the reference using the provided document item.
-        This method should be implemented by subclasses.
-        It can be synchronous or asynchronous.
-
-        Args:
-            item: The document item to use for resolving the reference.
-            accessor: DocumentRootAccessor for additional operations.
-            document_designator: Document designator for composing references.
-
-        Returns:
-            Optional coroutine if the operation is asynchronous.
-        """
-        pass
 
 
 class TaskReference(Reference):
     """Reference to a task by its designator."""
     task_designator: Optional[str] = Field(None, description="Unique task identifier like TASK-123")
 
-    def resolve(self, item: Any, document_designator: str, accessor) -> Optional[Awaitable[None]]:
-        """
-        Resolve the task reference using the provided document item.
-
-        Args:
-            item: The document item to use for resolving the reference.
-            accessor: Optional DocumentRootAccessor for additional operations.
-            document_designator: Document designator for composing references.
-
-        Returns:
-            None as this is a synchronous operation.
-        """
-        self.task_designator = designator_compose(document_designator, item.designator)
-        return None
-
 
 class RequirementReference(Reference):
     """Reference to a requirement by its designator."""
     requirement_designator: Optional[str] = Field(None, description="Unique requirement identifier like REQ-45")
 
-    def resolve(self, item: Any, document_designator: str, accessor) -> Optional[Awaitable[None]]:
-        """
-        Resolve the requirement reference using the provided document item.
-
-        Args:
-            item: The document item to use for resolving the reference.
-            accessor: Optional DocumentRootAccessor for additional operations.
-            document_designator: Document designator for composing references.
-
-        Returns:
-            None as this is a synchronous operation.
-        """
-        self.requirement_designator = designator_compose(document_designator, item.designator)
-        return None
-
 
 class FileReference(Reference):
     """Reference to a file by its path."""
     file_path: str = Field(..., description="Path to the file")
-
-    def resolve(self, item: Any, document_designator: str, accessor) -> Optional[Awaitable[None]]:
-
-        # Async case - traverse parent chain to get full path
-        async def get_full_path():
-            try:
-                # Start with the current item's name
-                path_parts = [item.name]
-                current_item = item
-
-                # Traverse up the parent chain
-                while current_item.parent_id:
-                    # Get the parent item
-                    parent_items = await accessor.items.get([current_item.parent_id])
-                    if not parent_items:
-                        break
-
-                    parent_item = parent_items[0]
-                    path_parts.insert(0, parent_item.name)
-                    current_item = parent_item
-
-                # Join the path parts to form the full path
-                self.file_path = "/".join(*path_parts)
-            except Exception as e:
-                # If there's an error, fall back to the item name
-                self.file_path = item.name
-
-        return get_full_path()
 
 
 class ScopeTask(BaseModel):
@@ -143,6 +54,7 @@ class ScopeTask(BaseModel):
     name: str = Field(..., description="Human-readable task name")
     description: str = Field(None, description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
+    type: TaskType = Field(..., description="Type of the task (Code, Review, Test, Input)")
     subtasks: List["ScopeTask"] = Field(default_factory=list, description="List of subtasks")
 
     # parent_task: Optional[TaskReference] = Field(None, description="Reference to parent task")
@@ -277,6 +189,9 @@ class ScopeContext(BaseModel):
 
         # Render task status
         lines.append(f"{indent}  Status: {task.status.value}")
+
+        # Render task type
+        lines.append(f"{indent}  Type: {task.type.value}")
 
         # Render task description if available
         if task.description:

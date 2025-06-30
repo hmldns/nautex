@@ -218,7 +218,6 @@ class NautexAPIService:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.scope_context_model import ScopeContext
 
         try:
             return await self.api_client.get_next_scope(project_id, plan_id)

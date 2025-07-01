@@ -86,12 +86,14 @@ class MCPService:
         self.plan_context_service = plan_context_service
         self.document_service = document_service
         self._documents_loaded_for_session = False
+        self._designators_paths: Dict[str, str] = {}
 
         logger.debug("MCPService initialized with FastMCP server")
 
 
-    async def ensure_dependency_documents_on_disk(self):
-                # Ensure dependency documents are loaded once per session
+    async def ensure_dependency_documents_on_disk(self) -> Dict[str, str]:
+        # Ensure dependency documents are loaded once per session
+
         if not self._documents_loaded_for_session:
             logger.info("Loading dependency documents for the current session")
             try:
@@ -100,14 +102,20 @@ class MCPService:
                     project_id=self.config.project_id,
                     plan_id=self.config.plan_id
                 )
-                logger.info(f"Loaded {sum(1 for success in doc_results.values() if success)} of {len(doc_results)} dependency documents")
+
+                # Count successful loads (paths that don't contain error messages)
+                successful_loads = sum(1 for path in doc_results.values() if not path.startswith("Error") and not path.startswith("Document"))
+                logger.info(f"Loaded {successful_loads} of {len(doc_results)} dependency documents")
 
                 # Mark documents as loaded for this session
                 self._documents_loaded_for_session = True
+                self._designators_paths = doc_results
+
             except Exception as e:
                 logger.error(f"Error loading dependency documents: {e}")
                 raise
 
+        return self._designators_paths
 
     def is_configured(self) -> bool:
         """Check if the service is properly configured.
@@ -285,8 +293,6 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
                 "error": "Project ID and implementation plan ID must be configured"
             }
 
-        await service.ensure_dependency_documents_on_disk()
-
         next_scope = await service.nautex_api_service.next_scope(
             project_id=service.config.project_id,
             plan_id=service.config.plan_id
@@ -294,7 +300,10 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
 
         if next_scope:
             # Convert the scope to a dictionary representation
-            response_scope = convert_scope_context_to_mcp_response(next_scope)
+
+            docs_lut = await service.ensure_dependency_documents_on_disk()
+
+            response_scope = convert_scope_context_to_mcp_response(next_scope, docs_lut)
             return {
                 "success": True,
                 "data": response_scope.model_dump(),
@@ -398,60 +407,3 @@ async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any
             - new_note: Optional new note to add to the task
     """
     return await mcp_handle_update_tasks(operations)
-
-
-async def mcp_handle_ensure_documents(doc_designators: List[str]) -> Dict[str, Any]:
-    """Implementation of the ensure documents functionality.
-
-    Args:
-        doc_designators: List of document designators to ensure
-    """
-    try:
-        logger.debug(f"Executing ensure documents tool for {len(doc_designators)} documents")
-        service = _instance
-
-        configured, error_response = _check_configured()
-        if not configured:
-            return error_response
-
-        if not service.config.project_id:
-            return {
-                "success": False,
-                "error": "Project ID must be configured"
-            }
-
-        if not service.document_service:
-            return {
-                "success": False,
-                "error": "Document service is not available"
-            }
-
-        results = await service.document_service.ensure_documents(
-            project_id=service.config.project_id,
-            doc_designators=doc_designators
-        )
-
-        return {
-            "success": True,
-            "data": {
-                "results": results,
-                "documents_path": service.config.documents_path
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"Error in ensure documents tool: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
-@mcp.tool
-async def nautex_ensure_documents(doc_designators: List[str]) -> Dict[str, Any]:
-    """Ensure documents are available locally.
-
-    Args:
-        doc_designators: List of document designators to ensure
-    """
-    return await mcp_handle_ensure_documents(doc_designators)

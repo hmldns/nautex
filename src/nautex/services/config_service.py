@@ -30,8 +30,9 @@ class ConfigurationService:
         Args:
             project_root: Root directory for the project. Defaults to current working directory.
         """
+
         self.project_root = project_root or Path.cwd()
-        self.config_dir = self.project_root / ".nautex"
+        self.config_dir = self.project_root / self.nautex_dir
         self.config_file = self.config_dir / "config.json"
         self.env_file = self.project_root / ".env"
 
@@ -40,6 +41,21 @@ class ConfigurationService:
     @property
     def config(self) -> NautexConfig:
         return self._config
+
+    @property
+    def cwd(self) -> Path :
+        return Path.cwd()
+
+    @property
+    def nautex_dir(self):
+        return Path(".nautex")
+
+    @property
+    def documents_path(self) -> Path :
+        if self.config.documents_path:
+            return Path(self.config.documents_path)
+        else:
+            return self.nautex_dir / "docs"
 
     def load_configuration(self) -> NautexConfig:
         """Load configuration from .nautex/config.json and environment variables.

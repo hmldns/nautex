@@ -16,7 +16,7 @@ class NautexConfig(BaseSettings):
     agent_instance_name: str = Field("Coding Agent", description="User-defined name for this CLI instance")
     project_id: Optional[str] = Field(None, description="Selected Nautex.ai project ID")
     plan_id: Optional[str] = Field(None, description="Selected implementation plan ID")
-    documents_path: str = Field("./documents", description="Path to store downloaded documents")
+    documents_path: Optional[str] = Field(None, description="Path to store downloaded documents")
 
     api_test_mode: bool = Field(False, description="Enable test mode for API client to use dummy responses",
                                exclude=True)
@@ -28,21 +28,6 @@ class NautexConfig(BaseSettings):
         env_prefix = "NAUTEX_"  # Environment variables should be prefixed with NAUTEX_k
         case_sensitive = False
         extra = "ignore"  # Ignore extra environment variables that don't match our model
-        json_schema_extra = {
-            "example": {
-                "api_host": "http://localhost:8000",
-                "api_token": "your-secret-token-here",
-                "agent_instance_name": "my-dev-agent",
-                "project_id": "PROJ-123",
-                "implementation_plan_id": "PLAN-456",
-                "documents_path": "./documents",
-                "api_test_mode": True,
-                "account_details": {
-                    "profile_email": "user@example.com",
-                    "api_version": "1.0.0"
-                }
-            }
-        }
 
 
     def get_token(self):

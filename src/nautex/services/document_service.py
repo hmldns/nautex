@@ -49,7 +49,7 @@ class DocumentService:
             logger.error(f"Error getting document {doc_designator}: {e}")
             return None
 
-    async def save_document_to_file(self, document: Document, output_path: Path) -> bool:
+    async def save_document_to_file(self, document: Document, output_path: Path) -> tuple[bool, str]:
         """Save a document to a file.
 
         Args:
@@ -57,7 +57,7 @@ class DocumentService:
             output_path: The path to save the document to
 
         Returns:
-            True if the document was saved successfully, False otherwise
+            Tuple of (success, path or error message)
         """
         try:
             # Create directory if it doesn't exist
@@ -71,12 +71,13 @@ class DocumentService:
                 await f.write(markdown_content)
 
             logger.debug(f"Document {document.designator} saved to {output_path}")
-            return True
+            return True, str(output_path)
         except Exception as e:
-            logger.error(f"Error saving document {document.designator} to {output_path}: {e}")
-            return False
+            error_msg = f"Error saving document {document.designator} to {output_path}: {e}"
+            logger.error(error_msg)
+            return False, error_msg
 
-    async def ensure_documents(self, project_id: str, doc_designators: List[str]) -> Dict[str, bool]:
+    async def ensure_documents(self, project_id: str, doc_designators: List[str]) -> Dict[str, str]:
         """Ensure documents are available locally.
 
         Args:
@@ -84,10 +85,10 @@ class DocumentService:
             doc_designators: List of document designators to ensure
 
         Returns:
-            Dictionary mapping document designators to success status
+            Dictionary mapping document designators to file paths or error messages
         """
         results = {}
-        documents_path = Path(self.config_service.config.documents_path)
+        documents_path = Path(self.config_service.documents_path)
 
         # Create documents directory if it doesn't exist
         os.makedirs(documents_path, exist_ok=True)
@@ -104,18 +105,20 @@ class DocumentService:
                     output_path = documents_path / output_filename
 
                     # Save document to file
-                    success = await self.save_document_to_file(document, output_path)
-                    results[designator] = success
+                    success, result = await self.save_document_to_file(document, output_path)
+                    results[designator] = result
                 else:
-                    logger.warning(f"Document {designator} not found")
-                    results[designator] = False
+                    error_msg = f"Document {designator} not found"
+                    logger.warning(error_msg)
+                    results[designator] = error_msg
             except Exception as e:
-                logger.error(f"Error ensuring document {designator}: {e}")
-                results[designator] = False
+                error_msg = f"Error ensuring document {designator}: {e}"
+                logger.error(error_msg)
+                results[designator] = error_msg
 
         return results
 
-    async def ensure_plan_dependency_documents(self, project_id: str, plan_id: str) -> Dict[str, bool]:
+    async def ensure_plan_dependency_documents(self, project_id: str, plan_id: str) -> Dict[str, str]:
         """Ensure all dependency documents for a plan are available locally.
 
         Args:
@@ -123,14 +126,15 @@ class DocumentService:
             plan_id: The ID of the implementation plan
 
         Returns:
-            Dictionary mapping document designators to success status, or empty dict if plan not found
+            Dictionary mapping document designators to file paths or error messages, or empty dict if plan not found
         """
         try:
             # Get the implementation plan
             plan = await self.nautex_api_service.get_implementation_plan(project_id, plan_id)
 
             if not plan:
-                logger.warning(f"Implementation plan {plan_id} not found for project {project_id}")
+                error_msg = f"Implementation plan {plan_id} not found for project {project_id}"
+                logger.warning(error_msg)
                 return {}
 
             # Get dependency documents
@@ -146,5 +150,6 @@ class DocumentService:
             return await self.ensure_documents(project_id, dependency_docs)
 
         except Exception as e:
-            logger.error(f"Error ensuring dependency documents for plan {plan_id}: {e}")
+            error_msg = f"Error ensuring dependency documents for plan {plan_id}: {e}"
+            logger.error(error_msg)
             return {}

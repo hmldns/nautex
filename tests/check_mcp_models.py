@@ -24,7 +24,7 @@ def process_and_print_scope_context(scope_context: ScopeContext, case_name: str)
     print(f"{'=' * 80}")
 
     # Convert to MCP response
-    response = convert_scope_context_to_mcp_response(scope_context)
+    response = convert_scope_context_to_mcp_response(scope_context, {})
 
     # Print the response as JSON
     print(json.dumps(response.model_dump(), indent=2))

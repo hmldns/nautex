@@ -23,6 +23,7 @@ class MCPScopeResponse(BaseModel):
     """Root model for MCP scope response."""
     progress_context: str = Field("", description="Overall instructions of what is going on")
     instructions: str = Field("", description="Instructions based on the current context scope mode")
+    documents_paths: Dict[str, str] = Field(default_factory=dict, description="Map of document designators to paths") 
     tasks: List[MCPScopeTask] = Field(default_factory=list, description="List of tasks in a tree structure")
 
 MCPScopeTask.model_rebuild()
@@ -241,11 +242,13 @@ def set_context_info_and_notes(mcp_task: MCPScopeTask, scope_context: ScopeConte
     traverse_tasks(mcp_task)
 
 
-def convert_scope_context_to_mcp_response(scope_context: ScopeContext, base_path: Optional[str] = None) -> MCPScopeResponse:
+def convert_scope_context_to_mcp_response(scope_context: ScopeContext, documents_paths: Dict[str, str],
+                                          base_path: Optional[str] = None) -> MCPScopeResponse:
     """Convert a ScopeContext to an MCPScopeResponse.
 
     Args:
         scope_context: The scope context to convert
+        documents_paths: Map of document designators to paths
         base_path: Optional base path for rendering relative file paths
 
     Returns:
@@ -283,6 +286,7 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, base_path
     response = MCPScopeResponse(
         progress_context=progress_context,
         instructions=get_mode_instructions(scope_context.mode) if top_level_tasks else "",
+        documents_paths=documents_paths,
         tasks=top_level_tasks
     )
 

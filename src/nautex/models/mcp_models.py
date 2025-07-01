@@ -146,7 +146,7 @@ def create_mcp_task_from_scope_task(task: ScopeTask) -> MCPScopeTask:
 def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextMode, is_in_focus: bool, has_subtasks: bool) -> Tuple[str, str]:
     """Provides context and instructions for a task based on its state and the execution mode."""
     # --- Repetitive String Constants for Instructions and Notes ---
-    NOTE_IRRELEVANT_TASK = "This task provided for information and context awareness. "
+    NOTE_IRRELEVANT_TASK = "This task is provided for scope context awareness. "
 
     INST_SUBTASKS = "Execute subtasks."
 
@@ -201,23 +201,24 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
         (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FOR_INPUT),
     }
 
-    # Check for DONE and BLOCKED status first, regardless of focus
-    if status == TaskStatus.DONE:
-        return (NOTE_IRRELEVANT_TASK, INST_TASK_DONE)
-
     if status == TaskStatus.BLOCKED:
         return ("", INST_TASK_BLOCKED)
 
     # Then check if the task is not in focus
     if not is_in_focus:
         if has_subtasks:
-            return (NOTE_IRRELEVANT_TASK, INST_SUBTASKS)
+            return NOTE_IRRELEVANT_TASK, INST_SUBTASKS
         else:
-            return (NOTE_IRRELEVANT_TASK, INST_SUBTASKS)
+            return NOTE_IRRELEVANT_TASK, ""
 
     # Finally, look up instructions for in-focus tasks
     key = (status, type, mode)
-    return in_focus_instruction_map.get(key, ("", ""))
+    context_note, instructions = in_focus_instruction_map.get(key, ("", ""))
+
+    if status == TaskStatus.DONE:
+        instructions = ""
+
+    return context_note, instructions
 
 
 def set_context_info_and_notes(mcp_task: MCPScopeTask, scope_context: ScopeContext) -> None:
@@ -275,9 +276,13 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, base_path
         set_context_info_and_notes(top_level_task, scope_context)
         top_level_tasks.append(top_level_task)
 
+    progress_context = f"You are in the process of executing tasks of the project with provided scope below" \
+                        if top_level_tasks else \
+                        "Implementation plan is complete. Report completion. "
+
     response = MCPScopeResponse(
-        progress_context=f"You are executing tasks scope by scope",
-        instructions=get_mode_instructions(scope_context.mode),
+        progress_context=progress_context,
+        instructions=get_mode_instructions(scope_context.mode) if top_level_tasks else "",
         tasks=top_level_tasks
     )
 

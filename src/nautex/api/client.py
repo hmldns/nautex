@@ -13,7 +13,7 @@ from src.nautex.api.api_models import (
     Project,
     ImplementationPlan,
     Task,
-    Requirement, APIResponse,
+    APIResponse,
 )
 
 
@@ -740,90 +740,4 @@ class NautexAPIClient:
             raise
         except Exception as e:
             logger.error(f"Unexpected error in get_next_scope: {e}")
-            raise NautexAPIError(f"Unexpected error: {str(e)}")
-
-    async def get_requirements_info(
-        self, 
-        project_id: str, 
-        requirement_designators: List[str]
-    ) -> List[Requirement]:
-        """Get information for specific requirements.
-
-        Args:
-            project_id: ID of the project
-            requirement_designators: List of requirement identifiers
-
-        Returns:
-            List of requirements
-
-        Raises:
-            NautexAPIError: If API call fails
-        """
-        headers = self._get_auth_headers()
-        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_REQUIREMENTS}")
-
-        # Create request payload
-        request_data = {
-            "requirement_designators": requirement_designators
-        }
-
-        try:
-            response_data = await self.post(url, headers, request_data)
-            logger.debug(f"Successfully retrieved {len(response_data.get('requirements', []))} requirements for project {project_id}")
-
-            # Parse response into list of Requirement models
-            requirements_data = response_data.get('requirements', [])
-            return [Requirement.model_validate(req) for req in requirements_data]
-
-        except NautexAPIError as e:
-            logger.error(f"Failed to get requirements info for project {project_id}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in get_requirements_info: {e}")
-            raise NautexAPIError(f"Unexpected error: {str(e)}")
-
-    async def add_requirement_note(
-        self, 
-        project_id: str, 
-        requirement_designator: str, 
-        content: str
-    ) -> Dict[str, Any]:
-        """Add a note to a requirement.
-
-        Args:
-            project_id: ID of the project
-            requirement_designator: Requirement identifier
-            content: Note content
-
-        Returns:
-            Confirmation dictionary
-
-        Raises:
-            NautexAPIError: If API call fails
-        """
-        headers = self._get_auth_headers()
-        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_REQUIREMENTS}/{requirement_designator}/notes")
-
-        # Create request payload
-        request_data = {
-            "content": content
-        }
-
-        try:
-            response_data = await self.post(url, headers, request_data)
-            logger.debug(f"Successfully added note to requirement {requirement_designator}")
-
-            # Return confirmation
-            return {
-                "requirement_designator": requirement_designator,
-                "status": "note_added",
-                "note_id": response_data.get("note_id"),
-                "timestamp": response_data.get("timestamp")
-            }
-
-        except NautexAPIError as e:
-            logger.error(f"Failed to add note to requirement {requirement_designator}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in add_requirement_note: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")

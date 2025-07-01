@@ -104,30 +104,6 @@ class Task(BaseModel):
         }
 
 
-class Requirement(BaseModel):
-    """Requirement model from Nautex.ai API.
-
-    Represents a requirement entity returned from /d/v1/requirements endpoints.
-    """
-    project_id: str = Field(..., description="Parent project identifier")
-    requirement_designator: str = Field(..., description="Unique requirement identifier like REQ-45")
-    name: str = Field(..., description="Human-readable requirement name")
-    description: str = Field(..., description="Detailed requirement description")
-    status: RequirementStatus = Field(..., description="Current requirement status")
-    notes: List[str] = Field(default_factory=list, description="List of requirement notes")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "project_id": "PROJ-123",
-                "requirement_designator": "REQ-45",
-                "name": "User Password Security",
-                "description": "Passwords must be hashed using Argon2",
-                "status": "approved",
-                "notes": ["Library recommendation: argon2-cffi"]
-            }
-        }
-
 
 # API Request Models
 class ProjectListRequest(BaseModel):
@@ -255,47 +231,6 @@ class TaskActionRequest(BaseModel):
             ]
         }
 
-
-class RequirementActionRequest(BaseModel):
-    """Base request model for requirement actions via /d/v1/requirements."""
-    action: str = Field(..., description="Action to perform: get, update, add_note")
-    project_id: str = Field(..., description="Project identifier")
-    requirement_designator: Optional[str] = Field(None, description="Single requirement designator")
-    requirement_designators: Optional[List[str]] = Field(None, description="Multiple requirement designators")
-    content: Optional[str] = Field(None, description="Note content for add_note action")
-    description: Optional[str] = Field(None, description="Updated description for update action")
-    status: Optional[RequirementStatus] = Field(None, description="Updated status for update action")
-
-    @validator('requirement_designators')
-    def validate_requirement_designators_not_empty(cls, v):
-        """Ensure requirement_designators list is not empty when provided."""
-        if v is not None and len(v) == 0:
-            raise ValueError('requirement_designators cannot be an empty list')
-        return v
-
-    class Config:
-        json_schema_extra = {
-            "examples": [
-                {
-                    "action": "get",
-                    "project_id": "PROJ-123",
-                    "requirement_designators": ["REQ-45", "REQ-46"]
-                },
-                {
-                    "action": "add_note",
-                    "project_id": "PROJ-123",
-                    "requirement_designator": "REQ-45",
-                    "content": "Clarification needed on implementation"
-                },
-                {
-                    "action": "update",
-                    "project_id": "PROJ-123",
-                    "requirement_designator": "REQ-45",
-                    "description": "Updated requirement description",
-                    "status": "pending_review"
-                }
-            ]
-        }
 
 
 # API Response Models

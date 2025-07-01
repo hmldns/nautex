@@ -11,6 +11,7 @@ class MCPScopeTask(BaseModel):
     name: str = Field(..., description="Human-readable task name")
     description: Optional[str] = Field(None, description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
+    type: TaskType = Field(..., description="Task type (Code, Review, Test, Input)")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
     context_note: Optional[str] = Field(None, description="Additional context for this task state")
@@ -132,7 +133,8 @@ def create_mcp_task_from_scope_task(task: ScopeTask) -> MCPScopeTask:
         designator=task.task_designator,
         name=task.name,
         description=task.description,
-        status=task.status.value,
+        status=task.status,
+        type=task.type,
         requirements=[req.requirement_designator for req in task.requirements if req.requirement_designator],
         files=[file.file_path for file in task.files],
         subtasks=[]  # Will be filled later
@@ -141,24 +143,12 @@ def create_mcp_task_from_scope_task(task: ScopeTask) -> MCPScopeTask:
     return task_state
 
 
-def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextMode, is_in_focus: bool) -> Tuple[
-    str, str]:
-    """
-    Provides context and instructions for a task based on its state and the execution mode.
-
-    Args:
-        status: The current status of the task.
-        type: The type of the task.
-        mode: The current scope execution mode.
-        is_in_focus: A boolean indicating if the task is the current focus.
-
-    Returns:
-        A tuple containing the context note and the instruction string.
-    """
+def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextMode, is_in_focus: bool, has_subtasks: bool) -> Tuple[str, str]:
+    """Provides context and instructions for a task based on its state and the execution mode."""
     # --- Repetitive String Constants for Instructions and Notes ---
-    NOTE_AWAIT_SUBTASK_COMPLETION = "This is a master task awaiting completion of its subtasks. "
-    NOTE_SUBTASK_CONTEXT = "This is a subtask of a larger master task. "
     NOTE_IRRELEVANT_TASK = "This task provided for information and context awareness. "
+
+    INST_SUBTASKS = "Execute subtasks."
 
     INST_START_CODING = "Implement the required code changes for this task. "
     INST_CONTINUE_CODING = "Continue the implementation of this coding task. "
@@ -211,15 +201,21 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
         (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FOR_INPUT),
     }
 
-    if not is_in_focus:
-        return (NOTE_IRRELEVANT_TASK, "")
-
+    # Check for DONE and BLOCKED status first, regardless of focus
     if status == TaskStatus.DONE:
         return (NOTE_IRRELEVANT_TASK, INST_TASK_DONE)
 
     if status == TaskStatus.BLOCKED:
         return ("", INST_TASK_BLOCKED)
 
+    # Then check if the task is not in focus
+    if not is_in_focus:
+        if has_subtasks:
+            return (NOTE_IRRELEVANT_TASK, INST_SUBTASKS)
+        else:
+            return (NOTE_IRRELEVANT_TASK, INST_SUBTASKS)
+
+    # Finally, look up instructions for in-focus tasks
     key = (status, type, mode)
     return in_focus_instruction_map.get(key, ("", ""))
 
@@ -232,7 +228,9 @@ def set_context_info_and_notes(mcp_task: MCPScopeTask, scope_context: ScopeConte
 
     def _set_context_info(_mcp_task: MCPScopeTask) -> None:
         _mcp_task.context_note, _mcp_task.instructions = get_task_instruction(_mcp_task.status, _mcp_task.type,
-                                                                              scope_context.mode, _mcp_task.designator in focus_tasks_designators)
+                                                                              scope_context.mode,
+                                                                              _mcp_task.designator in focus_tasks_designators,
+                                                                              bool(_mcp_task.subtasks))
 
     def traverse_tasks(_mcp_task: MCPScopeTask) -> None:
         _set_context_info(_mcp_task)

@@ -11,6 +11,7 @@ from .services.config_service import ConfigurationService, ConfigurationError
 from .services.nautex_api_service import NautexAPIService
 from .services.integration_status_service import IntegrationStatusService
 from .services.plan_context_service import PlanContextService
+from .services.document_service import DocumentService
 from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run, \
     mcp_handle_next_scope
 from .services.mcp_config_service import MCPConfigService
@@ -101,6 +102,12 @@ def main() -> None:
         integration_status_service=integration_status_service
     )
 
+    # Initialize document service
+    document_service = DocumentService(
+        nautex_api_service=nautex_api_service,
+        config_service=config_service
+    )
+
     # 5. UI service for TUI commands
     ui_service = UIService(
         config_service=config_service,
@@ -125,7 +132,8 @@ def main() -> None:
             mcp_service = MCPService(
                 config=config,  # This can be None
                 nautex_api_service=nautex_api_service,  # This can be None
-                plan_context_service=plan_context_service
+                plan_context_service=plan_context_service,
+                document_service=document_service
             )
 
             # Set the global MCP service instance

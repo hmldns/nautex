@@ -80,7 +80,7 @@ def get_mode_instructions(mode: ScopeContextMode) -> str:
         A string containing instructions for the current mode
     """
     if mode == ScopeContextMode.ExecuteSubtasks:
-        return f"Execute subtasks. On starting set their state in \"{TaskStatus.IN_PROGRESS}\" state and \"{TaskStatus.DONE}\" when finished and tested."
+        return f"Follow instructions on tasks, execute needed. On starting set relevant tasks state in \"{TaskStatus.IN_PROGRESS}\" state and \"{TaskStatus.DONE}\" when finished and tested."
 
     elif mode == ScopeContextMode.FinalizeMasterTask:
         return f"All subtasks are completed. Review and finalize results of the implementation and move master task to \"{TaskStatus.DONE}\" state."

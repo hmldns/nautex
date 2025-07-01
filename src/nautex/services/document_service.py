@@ -1,0 +1,150 @@
+"""Document Service for handling document operations."""
+
+import os
+import logging
+from typing import List, Optional, Dict
+from pathlib import Path
+import aiofiles
+import asyncio
+
+from src.nautex.api.api_models import Document
+from src.nautex.services.nautex_api_service import NautexAPIService
+from src.nautex.services.config_service import ConfigurationService
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+class DocumentService:
+    """Service for handling document operations."""
+
+    def __init__(
+        self,
+        nautex_api_service: NautexAPIService,
+        config_service: ConfigurationService
+    ):
+        """Initialize the document service.
+
+        Args:
+            nautex_api_service: The Nautex API service
+            config_service: The configuration service
+        """
+        self.nautex_api_service = nautex_api_service
+        self.config_service = config_service
+        logger.debug("DocumentService initialized")
+
+    async def get_document(self, project_id: str, doc_designator: str) -> Optional[Document]:
+        """Get a document by designator.
+
+        Args:
+            project_id: The ID of the project
+            doc_designator: The designator of the document
+
+        Returns:
+            A Document object, or None if the document was not found
+        """
+        try:
+            return await self.nautex_api_service.get_document_tree(project_id, doc_designator)
+        except Exception as e:
+            logger.error(f"Error getting document {doc_designator}: {e}")
+            return None
+
+    async def save_document_to_file(self, document: Document, output_path: Path) -> bool:
+        """Save a document to a file.
+
+        Args:
+            document: The document to save
+            output_path: The path to save the document to
+
+        Returns:
+            True if the document was saved successfully, False otherwise
+        """
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(output_path.parent, exist_ok=True)
+
+            # Generate markdown content
+            markdown_content = document.render_markdown()
+
+            # Write to file
+            async with aiofiles.open(output_path, 'w') as f:
+                await f.write(markdown_content)
+
+            logger.debug(f"Document {document.designator} saved to {output_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving document {document.designator} to {output_path}: {e}")
+            return False
+
+    async def ensure_documents(self, project_id: str, doc_designators: List[str]) -> Dict[str, bool]:
+        """Ensure documents are available locally.
+
+        Args:
+            project_id: The ID of the project
+            doc_designators: List of document designators to ensure
+
+        Returns:
+            Dictionary mapping document designators to success status
+        """
+        results = {}
+        documents_path = Path(self.config_service.config.documents_path)
+
+        # Create documents directory if it doesn't exist
+        os.makedirs(documents_path, exist_ok=True)
+
+        # Process each document
+        for designator in doc_designators:
+            try:
+                # Get document from API
+                document = await self.get_document(project_id, designator)
+
+                if document:
+                    # Determine output path
+                    output_filename = f"{designator}.md"
+                    output_path = documents_path / output_filename
+
+                    # Save document to file
+                    success = await self.save_document_to_file(document, output_path)
+                    results[designator] = success
+                else:
+                    logger.warning(f"Document {designator} not found")
+                    results[designator] = False
+            except Exception as e:
+                logger.error(f"Error ensuring document {designator}: {e}")
+                results[designator] = False
+
+        return results
+
+    async def ensure_plan_dependency_documents(self, project_id: str, plan_id: str) -> Dict[str, bool]:
+        """Ensure all dependency documents for a plan are available locally.
+
+        Args:
+            project_id: The ID of the project
+            plan_id: The ID of the implementation plan
+
+        Returns:
+            Dictionary mapping document designators to success status, or empty dict if plan not found
+        """
+        try:
+            # Get the implementation plan
+            plan = await self.nautex_api_service.get_implementation_plan(project_id, plan_id)
+
+            if not plan:
+                logger.warning(f"Implementation plan {plan_id} not found for project {project_id}")
+                return {}
+
+            # Get dependency documents
+            dependency_docs = plan.dependency_documents or []
+
+            if not dependency_docs:
+                logger.info(f"No dependency documents found for plan {plan_id}")
+                return {}
+
+            logger.info(f"Ensuring {len(dependency_docs)} dependency documents for plan {plan_id}")
+
+            # Ensure all dependency documents are available locally
+            return await self.ensure_documents(project_id, dependency_docs)
+
+        except Exception as e:
+            logger.error(f"Error ensuring dependency documents for plan {plan_id}: {e}")
+            return {}

@@ -1,10 +1,11 @@
 """Pydantic models for Nautex.ai API request/response structures."""
 
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Dict
 from enum import Enum
-from pathlib import Path
 from pydantic import BaseModel, Field, validator
 from starlette.responses import JSONResponse
+
+from .scope_context_model import TaskStatus, TaskType
 
 
 class AccountInfo(BaseModel):
@@ -24,14 +25,6 @@ class AccountInfo(BaseModel):
                 "api_version": "1.0.0"
             }
         }
-
-
-class TaskStatus(str, Enum):
-    # FIXME duplicated in scope_context_model.py
-    NOT_STARTED = "Not started"
-    IN_PROGRESS = "In progress"
-    DONE = "Done"
-    BLOCKED = "Blocked"
 
 
 # Core API Models
@@ -63,6 +56,7 @@ class ImplementationPlan(BaseModel):
     project_id: str = Field(..., description="Parent project identifier")
     name: str = Field(..., description="Human-readable plan name")
     description: Optional[str] = Field(None, description="Plan description")
+    dependency_documents: Optional[List[str]] = Field(None, description="List of document designators that this plan depends on")
 
     class Config:
         json_schema_extra = {
@@ -104,7 +98,6 @@ class Task(BaseModel):
         }
 
 
-
 # API Request Models
 class ProjectListRequest(BaseModel):
     """Request model for listing projects via /d/v1/projects."""
@@ -134,6 +127,7 @@ class TaskOperation(BaseModel):
     """Model representing a single operation on a task."""
     task_designator: str = Field(..., description="Unique task identifier like TASK-123")
     updated_status: Optional[TaskStatus] = Field(None, description="New status for the task")
+    updated_type: Optional[TaskType] = Field(None, description="New type for the task")
     new_note: Optional[str] = Field(None, description="New note content to add to the task")
 
     class Config:
@@ -142,6 +136,10 @@ class TaskOperation(BaseModel):
                 {
                     "task_designator": "TASK-789",
                     "updated_status": "in_progress"
+                },
+                {
+                    "task_designator": "TASK-789",
+                    "updated_type": "Code"
                 },
                 {
                     "task_designator": "TASK-789",
@@ -191,49 +189,131 @@ class TaskOperationRequest(BaseModel):
         }
 
 
-class TaskActionRequest(BaseModel):
-    """Base request model for task actions via /d/v1/tasks."""
-    action: str = Field(..., description="Action to perform: get_next, get, add_note")
-    project_id: str = Field(..., description="Project identifier")
-    plan_id: str = Field(..., description="Plan identifier")
-    task_designator: Optional[str] = Field(None, description="Specific task designator for single-task actions")
-    task_designators: Optional[List[str]] = Field(None, description="Multiple task designators for batch actions")
-    content: Optional[str] = Field(None, description="Note content for add_note action")
 
-    @validator('task_designators')
-    def validate_task_designators_not_empty(cls, v):
-        """Ensure task_designators list is not empty when provided."""
-        if v is not None and len(v) == 0:
-            raise ValueError('task_designators cannot be an empty list')
-        return v
+# API Response Models
+class Node(BaseModel):
+    """Node model for document tree.
+
+    Represents a node in a document tree structure.
+    """
+    title: str = Field(..., description="Node title")
+    content: Optional[str] = Field(None, description="Node content")
+    relations: Optional[List[Dict[str, Any]]] = Field(None, description="Node relations")
+    children: Optional[List['Node']] = Field(None, description="Child nodes")
+    designator: Optional[str] = Field(None, description="Node designator")
 
     class Config:
         json_schema_extra = {
-            "examples": [
-                {
-                    "action": "get_next",
-                    "project_id": "PROJ-123",
-                    "plan_id": "PLAN-456"
-                },
-                {
-                    "action": "get",
-                    "project_id": "PROJ-123",
-                    "plan_id": "PLAN-456",
-                    "task_designators": ["TASK-789", "TASK-790"]
-                },
-                {
-                    "action": "add_note",
-                    "project_id": "PROJ-123",
-                    "plan_id": "PLAN-456",
-                    "task_designator": "TASK-789",
-                    "content": "Implementation notes here"
-                }
-            ]
+            "example": {
+                "title": "Introduction",
+                "content": "This is the introduction section.",
+                "relations": [{"type": "reference", "target": "section-2"}],
+                "children": []
+            }
         }
 
 
+class Document(BaseModel):
+    """Document model from Nautex.ai API.
 
-# API Response Models
+    Represents a document tree structure.
+    """
+    designator: str = Field(..., description="Document designator")
+    title: str = Field(..., description="Document title")
+
+    node: Node = Field(..., description="Root node of the document")
+
+    def render_markdown(self) -> str:
+        """
+        Render the document tree as markdown.
+
+        The format follows these rules:
+        - Chapter nodes: #(depth level) [node designator] title
+        - Content nodes: [node designator] content (as paragraph)
+
+        Returns:
+            A string containing the markdown representation of the document
+        """
+        lines = []
+
+        # Recursively render nodes
+        self._render_node_markdown(self.node, lines, depth=0)
+
+        return "\n".join(lines)
+
+    def _render_node_markdown(self, node: Node, lines: List[str], depth: int = 1):
+        """
+        Recursively render a node and its children as markdown.
+
+        Args:
+            node: The node to render
+            lines: List to append markdown lines to
+            depth: Current depth level
+        """
+
+        # Check if this is a chapter (has title with non-zero length)
+        is_chapter = node.title and len(node.title.strip()) > 0
+
+        def _render_designator(_node: Node) -> str:
+            if _node.designator:
+                return f"[{_node.designator}]"
+            else:
+                return ""
+
+        if is_chapter:
+            # Add chapter heading with appropriate depth
+            heading_level = "#" * (depth + 1)  # +1 because document title is h1
+            lines.append(f"{heading_level} {_render_designator(node)} {node.title}")
+            lines.append("")
+
+        # Add content if present
+        if node.content:
+            if is_chapter:
+                # For chapters, content goes after the heading
+                lines.append(node.content)
+            else:
+                # For non-chapters (atomic requirements), content is a paragraph starting with designator
+                lines.append(f"{_render_designator(node)} {node.content}")
+            lines.append("")
+
+        # Process children recursively
+        if node.children:
+            for child in node.children:
+                self._render_node_markdown(child, lines, depth + 1)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "Requirements Document",
+                "node": {
+                    "title": "Requirements",
+                    "content": "This document outlines the requirements.",
+                    "children": [
+                        {
+                            "title": "Functional Requirements",
+                            "content": "List of functional requirements.",
+                            "children": []
+                        }
+                    ]
+                }
+            }
+        }
+
+
+class DocumentRequest(BaseModel):
+    """Request model for getting a document by designator."""
+    project_id: str = Field(..., description="Project ID containing the document")
+    doc_designator: str = Field(..., description="Document designator")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "project_id": "PROJ-123",
+                "doc_designator": "DOC-456"
+            }
+        }
+
+
 class APIResponse(BaseModel):
     """Standardized API response wrapper.
 

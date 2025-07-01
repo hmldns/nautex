@@ -698,6 +698,86 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in update_tasks_batch: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
+    async def get_document_tree(self, project_id: str, doc_designator: str) -> Optional["Document"]:
+        """
+        Get a document tree by designator.
+
+        Args:
+            project_id: The ID of the project
+            doc_designator: The designator of the document
+
+        Returns:
+            A Document object containing the document tree, or None if the document was not found
+        """
+        from src.nautex.api.api_models import Document
+
+        headers = self._get_auth_headers()
+        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/documents/{doc_designator}/tree")
+
+        try:
+            response = await self.get(url, headers)
+
+            # Handle APIResponse wrapper
+            if response.status == "success" and response.data:
+                document_data = response.data.get("document")
+                if document_data:
+                    return Document.model_validate(document_data)
+                return None
+            else:
+                raise NautexAPIError(f"Unexpected response format: {response}")
+
+        except NautexAPIError as e:
+            if e.status_code == 404:
+                # Document not found
+                logger.debug(f"Document {doc_designator} not found for project {project_id}")
+                return None
+            logger.error(f"Failed to get document tree for {doc_designator}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in get_document_tree: {e}")
+            raise NautexAPIError(f"Unexpected error: {str(e)}")
+
+    async def get_implementation_plan(self, project_id: str, plan_id: str) -> Optional["ImplementationPlan"]:
+        """Get a specific implementation plan by plan_id.
+
+        Args:
+            project_id: ID of the project
+            plan_id: ID of the implementation plan
+
+        Returns:
+            An ImplementationPlan object containing the plan details, or None if the plan was not found
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        from src.nautex.api.api_models import ImplementationPlan
+
+        headers = self._get_auth_headers()
+        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}")
+
+        try:
+            response = await self.get(url, headers)
+
+            # Handle APIResponse wrapper
+            if response.status == "success" and response.data:
+                plan_data = response.data.get("plan")
+                if plan_data:
+                    return ImplementationPlan.model_validate(plan_data)
+                return None
+            else:
+                raise NautexAPIError(f"Unexpected response format: {response}")
+
+        except NautexAPIError as e:
+            if e.status_code == 404:
+                # Plan not found
+                logger.debug(f"Implementation plan {plan_id} not found for project {project_id}")
+                return None
+            logger.error(f"Failed to get implementation plan {plan_id} for project {project_id}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in get_implementation_plan: {e}")
+            raise NautexAPIError(f"Unexpected error: {str(e)}")
+
     async def get_next_scope(self, project_id: str, plan_id: str) -> Optional["ScopeContext"]:
         """Get the next scope for a specific project and plan.
 

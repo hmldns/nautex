@@ -14,7 +14,6 @@ from src.nautex.api.api_models import (
     Project,
     ImplementationPlan,
     Task,
-    Requirement,
 )
 
 # Set up logging
@@ -249,4 +248,46 @@ class NautexAPIService:
             return APIResponse.model_validate(response_data)
         except NautexAPIError as e:
             logger.error(f"Failed to execute batch task update: {e}")
+            raise
+
+    async def get_implementation_plan(self, project_id: str, plan_id: str) -> Optional["ImplementationPlan"]:
+        """Get a specific implementation plan by plan_id.
+
+        Args:
+            project_id: ID of the project
+            plan_id: ID of the implementation plan
+
+        Returns:
+            An ImplementationPlan object containing the plan details, or None if the plan was not found
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        from src.nautex.api.api_models import ImplementationPlan
+
+        try:
+            return await self.api_client.get_implementation_plan(project_id, plan_id)
+        except NautexAPIError as e:
+            logger.error(f"Failed to get implementation plan {plan_id} for project {project_id}: {e}")
+            raise
+
+    async def get_document_tree(self, project_id: str, doc_designator: str) -> Optional["Document"]:
+        """Get a document tree by designator.
+
+        Args:
+            project_id: The ID of the project
+            doc_designator: The designator of the document
+
+        Returns:
+            A Document object containing the document tree, or None if the document was not found
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        from src.nautex.api.api_models import Document
+
+        try:
+            return await self.api_client.get_document_tree(project_id, doc_designator)
+        except NautexAPIError as e:
+            logger.error(f"Failed to get document tree for {doc_designator} in project {project_id}: {e}")
             raise

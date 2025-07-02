@@ -14,7 +14,7 @@ from .plan_context_service import PlanContextService
 from .config_service import ConfigurationService
 from .mcp_config_service import MCPConfigService
 from ..api.client import NautexAPIError
-from ..models.mcp_models import convert_scope_context_to_mcp_response
+from ..models.mcp_models import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateRequest, MCPTaskUpdateResponse
 
 from .document_service import DocumentService
 
@@ -335,14 +335,18 @@ async def nautex_next_scope() -> Dict[str, Any]:
     return await mcp_handle_next_scope()
 
 
-async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUpdateResponse:
     """Implementation of the update tasks functionality.
 
     Args:
         operations: List of operations, each containing:
             - task_designator: The designator of the task to update
             - updated_status: Optional new status for the task
+            - updated_type: Optional new type for the task
             - new_note: Optional new note to add to the task
+
+    Returns:
+        MCPTaskUpdateResponse with the result of the operation
     """
     try:
         logger.debug(f"Executing update tasks tool with {len(operations)} operations")
@@ -350,23 +354,38 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str,
 
         configured, error_response = _check_configured()
         if not configured:
-            return error_response
+            return MCPTaskUpdateResponse(
+                success=False,
+                error=error_response.get("error", "Configuration error")
+            )
 
         if not service.config.project_id or not service.config.plan_id:
-            return {
-                "success": False,
-                "error": "Project ID and implementation plan ID must be configured"
-            }
+            return MCPTaskUpdateResponse(
+                success=False,
+                error="Project ID and implementation plan ID must be configured"
+            )
 
         from src.nautex.api.api_models import TaskOperation
 
-        # Convert the operations to TaskOperation objects
-        task_operations = []
+        # Convert the operations to MCPTaskOperation objects
+        mcp_task_operations = []
         for op in operations:
-            task_operation = TaskOperation(
+            mcp_task_operation = MCPTaskOperation(
                 task_designator=op["task_designator"],
                 updated_status=op.get("updated_status"),
+                updated_type=op.get("updated_type"),
                 new_note=op.get("new_note")
+            )
+            mcp_task_operations.append(mcp_task_operation)
+
+        # Convert MCPTaskOperation objects to TaskOperation objects for the API
+        task_operations = []
+        for op in mcp_task_operations:
+            task_operation = TaskOperation(
+                task_designator=op.task_designator,
+                updated_status=op.updated_status,
+                updated_type=op.updated_type,
+                new_note=op.new_note
             )
             task_operations.append(task_operation)
 
@@ -376,24 +395,24 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str,
             operations=task_operations
         )
 
-        return {
-            "success": True,
-            "data": response.data,
-            "message": response.message
-        }
+        return MCPTaskUpdateResponse(
+            success=True,
+            data=response.data,
+            message=response.message
+        )
 
     except NautexAPIError as e:
         logger.error(f"API error in update tasks tool: {e}")
-        return {
-            "success": False,
-            "error": f"API error: {str(e)}"
-        }
+        return MCPTaskUpdateResponse(
+            success=False,
+            error=f"API error: {str(e)}"
+        )
     except Exception as e:
         logger.error(f"Error in update tasks tool: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return MCPTaskUpdateResponse(
+            success=False,
+            error=str(e)
+        )
 
 
 @mcp.tool
@@ -404,6 +423,15 @@ async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any
         operations: List of operations, each containing:
             - task_designator: The designator of the task to update
             - updated_status: Optional new status for the task
+            - updated_type: Optional new type for the task
             - new_note: Optional new note to add to the task
+
+    Returns:
+        Dictionary with the result of the operation:
+        - success: Whether the operation was successful
+        - data: Response data payload if successful
+        - message: Human-readable message if provided
+        - error: Error message if not successful
     """
-    return await mcp_handle_update_tasks(operations)
+    response = await mcp_handle_update_tasks(operations)
+    return response.model_dump(exclude_none=True)

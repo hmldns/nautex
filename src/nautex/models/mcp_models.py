@@ -17,6 +17,7 @@ class MCPScopeTask(BaseModel):
     context_note: Optional[str] = Field(None, description="Additional context for this task state")
     instructions: Optional[str] = Field(None, description="Instructions for this task")
     subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
+    in_focus: bool = Field(False, description="Whether this task is in focus")
 
 
 class MCPScopeResponse(BaseModel):
@@ -119,12 +120,12 @@ def compose_context_task_note(task: ScopeTask) -> str:
     return " ".join(notes)
 
 
-def create_mcp_task_from_scope_task(task: ScopeTask) -> MCPScopeTask:
+def create_mcp_task_from_scope_task(task: ScopeTask, is_in_focus: bool = False) -> MCPScopeTask:
     """Create an MCPScopeTask from a ScopeTask.
 
     Args:
         task: The ScopeTask to convert
-        is_focus: Whether this task is a focus task
+        is_in_focus: Whether this task is a focus task
 
     Returns:
         An MCPScopeTask containing the converted data
@@ -138,7 +139,8 @@ def create_mcp_task_from_scope_task(task: ScopeTask) -> MCPScopeTask:
         type=task.type,
         requirements=[req.requirement_designator for req in task.requirements if req.requirement_designator],
         files=[file.file_path for file in task.files],
-        subtasks=[]  # Will be filled later
+        subtasks=[],  # Will be filled later
+        in_focus=is_in_focus
     )
 
     return task_state
@@ -226,12 +228,11 @@ def set_context_info_and_notes(mcp_task: MCPScopeTask, scope_context: ScopeConte
     # Revisit mcp_tasks for setting context and instructions
     finalize_master_task = scope_context.mode == ScopeContextMode.FinalizeMasterTask
     tasks_execution = scope_context.mode == ScopeContextMode.ExecuteSubtasks
-    focus_tasks_designators = {td for td in scope_context.focus_tasks}
 
     def _set_context_info(_mcp_task: MCPScopeTask) -> None:
         _mcp_task.context_note, _mcp_task.instructions = get_task_instruction(_mcp_task.status, _mcp_task.type,
                                                                               scope_context.mode,
-                                                                              _mcp_task.designator in focus_tasks_designators,
+                                                                              _mcp_task.in_focus,
                                                                               bool(_mcp_task.subtasks))
 
     def traverse_tasks(_mcp_task: MCPScopeTask) -> None:
@@ -261,14 +262,15 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, documents
 
     def process_scope_task(task: ScopeTask) -> MCPScopeTask:
         # Create MCPScopeTask from ScopeTask using the helper function
-        mcp_task = create_mcp_task_from_scope_task(task)
-        
+        is_in_focus = task.task_designator in scope_context.focus_tasks
+        mcp_task = create_mcp_task_from_scope_task(task, is_in_focus)
+
         task_map[task.task_designator] = mcp_task
-        
+
         for subtask in task.subtasks:
             subtask_state = process_scope_task(subtask)
             mcp_task.subtasks.append(subtask_state)
-        
+
         return mcp_task
 
     # Process all top-level tasks
@@ -291,3 +293,24 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, documents
     )
 
     return response
+
+
+class MCPTaskOperation(BaseModel):
+    """Model representing a single operation on a task for MCP."""
+    task_designator: str = Field(..., description="Unique task identifier like TASK-123")
+    updated_status: Optional[TaskStatus] = Field(None, description="New status for the task")
+    updated_type: Optional[TaskType] = Field(None, description="New type for the task")
+    new_note: Optional[str] = Field(None, description="New note content to add to the task")
+
+
+class MCPTaskUpdateRequest(BaseModel):
+    """Request model for batch task operations in MCP."""
+    operations: List[MCPTaskOperation] = Field(..., description="List of operations to perform")
+
+
+class MCPTaskUpdateResponse(BaseModel):
+    """Response model for batch task operations in MCP."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    data: Optional[Dict[str, Any]] = Field(None, description="Response data payload")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    error: Optional[str] = Field(None, description="Error message if success is False")

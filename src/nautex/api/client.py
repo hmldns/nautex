@@ -8,7 +8,7 @@ import aiohttp
 import json
 from urllib.parse import urljoin
 
-from src.nautex.api.api_models import (
+from .api_models import (
     AccountInfo,
     Project,
     ImplementationPlan,

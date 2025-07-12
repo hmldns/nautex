@@ -64,11 +64,15 @@ class DocumentService:
             os.makedirs(output_path.parent, exist_ok=True)
 
             # Generate markdown content
-            markdown_content = document.render_markdown()
+            # FIXME, introduce doc trees types
+            if document.designator.startswith("FILE"):
+                content_str = document.render_tree()
+            else:
+                content_str = document.render_markdown()
 
             # Write to file
             async with aiofiles.open(output_path, 'w') as f:
-                await f.write(markdown_content)
+                await f.write(content_str)
 
             logger.debug(f"Document {document.designator} saved to {output_path}")
             return True, str(output_path)

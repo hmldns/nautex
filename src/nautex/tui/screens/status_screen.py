@@ -1,5 +1,6 @@
 """TUI screen for displaying application status."""
 
+import asyncio
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -56,6 +57,10 @@ class StatusScreen(App):
         self.integration_status_service = integration_status_service
         self.integration_status_widget = IntegrationStatusWidget()
         self.plan_context_widget = PlanContextWidget()
+
+        # Task for polling integration status
+        self._polling_task = None
+        self._polling_interval = 5.0  # seconds
 
     def compose(self) -> ComposeResult:
         """Compose the status screen layout."""
@@ -114,6 +119,47 @@ class StatusScreen(App):
             self._update_from_plan_context()
 
         self.plan_context_widget.update_from_plan_context(self.plan_context)
+
+        # Start polling for integration status updates if service is available
+        if self.integration_status_service:
+            self._start_polling_integration_status()
+
+    async def on_unmount(self) -> None:
+        """Called when the screen is unmounted."""
+        # Stop polling when screen is unmounted
+        self._stop_polling_integration_status()
+
+    def _start_polling_integration_status(self) -> None:
+        """Start a background task to poll for integration status updates."""
+        if self._polling_task is None:
+            self._polling_task = asyncio.create_task(self._poll_integration_status())
+
+    def _stop_polling_integration_status(self) -> None:
+        """Stop the polling task if it's running."""
+        if self._polling_task is not None:
+            self._polling_task.cancel()
+            self._polling_task = None
+
+    async def _poll_integration_status(self) -> None:
+        """Continuously poll for integration status updates."""
+        try:
+            while True:
+                await asyncio.sleep(self._polling_interval)
+                if self.integration_status_service:
+                    try:
+                        status = await self.integration_status_service.get_integration_status()
+                        self.integration_status_widget.update_from_integration_status(status)
+                    except Exception:
+                        # If there's an error, fall back to plan context data
+                        self._update_from_plan_context()
+        except asyncio.CancelledError:
+            # Task was cancelled, clean up
+            pass
+        except Exception as e:
+            self.log(f"Error in integration status polling: {e}")
+            # Attempt to restart polling after a brief delay
+            await asyncio.sleep(1.0)
+            self._start_polling_integration_status()
 
     def _update_from_plan_context(self) -> None:
         """Update integration status widget from plan context data."""

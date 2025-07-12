@@ -199,8 +199,10 @@ class Node(BaseModel):
     title: str = Field(..., description="Node title")
     content: Optional[str] = Field(None, description="Node content")
     relations: Optional[List[Dict[str, Any]]] = Field(None, description="Node relations")
+    properties: Optional[Dict[str, Any]] = Field(None, description="Node properties")
     children: Optional[List['Node']] = Field(None, description="Child nodes")
     designator: Optional[str] = Field(None, description="Node designator")
+
 
     class Config:
         json_schema_extra = {
@@ -240,6 +242,64 @@ class Document(BaseModel):
         self._render_node_markdown(self.node, lines, depth=0)
 
         return "\n".join(lines)
+
+
+    def render_tree(self) -> str:
+        """Render document tree structure as string with descriptions.
+
+        Returns:
+            Rendered tree string
+        """
+        result = []
+
+        # Start with document title
+        result.append(f"Document: {self.title} [{self.designator}]")
+
+        # Recursively render nodes
+        if self.node:
+            result.extend(self._render_node_tree(self.node, indent="  ", is_last=True))
+
+        return "\n".join(result)
+
+    def _render_node_tree(self, node: Node, indent: str = "", is_last: bool = True) -> List[str]:
+        """Recursively render a node and its children as a tree structure.
+
+        Args:
+            node: The node to render
+            indent: Current indentation string
+            is_last: Whether this is the last child in current level
+
+        Returns:
+            List of strings representing the rendered tree lines
+        """
+        result = []
+
+        # Get node markers
+        marker = "└── " if is_last else "├── "
+
+        # Build the line with title and designator
+        line = indent + marker + node.title
+        descr = node.properties.get('Description')
+        if descr:
+            # Calculate the appropriate indentation for description
+            base_len = len(line)
+            indent_pos = max(50, base_len + 5)  # Either 50 chars or line length + 5, whichever is greater
+            padding = " " * (indent_pos - base_len)
+            line += f"{padding}// {descr}"
+
+        result.append(line)
+
+        # Calculate child indent for next level
+        child_indent = indent + ("    " if is_last else "│   ")
+
+        # Process children recursively
+        if node.children:
+            for i, child in enumerate(node.children):
+                is_last_child = i == len(node.children) - 1
+                result.extend(self._render_node_tree(child, child_indent, is_last_child))
+
+        return result
+
 
     def _render_node_markdown(self, node: Node, lines: List[str], depth: int = 1):
         """

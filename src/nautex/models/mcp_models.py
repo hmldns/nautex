@@ -16,8 +16,8 @@ class MCPScopeTask(BaseModel):
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
     context_note: Optional[str] = Field(None, description="Additional context for this task state")
     instructions: Optional[str] = Field(None, description="Instructions for this task")
-    subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
     in_focus: bool = Field(False, description="Whether this task is in focus")
+    subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
 
 
 class MCPScopeResponse(BaseModel):
@@ -153,7 +153,7 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
 
     INST_SUBTASKS = "Execute subtasks."
 
-    INST_START_CODING = "Implement the required code changes for this task. "
+    INST_START_CODING = "Implement the required files changes for this task. "
     INST_CONTINUE_CODING = "Continue the implementation of this coding task. "
     INST_START_REVIEW = "Guide user through results review for the scope tasks. "
     INST_CONTINUE_REVIEW = "Continue reviewing process with user, gaining feedback from them. "

@@ -11,7 +11,7 @@ This document outlines the workflow for an AI Coding Agent interacting with the 
 The primary goal is to systematically pull tasks from Nautex, execute them according to the provided scope and requirements, and report progress back to the platform.
 
 Nautex acts as a project management system, breaking down development into specific, actionable tasks. The agent's role is to act as the software developer, implementing these tasks.
-The agent must strictly adhere to the scope defined in each task, including operating only on the specified files and fulfilling the given requirements.
+The agent must strictly adhere to the scope defined in each task, including operating only on the specified files in task and fulfilling the given requirements.
 
 ## Workflow Goal
 
@@ -51,7 +51,8 @@ JSON fields are just examples "//" escaped lines are explanations.
   // fully understand the requirements. Search by full designators would work.
   "documents_paths": {
     "PRD": ".nautex/docs/PRD.md",
-    "TRD": ".nautex/docs/TRD.md"
+    "TRD": ".nautex/docs/TRD.md",
+    "FILE": ".nautex/docs/FILE.md"  // refer to this document for managing expected file structure
   },
 
   // Designators are composed via 2 parts: DOC_DESIGNATOR-ITEM_DESIGNATOR  DOC_DESIGNATOR - is string, ITEM_DESIGNATOR - is number of statement inside the document.
@@ -61,13 +62,13 @@ JSON fields are just examples "//" escaped lines are explanations.
   "tasks": [
     {
       // The master task that groups several subtasks related to authentication.
-      "designator": "TSK-1",
+      "designator": "T-1",
       "name": "Implement User Authentication",
       "description": "Create the backend infrastructure for user registration and login.",
       "status": "NOT_STARTED",
       "type": "CODE",
-      "requirements": ["PRD-201"],
-      "files": ["src/services/auth_service.py", "src/api/auth_routes.py"],
+      "requirements": ["PRD-201"], // reference to the specific requirements in PRD file (document)
+      "files": ["src/services/auth_service.py", "src/api/auth_routes.py"], // reference to files related to the task and expected to be updated / created; referenced directory will have trailing "/", e.g. src/services/
       "context_note": "T",
       "instructions": "",
       "in_focus": true,
@@ -76,12 +77,12 @@ JSON fields are just examples "//" escaped lines are explanations.
       "subtasks": [
         {
           // The first subtask: creating a service to handle authentication logic.
-          "designator": "TSK-2",
+          "designator": "T-2",
           "name": "Create Authentication Service",
           "description": "Implement the business logic for user authentication, including password hashing and token generation.",
           "status": "NOT_STARTED",
           "type": "CODE",
-          "requirements": ["TRD-55", "TRD-56"],
+          "requirements": ["TRD-55", "TRD-56"], / references to the specific requirements in TRD file (document)
           "files": ["src/services/auth_service.py"],
           "context_note": "...",
           "instructions": "...",
@@ -90,7 +91,7 @@ JSON fields are just examples "//" escaped lines are explanations.
         },
         {
           // The second subtask: exposing the authentication logic via an API endpoint.
-          "designator": "TSK-3",
+          "designator": "T-3",
           "name": "Create Authentication API Endpoint",
           "description": "Create a public API endpoint for user login.",
           "status": "NOT_STARTED",
@@ -103,7 +104,7 @@ JSON fields are just examples "//" escaped lines are explanations.
           "subtasks": []
         },
         {
-          "designator": "TSK-4",
+          "designator": "T-4",
           "name": "Test Authentication Implementation",
           "description": "Write and execute tests to verify the implemented authentication service and endpoints work correctly.",
           "status": "NOT_STARTED",
@@ -117,7 +118,7 @@ JSON fields are just examples "//" escaped lines are explanations.
         },
         {
           // A standalone task for user review after the coding tasks are complete.
-          "designator": "TSK-4",
+          "designator": "T-4",
           "name": "Review Authentication Flow",
           "description": "Ask the user to review the implemented authentication endpoints to ensure they meet expectations.",
           "status": "NOT_STARTED",
@@ -157,22 +158,22 @@ This command is used to report changes in task status back to the Nautex platfor
 {
   "operations": [
     {
-      "task_designator": "TSK-1",
+      "task_designator": "T-1",
       "updated_status": "IN_PROGRESS",
       "new_note": "Starting work on the main authentication task. Subtasks will be addressed sequentially."
     },
     {
-      "task_designator": "TSK-2",
+      "task_designator": "T-2",
       "updated_status": "DONE",
       "new_note": "The 'AuthService' class has been implemented in 'src/services/auth_service.py' as per the requirements. Password hashing and JWT generation are complete."
     },
     {
-      "task_designator": "TSK-3",
+      "task_designator": "T-3",
       "updated_status": "BLOCKED",
       "new_note": "Blocked: Waiting for clarification on the expected JSON response format for the '/login' endpoint. I will proceed with other tasks until this is resolved."
     },
     {
-      "task_designator": "TSK-4",
+      "task_designator": "T-4",
       "new_note": "User review is the next step after the login endpoint is fully implemented and unblocked."
     }
   ]

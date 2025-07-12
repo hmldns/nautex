@@ -35,6 +35,18 @@ venv:
 		echo "Virtual environment already exists."; \
 	fi
 
+install-wheel:
+	@echo "Installing built wheel for testing..."
+	pip install dist/*.whl
+
+install-wheel-user:
+	@echo "Installing built wheel for current user..."
+	pip install --user dist/*.whl
+
+install-wheel-global:
+	@echo "Installing built wheel globally (requires sudo)..."
+	sudo pip install dist/*.whl
+
 # Installation targets
 install-dev:
 	@echo "Installing in development mode with dev dependencies..."

@@ -130,22 +130,22 @@ async def mcp_handle_status() -> Dict[str, Any]:
 
         return {
             "success": True,
-            "data": {
-                "config_loaded": context.config_loaded,
-                "config_path": str(context.config_path) if context.config_path else None,
-                "mcp_status": context.mcp_status,
-                "mcp_config_path": str(context.mcp_config_path) if context.mcp_config_path else None,
-                "api_connected": context.api_connected,
-                "api_response_time": context.api_response_time,
-                "next_task": {
-                    "task_designator": context.next_task.task_designator,
-                    "name": context.next_task.name,
-                    "description": context.next_task.description,
-                    "status": context.next_task.status
-                } if context.next_task else None,
-                "advised_action": context.advised_action,
-                "config_summary": context.config_summary
-            }
+            # "data": {
+            #     "config_loaded": context.config_loaded,
+            #     "config_path": str(context.config_path) if context.config_path else None,
+            #     "mcp_status": context.mcp_status,
+            #     "mcp_config_path": str(context.mcp_config_path) if context.mcp_config_path else None,
+            #     "api_connected": context.api_connected,
+            #     "api_response_time": context.api_response_time,
+            #     "next_task": {
+            #         "task_designator": context.next_task.task_designator,
+            #         "name": context.next_task.name,
+            #         "description": context.next_task.description,
+            #         "status": context.next_task.status
+            #     } if context.next_task else None,
+            #     "advised_action": context.advised_action,
+            #     "config_summary": context.config_summary
+            # }
         }
     except Exception as e:
         logger.error(f"Error in status tool: {e}")

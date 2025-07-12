@@ -14,6 +14,7 @@ from ..api.api_models import (
     Project,
     ImplementationPlan,
     Task,
+    APIResponse
 )
 
 # Set up logging
@@ -241,7 +242,6 @@ class NautexAPIService:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.api_models import TaskOperation, APIResponse
 
         try:
             response_data = await self.api_client.update_tasks_batch(project_id, plan_id, operations)
@@ -263,7 +263,6 @@ class NautexAPIService:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.api_models import ImplementationPlan
 
         try:
             return await self.api_client.get_implementation_plan(project_id, plan_id)
@@ -284,7 +283,6 @@ class NautexAPIService:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.api_models import Document
 
         try:
             return await self.api_client.get_document_tree(project_id, doc_designator)

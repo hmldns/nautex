@@ -14,8 +14,10 @@ from .api_models import (
     ImplementationPlan,
     Task,
     APIResponse,
+    TaskOperationRequest,
+    Document
 )
-
+from .scope_context_model import ScopeContext
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -676,7 +678,6 @@ class NautexAPIClient:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.api_models import TaskOperationRequest
 
         headers = self._get_auth_headers()
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}/tasks_update")
@@ -698,7 +699,7 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in update_tasks_batch: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_document_tree(self, project_id: str, doc_designator: str) -> Optional["Document"]:
+    async def get_document_tree(self, project_id: str, doc_designator: str) -> Optional[Document]:
         """
         Get a document tree by designator.
 
@@ -709,7 +710,6 @@ class NautexAPIClient:
         Returns:
             A Document object containing the document tree, or None if the document was not found
         """
-        from src.nautex.api.api_models import Document
 
         headers = self._get_auth_headers()
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/documents/{doc_designator}/tree")
@@ -737,7 +737,7 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in get_document_tree: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_implementation_plan(self, project_id: str, plan_id: str) -> Optional["ImplementationPlan"]:
+    async def get_implementation_plan(self, project_id: str, plan_id: str) -> Optional[ImplementationPlan]:
         """Get a specific implementation plan by plan_id.
 
         Args:
@@ -750,7 +750,6 @@ class NautexAPIClient:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.api_models import ImplementationPlan
 
         headers = self._get_auth_headers()
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}")
@@ -778,7 +777,7 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in get_implementation_plan: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_next_scope(self, project_id: str, plan_id: str) -> Optional["ScopeContext"]:
+    async def get_next_scope(self, project_id: str, plan_id: str) -> Optional[ScopeContext]:
         """Get the next scope for a specific project and plan.
 
         Args:
@@ -791,7 +790,6 @@ class NautexAPIClient:
         Raises:
             NautexAPIError: If API call fails
         """
-        from src.nautex.api.scope_context_model import ScopeContext
 
         headers = self._get_auth_headers()
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}/scope/next")

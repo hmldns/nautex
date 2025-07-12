@@ -1,22 +1,16 @@
-"""MCP Service for FastMCP server functionality."""
-
-import asyncio
 import logging
 from typing import Dict, Any, Optional, List
-import json
 
 from fastmcp import FastMCP
 
 from ..models.config_models import NautexConfig
 from .nautex_api_service import NautexAPIService
-from .integration_status_service import IntegrationStatusService
 from .plan_context_service import PlanContextService
-from .config_service import ConfigurationService
-from .mcp_config_service import MCPConfigService
 from ..api.client import NautexAPIError
 from ..models.mcp_models import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateRequest, MCPTaskUpdateResponse
 
 from .document_service import DocumentService
+from ..api.api_models import TaskOperation
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -365,7 +359,6 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
                 error="Project ID and implementation plan ID must be configured"
             )
 
-        from src.nautex.api.api_models import TaskOperation
 
         # Convert the operations to MCPTaskOperation objects
         mcp_task_operations = []

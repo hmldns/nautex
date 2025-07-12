@@ -48,9 +48,14 @@ class MCPConfigService:
             logger.error(f"Failed to load MCP config template: {e}")
             # Fallback template
             self.nautex_config_template = {
-                "command": "nautex",
-                "args": ["mcp"]
+              "mcpServers": {
+                "nautex": {
+                  "command": "nautex",
+                  "args": ["mcp"]
+                }
+              }
             }
+
 
     def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:
         """Check the status of MCP configuration integration.

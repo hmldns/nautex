@@ -57,6 +57,10 @@ where = ["src"]
 [tool.setuptools.package-dir]
 "" = "src"
 
+[tool.setuptools.package-data]
+nautex = ["consts/**/*"]
+
+
 [tool.black]
 line-length = 88
 target-version = ['py310']
@@ -98,4 +102,4 @@ strict_equality = true
 
 [[tool.mypy.overrides]]
 module = "textual.*"
-ignore_missing_imports = true 
+ignore_missing_imports = true

@@ -7,9 +7,9 @@ from pathlib import Path
 import aiofiles
 import asyncio
 
-from src.nautex.api.api_models import Document
-from src.nautex.services.nautex_api_service import NautexAPIService
-from src.nautex.services.config_service import ConfigurationService
+from ..api.api_models import Document
+from ..services.nautex_api_service import NautexAPIService
+from ..services.config_service import ConfigurationService
 
 # Set up logging
 logger = logging.getLogger(__name__)

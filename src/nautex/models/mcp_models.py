@@ -3,7 +3,7 @@
 from typing import List, Optional, Dict, Any, Union, Tuple
 from enum import Enum
 from pydantic import BaseModel, Field
-from src.nautex.api.scope_context_model import ScopeContext, ScopeTask, ScopeContextMode, TaskStatus, TaskType
+from ..api.scope_context_model import ScopeContext, ScopeTask, ScopeContextMode, TaskStatus, TaskType
 
 
 class MCPScopeTask(BaseModel):

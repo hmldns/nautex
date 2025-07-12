@@ -5,7 +5,7 @@ from typing import Optional, Any
 from pathlib import Path
 
 from ..services.mcp_config_service import MCPConfigStatus
-from src.nautex.api.api_models import Task
+from ..api.api_models import Task
 
 
 @dataclass

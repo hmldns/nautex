@@ -9,7 +9,7 @@ import time
 
 from . import ConfigurationService
 from ..api.client import NautexAPIClient, NautexAPIError
-from src.nautex.api.api_models import (
+from ..api.api_models import (
     AccountInfo,
     Project,
     ImplementationPlan,

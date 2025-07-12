@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from src.nautex.api.api_models import AccountInfo
-from src.nautex.services.mcp_config_service import MCPConfigStatus
+from ..api.api_models import AccountInfo
+from ..services.mcp_config_service import MCPConfigStatus
 
 
 @dataclass(kw_only=True)

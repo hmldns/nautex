@@ -1,13 +1,11 @@
-"""Main CLI entry point for Nautex CLI."""
-
 import argparse
 import asyncio
 import sys
-from typing import Optional
+
 from pathlib import Path
 
 from .services.ui_service import UIService
-from .services.config_service import ConfigurationService, ConfigurationError
+from .services.config_service import ConfigurationService
 from .services.nautex_api_service import NautexAPIService
 from .services.integration_status_service import IntegrationStatusService
 from .services.plan_context_service import PlanContextService
@@ -15,7 +13,6 @@ from .services.document_service import DocumentService
 from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run, \
     mcp_handle_next_scope
 from .services.mcp_config_service import MCPConfigService
-from .api.client import NautexAPIClient
 from .api import create_api_client
 import json
 

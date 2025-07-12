@@ -154,7 +154,6 @@ async def mcp_handle_status() -> Dict[str, Any]:
             "error": str(e)
         }
 
-
 @mcp.tool
 async def nautex_status() -> Dict[str, Any]:
     """Get comprehensive status and context information for Nautex CLI."""
@@ -202,10 +201,10 @@ async def mcp_handle_list_projects() -> Dict[str, Any]:
         }
 
 
-@mcp.tool
-async def nautex_list_projects() -> Dict[str, Any]:
-    """List all available projects."""
-    return await mcp_handle_list_projects()
+# @mcp.tool
+# async def nautex_list_projects() -> Dict[str, Any]:
+#     """List all available projects."""
+#     return await mcp_handle_list_projects()
 
 
 def _check_configured():
@@ -261,14 +260,14 @@ async def mcp_handle_list_plans(project_id: str) -> Dict[str, Any]:
         }
 
 
-@mcp.tool
-async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
-    """List implementation plans for a project.
-
-    Args:
-        project_id: ID of the project to get plans for
-    """
-    return await mcp_handle_list_plans(project_id)
+# @mcp.tool()
+# async def nautex_list_plans(project_id: str) -> Dict[str, Any]:
+#     """List implementation plans for a project.
+#
+#     Args:
+#         project_id: ID of the project to get plans for
+#     """
+#     return await mcp_handle_list_plans(project_id)
 
 
 async def mcp_handle_next_scope() -> Dict[str, Any]:

@@ -47,6 +47,15 @@ install-wheel-global:
 	@echo "Installing built wheel globally (requires sudo)..."
 	sudo pip install dist/*.whl
 
+uninstall-global:
+	sudo pip uninstall nautex
+
+freeze:
+	pip3 freeze > requirements.txt
+
+reinstall-global: uninstall-global install-wheel-global
+	@echo "Reinstalled"
+
 # Installation targets
 install-dev:
 	@echo "Installing in development mode with dev dependencies..."

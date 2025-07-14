@@ -30,48 +30,6 @@ class MCPScopeResponse(BaseModel):
 MCPScopeTask.model_rebuild()
 
 
-def get_task_type_description(task: ScopeTask) -> str:
-    """Generate a description of the task type.
-
-    Args:
-        task: The task to generate a type description for
-
-    Returns:
-        A string describing the task type, or empty string if task has no type
-    """
-    if not hasattr(task, 'type'):
-        return ""
-
-    return f"Task type: {task.type.value}."
-
-
-def get_task_instructions(task: ScopeTask) -> str:
-    """Generate instructions for a task based on its status and other properties.
-
-    Args:
-        task: The task to generate instructions for
-
-    Returns:
-        A string containing instructions for the task
-    """
-    if task.status == TaskStatus.NOT_STARTED:
-        return "This task is not started yet. Review requirements and files before beginning work."
-
-    elif task.status == TaskStatus.IN_PROGRESS:
-        if task.subtasks:
-            return "This task is in progress. Focus on completing subtasks in order."
-        else:
-            return "This task is in progress. Continue implementation according to requirements."
-
-    elif task.status == TaskStatus.DONE:
-        return "This task is completed. No further action needed."
-
-    elif task.status == TaskStatus.BLOCKED:
-        return "This task is blocked. Resolve blocking issues before continuing."
-
-    return ""
-
-
 def get_mode_instructions(mode: ScopeContextMode) -> str:
     """Generate instructions based on the scope context mode.
 
@@ -88,36 +46,6 @@ def get_mode_instructions(mode: ScopeContextMode) -> str:
         return f"All subtasks are completed. Review and finalize results of the implementation and move master task to \"{TaskStatus.DONE}\" state."
 
     return ""
-
-
-def compose_context_task_note(task: ScopeTask) -> str:
-    """Compose a context note for a context task.
-
-    Args:
-        task: The task to compose a context note for
-
-    Returns:
-        A string containing the context note
-    """
-    notes = []
-
-    # Add task type information if available
-    type_info = get_task_type_description(task)
-    if type_info:
-        notes.append(type_info)
-
-    # Add subtask information if available
-    if task.subtasks:
-        subtask_designators = [subtask.task_designator for subtask in task.subtasks]
-        if len(subtask_designators) == 1:
-            notes.append(f"Has subtask: {subtask_designators[0]}")
-        else:
-            notes.append(f"Has subtasks: {', '.join(subtask_designators)}")
-
-    # Add a note about this being a context task
-    notes.append("Consider this task for your information for the scope of focus tasks.")
-
-    return " ".join(notes)
 
 
 def create_mcp_task_from_scope_task(task: ScopeTask, is_in_focus: bool = False) -> MCPScopeTask:

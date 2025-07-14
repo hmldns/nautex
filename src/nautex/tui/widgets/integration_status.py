@@ -18,25 +18,30 @@ class StatusDisplay(Static):
     }
     """
 
-    def __init__(self, label: str, status: str = "⚪", **kwargs):
+    def __init__(self, label: str, status: bool = False, **kwargs):
         """Initialize status display.
 
         Args:
             label: The label text
             status: The status indicator (emoji)
         """
-        super().__init__(f"{status} {label}", **kwargs)
         self.label_text = label
-        self.status_indicator = status
+        self.status_flag = status
+        super().__init__(self._disp_render(), **kwargs)
 
-    def update_status(self, status: str) -> None:
-        """Update the status indicator.
 
-        Args:
-            status: New status indicator
-        """
-        self.status_indicator = status
-        self.update(f"{status} {self.label_text}")
+    def set_status(self, flag: bool):
+        self.status_flag = flag
+
+    def _disp_render_status(self) -> str:
+        return "✅" if self.status_flag else "⚠️"
+
+    def _disp_render(self) -> str:
+        return f"{self._disp_render_status()} {self.label_text}"
+
+    def update_status(self, status_flag: bool) -> None:
+        self.set_status(status_flag)
+        self.update(self._disp_render())
 
 
 class IntegrationStatusPanel(HorizontalGroup):
@@ -60,11 +65,12 @@ class IntegrationStatusPanel(HorizontalGroup):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.status_network = StatusDisplay("net", "⚪")
-        self.status_api = StatusDisplay("api", "⚪")
-        self.status_project = StatusDisplay("proj", "⚪")
-        self.status_plan = StatusDisplay("plan", "⚪")
-        self.status_mcp = StatusDisplay("mcp", "⚪")
+        self.status_network = StatusDisplay("Connection")
+        self.status_api =     StatusDisplay("API")
+        self.status_project = StatusDisplay("Project")
+        self.status_plan =    StatusDisplay("Plan")
+        self.status_mcp =     StatusDisplay("MCP Config")
+        self.agent_rules =     StatusDisplay("Agent Rules")
 
 
         self.border_title = "Integration Status"
@@ -78,11 +84,11 @@ class IntegrationStatusPanel(HorizontalGroup):
         yield self.status_mcp
 
 
-    def update_from_integration_status(self, integration_status: IntegrationStatus) -> None:
+    def update_data(self, integration_status: IntegrationStatus) -> None:
         # Network status
 
-        self.status_network.update_status("🟢" if integration_status.network_connected else "🔴")
-        self.status_api.update_status("🟢" if integration_status.api_connected else "🔴")
+        self.status_network.update_status(integration_status.network_connected)
+        self.status_api.update_status(integration_status.api_connected)
 
         # self.update_status("network", "🟢" if integration_status.network_connected
         # else "🔴" if integration_status.config_loaded and integration_status.config_summary and integration_status.config_summary.get(

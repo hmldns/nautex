@@ -1,14 +1,11 @@
 """Sample script to generate ScopeContext instances and convert them to MCP responses."""
 
 import json
-import os
-from enum import Enum
-from typing import Dict, Any, List, Optional, Tuple
-from pydantic import BaseModel, Field
+
 
 from src.nautex.api.scope_context_model import ScopeContextMode, ScopeContext, ScopeTask, TaskStatus, TaskType, \
     RequirementReference, FileReference
-from src.nautex.models.mcp_models import convert_scope_context_to_mcp_response
+from src.nautex.models.mcp import convert_scope_context_to_mcp_response
 
 
 def process_and_print_scope_context(scope_context: ScopeContext, case_name: str) -> None:

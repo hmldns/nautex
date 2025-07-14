@@ -25,6 +25,10 @@ The core workflow is as follows:
 4.  **Complete Tasks:** Once a task is fully implemented, update its status to `Done` using the `tasks_update` command.
 5.  **Repeat:** Continue this cycle until `next_scope` returns no new tasks.
 
+# WARNING!
+
+NEVER EDIT FILES IN `.nautex` directory
+
 # Commands
 
 ## `next_scope`

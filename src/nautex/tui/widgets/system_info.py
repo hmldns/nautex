@@ -7,7 +7,7 @@ from textual.reactive import reactive
 
 from ...services.config_service import ConfigurationService
 from ...services.integration_status_service import IntegrationStatusService
-from ...models.config_models import NautexConfig
+from ...models.config import NautexConfig
 from ...models.integration_status import IntegrationStatus
 
 

@@ -1,12 +1,10 @@
 """TUI screen for the interactive setup process."""
 
-import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
 from pydantic import SecretStr
-from pygments.styles.dracula import yellow
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -19,11 +17,12 @@ from ..widgets import (
     LoadableList,
     SystemInfoWidget,
 )
+from ...models.integration_status import IntegrationStatus
 from ...services.config_service import ConfigurationService, ConfigurationError
 from ...services.integration_status_service import IntegrationStatusService
 from ...services.mcp_config_service import MCPConfigService
 from ...services.nautex_api_service import NautexAPIService
-from ...models.config_models import NautexConfig
+from ...models.config import NautexConfig
 
 
 @dataclass(kw_only=True)
@@ -118,10 +117,6 @@ class SetupScreen(Screen):
         self.project_root = project_root
         self.integration_status_service = integration_status_service
         self.api_service = api_service
-
-        # Task for polling integration status
-        self._polling_task = None
-        self._polling_interval = 5.0  # seconds
 
         # Setup state
         self.setup_data = {}
@@ -335,12 +330,15 @@ class SetupScreen(Screen):
         yield Footer()
 
     async def on_mount(self) -> None:
-        await self._update_integration_status()
+        # Get initial integration status
+        status = await self.integration_status_service.get_integration_status()
+        self._on_integration_status_update(status)
+
         await self._update_system_info()
         self.api_token_input.focus()
 
         # Start polling for integration status updates
-        self._start_polling_integration_status()
+        self.integration_status_service.start_polling(on_update=self._on_integration_status_update)
 
         # Load projects on start
         self.projects_list.reload()
@@ -348,33 +346,19 @@ class SetupScreen(Screen):
     async def on_unmount(self) -> None:
         """Called when the screen is unmounted."""
         # Stop polling when screen is unmounted
-        self._stop_polling_integration_status()
+        self.integration_status_service.stop_polling()
 
-    def _start_polling_integration_status(self) -> None:
-        """Start a background task to poll for integration status updates."""
-        if self._polling_task is None:
-            self._polling_task = asyncio.create_task(self._poll_integration_status())
+    def _on_integration_status_update(self, status: IntegrationStatus) -> None:
+        """Callback function for integration status updates.
 
-    def _stop_polling_integration_status(self) -> None:
-        """Stop the polling task if it's running."""
-        if self._polling_task is not None:
-            self._polling_task.cancel()
-            self._polling_task = None
-
-    async def _poll_integration_status(self) -> None:
-        """Continuously poll for integration status updates."""
-        try:
-            while True:
-                await asyncio.sleep(self._polling_interval)
-                await self._update_integration_status()
-        except asyncio.CancelledError:
-            # Task was cancelled, clean up
-            pass
-        except Exception as e:
-            self.app.log(f"Error in integration status polling: {e}")
-            # Attempt to restart polling after a brief delay
-            await asyncio.sleep(1.0)
-            self._start_polling_integration_status()
+        Args:
+            status: The updated integration status
+        """
+        self.integration_status_widget.update_data(status)
+        self.system_info_widget.update_system_info(
+            email=status.account_info.profile_email if status.account_info else None,
+            network_delay=status.network_response_time
+        )
 
     def _load_existing_config(self) -> None:
         self.api_token_input.set_value(str(self.config_service.config.api_token))
@@ -397,18 +381,6 @@ class SetupScreen(Screen):
         self.focusable_widgets[self.current_focus_index].focus()
 
 
-    async def _update_integration_status(self) -> None:
-        try:
-            status = await self.integration_status_service.get_integration_status()
-
-            self.integration_status_widget.update_from_integration_status(status)
-            self.system_info_widget.update_system_info(
-                email=status.account_info.profile_email if status.account_info else None,
-                network_delay=status.network_response_time
-            )
-
-        except Exception:
-            pass
 
     async def _update_system_info(self) -> None:
         """Update the system info widget with current data."""

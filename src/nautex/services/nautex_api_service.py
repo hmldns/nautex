@@ -55,7 +55,7 @@ class NautexAPIService:
         start_time = time.time()
         try:
             # Use get_account_info with the specified timeout to check connectivity
-            await self.api_client.get_account_info(timeout=timeout)
+            await self.api_client.get_account_info(timeout=timeout, token_override="Not valid token for connection check")
 
             response_time = time.time() - start_time
             return True, response_time, None

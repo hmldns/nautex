@@ -3,6 +3,7 @@
 from textual.widgets import Static
 from textual.containers import Vertical
 from .integration_status import IntegrationStatusPanel
+from ...models.integration_status import IntegrationStatus
 
 
 class IntegrationStatusWidget(Vertical):
@@ -23,6 +24,10 @@ class IntegrationStatusWidget(Vertical):
     IntegrationStatusWidget IntegrationStatusPanel {
         margin: 0;
         padding: 0;
+    }
+    
+    IntegrationStatusWidget > IntegrationStatusPanel {
+         padding: 0 0 0 1;
     }
     """
 
@@ -54,13 +59,13 @@ class IntegrationStatusWidget(Vertical):
         yield self.status_panel
         yield self.status_text
 
-    def update_from_integration_status(self, integration_status) -> None:
+    def update_data(self, integration_status: IntegrationStatus) -> None:
         """Update the widget based on integration status.
 
         Args:
             integration_status: IntegrationStatus object from integration_status_service
         """
-        self.status_panel.update_from_integration_status(integration_status)
+        self.status_panel.update_data(integration_status)
 
         # Update status text
         if integration_status.integration_ready:

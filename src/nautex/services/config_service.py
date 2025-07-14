@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from pydantic import ValidationError
 
-from ..models.config_models import NautexConfig
+from ..models.config import NautexConfig
 
 
 class ConfigurationError(Exception):

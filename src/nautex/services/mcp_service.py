@@ -3,11 +3,11 @@ from typing import Dict, Any, Optional, List
 
 from fastmcp import FastMCP
 
-from ..models.config_models import NautexConfig
+from ..models.config import NautexConfig
 from .nautex_api_service import NautexAPIService
 from .plan_context_service import PlanContextService
 from ..api.client import NautexAPIError
-from ..models.mcp_models import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateRequest, MCPTaskUpdateResponse
+from ..models.mcp import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateRequest, MCPTaskUpdateResponse
 
 from .document_service import DocumentService
 from ..api.api_models import TaskOperation

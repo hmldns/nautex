@@ -2,10 +2,11 @@
 
 import time
 import logging
-from typing import Optional, Tuple, Dict, Any
+import asyncio
+from typing import Optional, Tuple, Dict, Any, Callable
 from pathlib import Path
 
-from ..models.config_models import NautexConfig
+from ..models.config import NautexConfig
 from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
 from .mcp_config_service import MCPConfigService, MCPConfigStatus
@@ -17,14 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 class IntegrationStatusService:
-    """Service for managing all integration status concerns.
-
-    This service is the top-level integration point for:
-    - API validation and connectivity testing
-    - Configuration validation and management
-    - MCP integration status checking
-    - Overall integration health assessment
-    """
 
     def __init__(
         self,
@@ -46,6 +39,11 @@ class IntegrationStatusService:
         self.project_root = project_root or Path.cwd()
         self._nautex_api_service = nautex_api_service
 
+        # Polling related attributes
+        self._polling_task = None
+        self._polling_interval = 5.0  # seconds
+        self._on_update_callback = None
+
     async def get_integration_status(self) -> IntegrationStatus:
         """Get comprehensive integration status.
 
@@ -55,65 +53,16 @@ class IntegrationStatusService:
         logger.debug("Gathering integration status...")
 
         # Initialize status
-        status = IntegrationStatus()
+        status = IntegrationStatus(
+            config=self.config_service.config
+        )
 
-        # 1. Check configuration
-        await self._check_configuration_status(status)
+        if status.config_loaded:
+            await self._check_network_connectivity(status)
+            await self._check_api_connectivity(status)
+            self._check_mcp_status(status)
 
-        # 2. Check MCP integration
-        self._check_mcp_status(status)
-
-        # 3. Test network connectivity first (quick check)
-        # if status.config_loaded:
-        await self._check_network_connectivity(status)
-
-        await self._check_api_connectivity(status)
-
-        # 5. Determine overall integration readiness
-        self._determine_integration_readiness(status)
-
-        logger.info(f"Integration status: {status.status_message}")
         return status
-
-
-    def validate_configuration_completeness(self, config: NautexConfig) -> Tuple[bool, str]:
-        """Validate if configuration has all required fields for operation.
-
-        Args:
-            config: Configuration to validate
-
-        Returns:
-            Tuple of (is_complete, status_message)
-        """
-        if not config.api_token:
-            return False, "API token is required"
-
-        if not config.agent_instance_name:
-            return False, "Agent instance name is required"
-
-        if not config.project_id:
-            return False, "Project ID must be selected"
-
-        if not config.plan_id:
-            return False, "Implementation plan must be selected"
-
-        return True, "Configuration is complete"
-
-    async def _check_configuration_status(self, status: IntegrationStatus) -> None:
-        """Check configuration loading and validity."""
-        try:
-            logger.debug("Loading configuration...")
-            config = self.config_service.load_configuration()
-            status.config_loaded = True
-            status.config_path = self.config_service.get_config_path()
-
-
-
-            logger.debug(f"Configuration loaded from {status.config_path}")
-
-        except ConfigurationError as e:
-            logger.warning(f"Failed to load configuration: {e}")
-            status.config_loaded = False
 
     def _check_mcp_status(self, status: IntegrationStatus) -> None:
         """Check MCP integration status."""
@@ -126,10 +75,10 @@ class IntegrationStatusService:
 
         try:
             logger.debug("Testing network connectivity...")
-            
+
             # Quick network connectivity check with 3 second timeout
             network_ok, response_time, error_msg = await self._nautex_api_service.check_network_connectivity(timeout=1.0)
-            
+
             # Store network status as a custom attribute
             status.network_connected = network_ok
             status.network_response_time = response_time
@@ -158,56 +107,50 @@ class IntegrationStatusService:
             status.api_connected = False
             status.api_response_time = None
 
-    def _determine_integration_readiness(self, status: IntegrationStatus) -> None:
-        """Determine overall integration readiness and status message."""
-        # Priority 1: Configuration issues
-        if not status.config_loaded:
-            status.integration_ready = False
-            status.status_message = "Configuration not found - run 'nautex setup'"
-            return
-
-        # Priority 2: Network connectivity issues
-        if hasattr(status, 'network_connected') and not status.network_connected:
-            status.integration_ready = False
-            status.status_message = f"Network connectivity failed - check connection to {getattr(status, 'network_error', 'API host')}"
-            return
-
-        # Priority 3: API connectivity issues  
-        if not status.api_connected:
-            status.integration_ready = False
-            status.status_message = "API connectivity failed - check token and API host"
-            return
-
-        # Priority 4: Missing project/plan configuration
-        if not status.config_summary or not status.config_summary.get("project_id"):
-            status.integration_ready = False
-            status.status_message = "Project not selected - run 'nautex setup'"
-            return
-
-        if not status.config_summary.get("plan_id"):
-            status.integration_ready = False
-            status.status_message = "Implementation plan not selected - run 'nautex setup'"
-            return
-
-        # Integration is ready for work
-        status.integration_ready = True
-        if status.mcp_status != MCPConfigStatus.OK:
-            status.status_message = "Ready to work (consider setting up MCP integration for IDE support)"
-        else:
-            status.status_message = "Fully integrated and ready to work"
-
-    def _create_config_summary(self, config: NautexConfig) -> Dict[str, Any]:
-        """Create a summary of the configuration.
+    def start_polling(self, on_update: Optional[Callable[[IntegrationStatus], None]] = None, interval: Optional[float] = None) -> None:
+        """Start a background task to poll for integration status updates.
 
         Args:
-            config: The loaded configuration
-
-        Returns:
-            Dictionary summary of key configuration fields
+            on_update: Optional callback function to be called when new status is available
+            interval: Optional polling interval in seconds (defaults to self._polling_interval)
         """
-        return {
-            "agent_instance_name": config.agent_instance_name,
-            "project_id": config.project_id,
-            "plan_id": config.plan_id,
-            "has_token": bool(config.api_token)
-        }
+        if interval is not None:
+            self._polling_interval = interval
+
+        self._on_update_callback = on_update
+
+        if self._polling_task is None:
+            self._polling_task = asyncio.create_task(self._poll_integration_status())
+            logger.debug("Started integration status polling task")
+
+    def stop_polling(self) -> None:
+        """Stop the polling task if it's running."""
+        if self._polling_task is not None:
+            self._polling_task.cancel()
+            self._polling_task = None
+            logger.debug("Stopped integration status polling task")
+
+    async def _poll_integration_status(self) -> None:
+        """Continuously poll for integration status updates."""
+        try:
+            while True:
+                await asyncio.sleep(self._polling_interval)
+
+                try:
+                    status = await self.get_integration_status()
+
+                    # Call the callback if provided
+                    if self._on_update_callback:
+                        self._on_update_callback(status)
+
+                except Exception as e:
+                    logger.error(f"Error getting integration status: {e}")
+
+        except asyncio.CancelledError:
+            # Task was cancelled, clean up
+            logger.debug("Integration status polling task cancelled")
+        except Exception as e:
+            logger.error(f"Error in integration status polling: {e}")
+            # Attempt to restart polling after a brief delay
+            await asyncio.sleep(1.0)
+            self.start_polling(self._on_update_callback)

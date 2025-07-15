@@ -5,7 +5,6 @@ import logging
 from typing import List, Optional, Dict
 from pathlib import Path
 import aiofiles
-import asyncio
 
 from ..api.api_models import Document
 from ..services.nautex_api_service import NautexAPIService

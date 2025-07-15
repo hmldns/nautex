@@ -1,8 +1,8 @@
-import logging
-
-logging.basicConfig(
-    level=logging.ERROR
-)
+# import logging
+#
+# logging.basicConfig(
+#     level=logging.ERROR
+# )
 
 import argparse
 import asyncio

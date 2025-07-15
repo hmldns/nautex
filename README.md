@@ -1,5 +1,5 @@
 
-This is MCP server that integrates PRD and TRD tool Nautex AI with the conding agents. 
+This is MCP server that integrates PRD and TRD building tool [Nautex AI](nautex.ai) with the conding agents. 
 
 Nautex AI acts as a Product and Project manager for coding agents, speeding up AI assisted development by communicating requirements well.
 

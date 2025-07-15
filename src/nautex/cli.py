@@ -1,5 +1,12 @@
+import logging
+
+logging.basicConfig(
+    level=logging.WARNING
+)
+
 import argparse
 import asyncio
+
 import sys
 
 from pathlib import Path

@@ -9,7 +9,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Static
+from textual.widgets import Button, Footer, Static, Link
 
 from ..widgets import (
     ValidatedTextInput,
@@ -147,8 +147,8 @@ class SetupScreen(Screen):
         self.setup_data = {}
 
         # Create API token link (using Static with markup instead of Link)
-        api_token_link = Static(
-            "[Get one from: app.nautex.ai/settings/nautex-api](https://app.nautex.ai/settings/nautex-api)", markup=True)
+        api_token_link = Link("Get API token from: app.nautex.ai/settings/nautex-api",
+                              url="(https://app.nautex.ai/settings/nautex-api)", tooltip="Get API Key")
 
         # Widget references
         self.integration_status_widget = IntegrationStatusWidget()

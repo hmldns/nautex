@@ -110,7 +110,7 @@ build:
 	@echo "Building package..."
 	python3 -m build
 
-publish: build
+publish: clean build
 	@echo "Publishing to PyPI..."
 	twine upload dist/*
 

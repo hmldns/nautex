@@ -137,6 +137,5 @@ clean:
 	rm -rf dist/
 	rm -rf *.egg-info/
 	rm -rf src/*.egg-info/
-	rm -rf venv/
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete

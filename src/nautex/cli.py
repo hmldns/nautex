@@ -1,7 +1,7 @@
 import logging
 
 logging.basicConfig(
-    level=logging.WARNING
+    level=logging.ERROR
 )
 
 import argparse

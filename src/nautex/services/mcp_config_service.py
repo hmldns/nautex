@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, Any, Literal
 import logging
 
-from src.nautex.services import ConfigurationService
-from src.nautex.models.config import NautexConfig
+from . import ConfigurationService
 
 # Set up logging
 logger = logging.getLogger(__name__)

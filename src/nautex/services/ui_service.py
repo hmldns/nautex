@@ -67,5 +67,24 @@ class UIService:
             print(f"Setup failed: {e}")
             print("Please check your configuration and try again.")
 
+        finally:
+            # Ensure API client is closed even if an exception occurs
+            # This prevents "Unclosed client session" errors when the app is terminated
+            self.integration_status_service.stop_polling()
+            await self.api_service.api_client.close()
+
     async def handle_status_command(self, noui: bool = False) -> None:
-        print("Status Screen: Under development")
+        """Handle the status command by displaying integration status.
+
+        Args:
+            noui: If True, print status to console instead of TUI
+        """
+        try:
+            print("Status Screen: Under development")
+            # Future implementation will go here
+
+        finally:
+            # Ensure API client is closed even if an exception occurs
+            # This prevents "Unclosed client session" errors when the app is terminated
+            self.integration_status_service.stop_polling()
+            await self.api_service.api_client.close()

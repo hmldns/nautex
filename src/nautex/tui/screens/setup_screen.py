@@ -499,3 +499,9 @@ class SetupApp(App):
             agent_rules_service=self.agent_rules_service,
         )
         self.push_screen(setup_screen)
+
+    async def on_shutdown(self) -> None:
+        """Called when the app is shutting down."""
+        # Stop polling and close API client to prevent "Unclosed client session" errors
+        self.integration_status_service.stop_polling()
+        await self.api_service.api_client.close()

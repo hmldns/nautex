@@ -295,7 +295,7 @@ class SetupScreen(Screen):
 
             # If no plans were found but no error occurred, show a message to create one
             if not plans:
-                self.impl_plans_list.set_empty_message("No implementation plans found. Create one in the Nautex app.")
+                self.impl_plans_list.set_empty_message("No implementation plans found.\nCreate one in the Nautex app.\nGo to app.nautex.ai")
 
             return plans, selected_index
 

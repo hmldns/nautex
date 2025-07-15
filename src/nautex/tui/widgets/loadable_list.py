@@ -218,7 +218,9 @@ class LoadableList(Vertical):
                 self.list_view.index = selected_index
         else:
             # If no data, show the empty message
-            await self.list_view.append(ListItem(Label(self.empty_message)))
+            items = self.empty_message.split("\n")
+            list_items = [ListItem(Label(l)) for l in items]
+            await self.list_view.extend(list_items)
 
         # Re-enable interaction
         self.list_view.disabled = self.is_disabled  # remain disabled only if explicitly disabled

@@ -73,20 +73,17 @@ def main() -> None:
         parser.print_help()
         return
 
-    # Initialize all common services before checking the command
-    project_root = Path.cwd()
-
     # 1. Base services that don't depend on other services
-    config_service = ConfigurationService(project_root)
-    mcp_config_service = MCPConfigService(config_service, ".cursor") # TODO other vendors
-    agent_rules_service = AgentRulesService(config_service, ".cursor")
+    config_service = ConfigurationService()
+    config_service.load_configuration()
 
-    # 2. Load configuration or set default
-    config = config_service.load_configuration()
+    # 2. Initialize services that depend on config
+    mcp_config_service = MCPConfigService(config_service)
+    agent_rules_service = AgentRulesService(config_service)
 
     # 3. Initialize API client and service if config is available
 
-    api_client = create_api_client(base_url=config.api_host, test_mode=False)
+    api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
     nautex_api_service = NautexAPIService(api_client, config_service)
 
     # 4. Services that depend on other services
@@ -95,7 +92,6 @@ def main() -> None:
         mcp_config_service=mcp_config_service,
         agent_rules_service=agent_rules_service,
         nautex_api_service=nautex_api_service,
-        project_root=project_root
     )
 
     plan_context_service = PlanContextService(
@@ -114,7 +110,8 @@ def main() -> None:
         plan_context_service=plan_context_service,
         integration_status_service=integration_status_service,
         api_service=nautex_api_service,
-        project_root=project_root
+        mcp_config_service=mcp_config_service,
+        agent_rules_service=agent_rules_service,
     )
 
     # Command dispatch
@@ -130,7 +127,6 @@ def main() -> None:
         # Initialize MCP service
         try:
             mcp_service = MCPService(
-                config=config,  # This can be None
                 nautex_api_service=nautex_api_service,  # This can be None
                 plan_context_service=plan_context_service,
                 document_service=document_service

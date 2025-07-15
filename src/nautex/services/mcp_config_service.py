@@ -34,26 +34,24 @@ class MCPConfigService:
     like Cursor.
     """
 
-    def __init__(self, config_service: ConfigurationService, config: NautexConfig):
+    def __init__(self, config_service: ConfigurationService):
         """Initialize the MCP configuration service.
 
         Args:
             config_service: The configuration service to use
-            config: The Nautex configuration object
         """
         self.config_service = config_service
-        self.config = config
-        self.subpath = config.get_agent_mcp_folder()
 
         self.nautex_config_template = {
-          "mcpServers": {
             "nautex": {
               "command": "uv",
               "args": ["nautex", "mcp"]
             }
-          }
         }
 
+    @property
+    def mcp_config_subpath(self):
+        return self.config_service.config.get_agent_mcp_folder()
 
     def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:
         """Check the status of MCP configuration integration.
@@ -68,19 +66,19 @@ class MCPConfigService:
             - MCPConfigStatus.NOT_FOUND: No mcp.json file found or no nautex entry
         """
         # Check local {subpath}/mcp.json first
-        local_mcp_path = self.config_service.cwd / self.subpath / "mcp.json"
+        local_mcp_path = self.get_config_path('local')
         if local_mcp_path.exists():
             status = self._validate_mcp_file(local_mcp_path)
             return status, local_mcp_path
 
         # Check global ~/{subpath}/mcp.json
-        global_mcp_path = Path.home() / self.subpath / "mcp.json"
+        global_mcp_path = self.get_config_path('global')
         if global_mcp_path.exists():
             status = self._validate_mcp_file(global_mcp_path)
             return status, global_mcp_path
 
         # No mcp.json found
-        logger.debug(f"No mcp.json file found in local or global {self.subpath} directories")
+        logger.debug(f"No mcp.json file found in local or global {self.mcp_config_subpath} directories")
         return MCPConfigStatus.NOT_FOUND, None
 
     def _validate_mcp_file(self, mcp_path: Path) -> MCPConfigStatus:
@@ -136,9 +134,9 @@ class MCPConfigService:
         if not isinstance(nautex_config, dict):
             return False
 
-        # Check required fields
-        required_command = self.nautex_config_template["command"]
-        required_args = self.nautex_config_template["args"]
+        template_nautex_entry = self.nautex_config_template.get("nautex")
+        required_command = template_nautex_entry.get("command")
+        required_args = template_nautex_entry.get("args")
 
         return (
             nautex_config.get("command") == required_command and
@@ -161,12 +159,7 @@ class MCPConfigService:
         """
         try:
             # Determine target path
-            if location == 'global':
-                target_path = Path.home() / self.subpath / "mcp.json"
-            elif location == 'local':
-                target_path = self.config_service.cwd / self.subpath / "mcp.json"
-            else:
-                raise ValueError(f"Invalid location: {location}. Must be 'global' or 'local'")
+            target_path = self.get_config_path(location)
 
             # Ensure parent directory exists
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,7 +191,7 @@ class MCPConfigService:
                 mcp_config["mcpServers"] = {}
 
             # Add/update nautex entry
-            mcp_config["mcpServers"]["nautex"] = self.nautex_config_template.copy()
+            mcp_config["mcpServers"].update(self.nautex_config_template.copy())
 
             # Write the configuration
             with open(target_path, 'w', encoding='utf-8') as f:
@@ -242,3 +235,21 @@ class MCPConfigService:
 
         # Default to global
         # return 'global'
+
+    def get_config_path(self, location: Optional[Literal['global', 'local']] = None) -> Path:
+        """Get the path where the MCP configuration will be written.
+
+        Args:
+            location: The location to get the path for.
+                     If None, uses the recommended location.
+
+        Returns:
+            Path where the MCP configuration will be written
+        """
+        if location is None:
+            location = self.get_recommended_location()
+
+        if location == 'global':
+            return Path.home() / self.mcp_config_subpath / "mcp.json"
+        else:  # local
+            return self.config_service.cwd / self.mcp_config_subpath / "mcp.json"

@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, List
 
 from fastmcp import FastMCP
 
+from . import ConfigurationService
 from ..models.config import NautexConfig
 from .nautex_api_service import NautexAPIService
 from .plan_context_service import PlanContextService
@@ -62,7 +63,7 @@ class MCPService:
 
     def __init__(
         self,
-        config: NautexConfig,
+        config_service: ConfigurationService,
         nautex_api_service: NautexAPIService,
         plan_context_service: PlanContextService,
         document_service: Optional['DocumentService'] = None
@@ -75,7 +76,7 @@ class MCPService:
             plan_context_service: Service for plan context management
             document_service: Service for document operations (optional)
         """
-        self.config = config
+        self.config_service = config_service
         self.nautex_api_service = nautex_api_service
         self.plan_context_service = plan_context_service
         self.document_service = document_service
@@ -84,6 +85,9 @@ class MCPService:
 
         logger.debug("MCPService initialized with FastMCP server")
 
+    @property
+    def config(self) -> NautexConfig:
+        return self.config_service.config
 
     async def ensure_dependency_documents_on_disk(self) -> Dict[str, str]:
         # Ensure dependency documents are loaded once per session

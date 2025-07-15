@@ -80,9 +80,9 @@ class IntegrationStatus:
             return "Implementation plan not selected - run 'uv nautex setup'"
 
         if not self.mcp_config_set:
-            return "MCP configuration needed - press 'M' to configure MCP integration"
+            return "MCP configuration needed - press 'Ctrl+T' to configure MCP integration"
 
         if not self.agent_rules_set:
-            return "Agent rules needed - press 'A' to configure agent workflow rules"
+            return "Agent rules needed - press 'Ctrl+R' to configure agent workflow rules"
 
         return "Fully integrated and ready to work"

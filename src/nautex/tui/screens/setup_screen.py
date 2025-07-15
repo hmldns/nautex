@@ -17,12 +17,15 @@ from ..widgets import (
     LoadableList,
     SystemInfoWidget,
 )
+from ..widgets.config_dialogs import MCPConfigWriteDialog, AgentRulesWriteDialog
 from ...models.integration_status import IntegrationStatus
 from ...services.config_service import ConfigurationService, ConfigurationError
 from ...services.integration_status_service import IntegrationStatusService
-from ...services.mcp_config_service import MCPConfigService
+from ...services.mcp_config_service import MCPConfigService, MCPConfigStatus
+from ...services.agent_rules_service import AgentRulesService, AgentRulesStatus
 from ...services.nautex_api_service import NautexAPIService
 from ...models.config import NautexConfig
+from ...utils import path2display
 
 
 @dataclass(kw_only=True)
@@ -50,6 +53,8 @@ class SetupScreen(Screen):
         Binding("escape", "quit", "Quit"),
         Binding("tab", "next_input", "Next Field"),
         Binding("enter", "next_input", "Next Field"),
+        Binding("ctrl+t", "show_mcp_dialog", "MCP Config"),
+        Binding("ctrl+r", "show_agent_rules_dialog", "Agent Rules"),
     ]
 
     CSS = """
@@ -125,16 +130,18 @@ class SetupScreen(Screen):
     def __init__(
         self,
         config_service: ConfigurationService,
-        project_root: Path,
         integration_status_service: IntegrationStatusService,
         api_service: NautexAPIService,
+        mcp_config_service: MCPConfigService,
+        agent_rules_service: AgentRulesService,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.config_service = config_service
-        self.project_root = project_root
         self.integration_status_service = integration_status_service
         self.api_service = api_service
+        self.mcp_config_service = mcp_config_service
+        self.agent_rules_service = agent_rules_service
 
         # Setup state
         self.setup_data = {}
@@ -350,13 +357,17 @@ class SetupScreen(Screen):
                 yield self.impl_plans_list
 
         # Environment info with CWD before footer
-        yield Static(f"Current Working Directory: {self.config_service.cwd}", id="environment_info")
+        yield Static(f"Current Working Directory: {path2display(self.config_service.cwd)}", id="environment_info")
         yield Footer()
+
+    async def update_integration_status(self):
+        status = await self.integration_status_service.get_integration_status()
+        self._on_integration_status_update(status)
+
 
     async def on_mount(self) -> None:
         # Get initial integration status
-        status = await self.integration_status_service.get_integration_status()
-        self._on_integration_status_update(status)
+        await self.update_integration_status()
 
         await self._update_system_info()
         self.api_token_input.focus()
@@ -404,12 +415,40 @@ class SetupScreen(Screen):
         # Focus the next widget
         self.focusable_widgets[self.current_focus_index].focus()
 
+    async def action_show_mcp_dialog(self) -> None:
 
+        dialog = MCPConfigWriteDialog(mcp_service=self.mcp_config_service)
+        result = await self.app.push_screen(dialog)
+
+        if result:
+            # Refresh the system info to show updated status
+            await self._update_system_info()
+            await self.update_integration_status()
+
+
+    async def action_show_agent_rules_dialog(self) -> None:
+
+        dialog = AgentRulesWriteDialog(rules_service=self.agent_rules_service)
+        result = await self.app.push_screen(dialog)
+
+        if result:
+            # Refresh the system info to show updated status
+            await self._update_system_info()
+            await self.update_integration_status()
 
     async def _update_system_info(self) -> None:
         """Update the system info widget with current data."""
+        # Get agent_type from config
+        agent_type = self.config_service.config.agent_type
+
+        mcp_config_status, _ = self.mcp_config_service.check_mcp_configuration()
+        agent_rules_status, _ = self.agent_rules_service.check_rules_file()
+
         self.system_info_widget.update_system_info(
-            host=self.config_service.config.api_host
+            host=self.config_service.config.api_host,
+            agent_type=agent_type,
+            mcp_config_status=mcp_config_status,
+            agent_rules_status=agent_rules_status
         )
 
     async def on_toggle_button_click(self) -> None:
@@ -438,21 +477,25 @@ class SetupApp(App):
 
     def __init__(self,
                  config_service: ConfigurationService,
-                 project_root: Path,
                  api_service: NautexAPIService,
-                 integration_status_service: IntegrationStatusService, **kwargs):
+                 integration_status_service: IntegrationStatusService,
+                 mcp_config_service: MCPConfigService = None,
+                 agent_rules_service: AgentRulesService = None,
+                 **kwargs):
         super().__init__(**kwargs)
         self.config_service = config_service
-        self.project_root = project_root
         self.api_service = api_service
         self.integration_status_service = integration_status_service
+        self.mcp_config_service = mcp_config_service
+        self.agent_rules_service = agent_rules_service
 
     def on_mount(self) -> None:
         """Called when the app starts."""
         setup_screen = SetupScreen(
             config_service=self.config_service,
-            project_root=self.project_root,
             integration_status_service=self.integration_status_service,
             api_service=self.api_service,
+            mcp_config_service=self.mcp_config_service,
+            agent_rules_service=self.agent_rules_service,
         )
         self.push_screen(setup_screen)

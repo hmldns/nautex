@@ -26,7 +26,6 @@ class IntegrationStatusService:
         mcp_config_service: MCPConfigService,
         agent_rules_service: AgentRulesService,
         nautex_api_service: Optional[NautexAPIService],
-        project_root: Optional[Path]
     ):
         """Initialize the integration status service.
 
@@ -40,7 +39,6 @@ class IntegrationStatusService:
         self.config_service = config_service
         self.mcp_config_service = mcp_config_service
         self.agent_rules_service = agent_rules_service
-        self.project_root = project_root or Path.cwd()
         self._nautex_api_service = nautex_api_service
 
         # Polling related attributes

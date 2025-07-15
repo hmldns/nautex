@@ -20,7 +20,8 @@ class UIService:
         plan_context_service: PlanContextService,
         integration_status_service: IntegrationStatusService,
         api_service: NautexAPIService,
-        project_root: Optional[Path] = None
+        mcp_config_service=None,
+        agent_rules_service=None,
     ):
         """Initialize the UI service.
 
@@ -28,13 +29,16 @@ class UIService:
             config_service: Service for configuration management
             plan_context_service: Service for plan context management
             integration_status_service: Service for integration status management
-            project_root: Root directory for the project. Defaults to current working directory.
+            api_service: Service for API interactions
+            mcp_config_service: Service for MCP configuration management
+            agent_rules_service: Service for agent rules management
         """
-        self.project_root = project_root or Path.cwd()
         self.config_service = config_service
         self.plan_context_service = plan_context_service
         self.integration_status_service = integration_status_service
         self.api_service = api_service
+        self.mcp_config_service = mcp_config_service
+        self.agent_rules_service = agent_rules_service
 
     async def handle_setup_command(self) -> None:
         """Handle the setup command by launching the interactive SetupScreen TUI.
@@ -51,9 +55,10 @@ class UIService:
             # Create the setup app with the necessary services
             app = SetupApp(
                 config_service=self.config_service,
-                project_root=self.project_root,
                 integration_status_service=self.integration_status_service,
-                api_service=self.api_service
+                api_service=self.api_service,
+                mcp_config_service=self.mcp_config_service,
+                agent_rules_service=self.agent_rules_service
             )
             await app.run_async()
 

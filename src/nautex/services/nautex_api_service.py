@@ -14,7 +14,7 @@ from ..api.api_models import (
     Project,
     ImplementationPlan,
     Task,
-    APIResponse
+    APIResponse, TaskOperation
 )
 
 # Set up logging
@@ -225,7 +225,7 @@ class NautexAPIService:
             logger.error(f"Failed to get next scope for project {project_id}, plan {plan_id}: {e}")
             raise
 
-    async def update_tasks(self, project_id: str, plan_id: str, operations: List["TaskOperation"]) -> Dict[str, Any]:
+    async def update_tasks(self, project_id: str, plan_id: str, operations: List["TaskOperation"]) -> APIResponse:
         """Update multiple tasks in a batch operation.
 
         Args:

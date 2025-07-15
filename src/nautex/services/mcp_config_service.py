@@ -8,6 +8,7 @@ from typing import Tuple, Optional, Dict, Any, Literal
 import logging
 
 from src.nautex.services import ConfigurationService
+from src.nautex.models.config import NautexConfig
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -33,15 +34,16 @@ class MCPConfigService:
     like Cursor.
     """
 
-    def __init__(self, config_service: ConfigurationService, subpath: str):
+    def __init__(self, config_service: ConfigurationService, config: NautexConfig):
         """Initialize the MCP configuration service.
 
         Args:
             config_service: The configuration service to use
-            subpath: The subpath to use for MCP configuration
+            config: The Nautex configuration object
         """
         self.config_service = config_service
-        self.subpath = Path(subpath)
+        self.config = config
+        self.subpath = config.get_agent_mcp_folder()
 
         self.nautex_config_template = {
           "mcpServers": {

@@ -61,26 +61,28 @@ class IntegrationStatus:
             self.api_connected,
             self.project_selected,
             self.plan_selected,
+            self.mcp_config_set,
+            self.agent_rules_set,
         ])
 
     @property
     def status_message(self) -> str:
         """Returns a status message based on the first failed check."""
         if not self.config_loaded:
-            return "Configuration not found - run 'nautex setup'"
+            return "Configuration not found - run 'uv nautex setup'"
         if not self.network_connected:
             return "Network connectivity failed - check internet connection or Host URL"
         if not self.api_connected:
             return "API connectivity failed - check token"
         if not self.project_selected:
-            return "Project not selected - run 'nautex setup'"
+            return "Project not selected - run 'uv nautex setup'"
         if not self.plan_selected:
-            return "Implementation plan not selected - run 'nautex setup'"
+            return "Implementation plan not selected - run 'uv nautex setup'"
 
         if not self.mcp_config_set:
-            return "Ready to work, need to setup MCP properly"
+            return "MCP configuration needed - press 'M' to configure MCP integration"
 
         if not self.agent_rules_set:
-            return "Ready to work, need to setup agent rules properly"
+            return "Agent rules needed - press 'A' to configure agent workflow rules"
 
         return "Fully integrated and ready to work"

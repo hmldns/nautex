@@ -7,6 +7,8 @@ from textual.reactive import reactive
 
 from ...services.config_service import ConfigurationService
 from ...services.integration_status_service import IntegrationStatusService
+from ...services.mcp_config_service import MCPConfigStatus
+from ...services.agent_rules_service import AgentRulesStatus
 from ...models.config import NautexConfig
 from ...models.integration_status import IntegrationStatus
 
@@ -41,6 +43,9 @@ class SystemInfoWidget(Vertical):
     host: reactive[str] = reactive("")
     email: reactive[str] = reactive("")
     network_delay: reactive[float] = reactive(0.0)
+    agent_type: reactive[str] = reactive("")
+    mcp_config_status: reactive[MCPConfigStatus] = reactive(MCPConfigStatus.NOT_FOUND)
+    agent_rules_status: reactive[AgentRulesStatus] = reactive(AgentRulesStatus.NOT_FOUND)
 
     def __init__(
         self,
@@ -79,6 +84,9 @@ class SystemInfoWidget(Vertical):
         self.data_table.add_row("Host", self.host or "Not configured")
         self.data_table.add_row("Acc Email", self.email or "Not available")
         self.data_table.add_row("ping", f"{self.network_delay:.3f}s" if self.network_delay > 0 else "N/A")
+        self.data_table.add_row("Agent Type", self.agent_type or "Not configured")
+        self.data_table.add_row("MCP Config", self.mcp_config_status.value)
+        self.data_table.add_row("Agent Rules", self.agent_rules_status.value)
 
 
     async def refresh_data(self) -> None:
@@ -96,6 +104,9 @@ class SystemInfoWidget(Vertical):
         host: Optional[str] = None,
         email: Optional[str] = None,
         network_delay: Optional[float] = None,
+        agent_type: Optional[str] = None,
+        mcp_config_status: Optional[MCPConfigStatus] = None,
+        agent_rules_status: Optional[AgentRulesStatus] = None,
     ) -> None:
         # Update reactive properties
         if host is not None:
@@ -104,6 +115,12 @@ class SystemInfoWidget(Vertical):
             self.email = email
         if network_delay is not None:
             self.network_delay = network_delay
+        if agent_type is not None:
+            self.agent_type = agent_type
+        if mcp_config_status is not None:
+            self.mcp_config_status = mcp_config_status
+        if agent_rules_status is not None:
+            self.agent_rules_status = agent_rules_status
 
         # Update table display
         try:
@@ -111,10 +128,15 @@ class SystemInfoWidget(Vertical):
             self.data_table.update_cell_at((0, 1), self.host or "Not configured", update_width=True)
             # Update email row
             self.data_table.update_cell_at((1, 1), self.email or "Not available", update_width=True)
-
             # Update network delay row
             network_delay_text = f"{self.network_delay:.3f}s" if self.network_delay > 0.0 else "N/A"
             self.data_table.update_cell_at((2, 1), network_delay_text, update_width=True)
+            # Update agent type row
+            self.data_table.update_cell_at((3, 1), self.agent_type or "Not configured", update_width=True)
+            # Update MCP config status row
+            self.data_table.update_cell_at((4, 1), self.mcp_config_status.value, update_width=True)
+            # Update agent rules status row
+            self.data_table.update_cell_at((5, 1), self.agent_rules_status.value, update_width=True)
 
         except Exception:
             # If table update fails, rebuild it

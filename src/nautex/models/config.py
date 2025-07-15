@@ -1,5 +1,5 @@
 """Pydantic models for configuration management."""
-
+from pathlib import Path
 from typing import Optional, Dict
 from pydantic import SecretStr, Field
 from pydantic_settings import BaseSettings
@@ -18,6 +18,8 @@ class NautexConfig(BaseSettings):
     project_id: Optional[str] = Field(None, description="Selected Nautex.ai project ID")
     plan_id: Optional[str] = Field(None, description="Selected implementation plan ID")
     documents_path: Optional[str] = Field(None, description="Path to store downloaded documents")
+
+    agent_type: Optional[str] = Field("cursor", description="AI agent to guide")
 
     class Config:
         """Pydantic configuration for environment variables and JSON files."""
@@ -38,3 +40,31 @@ class NautexConfig(BaseSettings):
                                exclude={"api_host", "api_token"} # don't serializing these 2
                               )
 
+
+    def get_agent_mcp_folder(self) -> Path:
+        """Get the MCP folder path for the configured agent type.
+
+        Returns:
+            Path object pointing to the MCP folder for the agent type.
+
+        Raises:
+            ValueError: If the agent type is not supported.
+        """
+        if self.agent_type == "cursor":
+            return Path(".cursor")
+        else:
+            raise ValueError(f"Unsupported agent type: {self.agent_type}")
+
+    def get_agent_rules_folder(self) -> Path:
+        """Get the rules folder path for the configured agent type.
+
+        Returns:
+            Path object pointing to the rules folder for the agent type.
+
+        Raises:
+            ValueError: If the agent type is not supported.
+        """
+        if self.agent_type == "cursor":
+            return Path(".cursor/rules")
+        else:
+            raise ValueError(f"Unsupported agent type: {self.agent_type}")

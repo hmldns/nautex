@@ -7,6 +7,7 @@ from typing import Tuple, Optional, Literal
 import logging
 
 from src.nautex.services import ConfigurationService
+from src.nautex.models.config import NautexConfig
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class AgentRulesStatus(str, Enum):
     of the agent rules file.
     """
     OK = "OK"
-    INVALID = "INVALID"
+    OUTDATED = "OUTDATED"
     NOT_FOUND = "NOT_FOUND"
 
 
@@ -30,16 +31,17 @@ class AgentRulesService:
     and writing the rules files to integrate with agent tools like Cursor.
     """
 
-    def __init__(self, config_service: ConfigurationService, subpath: str):
+    def __init__(self, config_service: ConfigurationService, config: NautexConfig):
         """Initialize the agent rules service.
 
         Args:
             config_service: The configuration service to use
-            subpath: The subpath to use for agent rules files
+            config: The Nautex configuration object
         """
         self.config_service = config_service
-        self.subpath = Path(subpath)
-        
+        self.config = config
+        self.subpath = config.get_agent_rules_folder()
+
         # Get the package path for the rules file
         self.rules_file_name = "nautex_workflow.mdc"
         self.rules_package_path = "src.nautex.rules.cursor"
@@ -96,11 +98,11 @@ class AgentRulesService:
                 return AgentRulesStatus.OK
             else:
                 logger.debug(f"Invalid rules file found at {rules_path}")
-                return AgentRulesStatus.INVALID
+                return AgentRulesStatus.OUTDATED
 
         except IOError as e:
             logger.error(f"Error reading rules file at {rules_path}: {e}")
-            return AgentRulesStatus.INVALID
+            return AgentRulesStatus.OUTDATED
 
     def _get_package_rules_content(self) -> str:
         """Get the content of the rules file from the package.
@@ -112,7 +114,7 @@ class AgentRulesService:
             # Use importlib.resources to get the content of the file from the package
             package_path = importlib.resources.files(self.rules_package_path)
             file_path = package_path / self.rules_package_file
-            
+
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:

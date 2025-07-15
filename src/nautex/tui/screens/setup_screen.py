@@ -147,7 +147,8 @@ class SetupScreen(Screen):
         self.setup_data = {}
 
         # Create API token link (using Static with markup instead of Link)
-        api_token_link = Static("[link=https://app.nautex.ai/settings/nautex-api]Get one from: app.nautex.ai/settings/nautex-api[/link]", markup=True)
+        api_token_link = Static(
+            "[Get one from: app.nautex.ai/settings/nautex-api](https://app.nautex.ai/settings/nautex-api)", markup=True)
 
         # Widget references
         self.integration_status_widget = IntegrationStatusWidget()

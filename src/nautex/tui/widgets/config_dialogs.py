@@ -11,6 +11,7 @@ from textual.reactive import reactive
 
 from ...services.mcp_config_service import MCPConfigService, MCPConfigStatus
 from ...services.agent_rules_service import AgentRulesService, AgentRulesStatus
+from ...utils import path2display
 
 
 class ConfigWriteDialog(Screen):
@@ -172,8 +173,8 @@ class MCPConfigWriteDialog(ConfigWriteDialog):
 
     def __init__(self, mcp_service: MCPConfigService, **kwargs):
         super().__init__(
-            title="Write MCP Configuration",
-            message="Configure MCP integration for IDE tools like Cursor.",
+            title="Manage MCP Configuration",
+            message="",
             **kwargs
         )
         self.mcp_service = mcp_service
@@ -191,7 +192,7 @@ class MCPConfigWriteDialog(ConfigWriteDialog):
 
         # Set path text
         if self.path:
-            self.path_text = f"Current path: {self.path}"
+            self.path_text = f"Current path: {path2display(self.path)}"
         else:
             path = self.mcp_service.get_config_path()
             self.path_text = f"Will be written to: {path}"
@@ -231,8 +232,8 @@ class AgentRulesWriteDialog(ConfigWriteDialog):
 
     def __init__(self, rules_service: AgentRulesService, **kwargs):
         super().__init__(
-            title="Write Agent Rules",
-            message="Configure agent workflow rules for tools like Cursor.",
+            title="Manage Agent Rules",
+            message="",
             **kwargs
         )
         self.rules_service = rules_service
@@ -253,7 +254,7 @@ class AgentRulesWriteDialog(ConfigWriteDialog):
             self.path_text = f"Current path: {self.path}"
         else:
             path = self.rules_service.get_rules_path()
-            self.path_text = f"Will be written to: {path}"
+            self.path_text = f"Will be written to: {path2display(path)}"
 
         # Register button handlers
         self.register_button_handler("write_rules", self.write_config)

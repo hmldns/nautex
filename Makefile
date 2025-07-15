@@ -4,13 +4,20 @@
 help:
 	@echo "Available targets:"
 	@echo "  setup        Run the complete setup (recommended)"
-	@echo "  venv         Create a virtual environment"
+	@echo "  venv         Create a virtual environment" 
 	@echo "  install-dev  Install the package in development mode with dev dependencies"
 	@echo "  install      Install the package in normal mode"
+	@echo "  install-wheel         Install built wheel for testing"
+	@echo "  install-wheel-user    Install built wheel for current user"
+	@echo "  install-wheel-global  Install built wheel globally (requires sudo)"
+	@echo "  uninstall-global      Uninstall package globally"
+	@echo "  freeze       Generate requirements.txt from current environment"
+	@echo "  reinstall-global      Reinstall package globally"
 	@echo "  run-cli      Run CLI without installation (shows help)"
 	@echo "  run-setup    Run setup command without installation"
 	@echo "  run-status   Run status command without installation"
 	@echo "  run-mcp      Run MCP server without installation"
+	@echo "  run-mcp-inspector  Run MCP inspector without authentication"
 	@echo "  lint         Run linters (flake8, mypy)"
 	@echo "  format       Format code with black and isort"
 	@echo "  check        Run format check without modifying files"
@@ -98,13 +105,6 @@ check:
 	@echo "Running mypy..."
 	mypy src/nautex/
 
-# Testing (manual for MVP)
-test:
-	@echo "Manual testing for MVP:"
-	@echo "1. Test CLI commands: nautex --help, nautex setup --help, etc."
-	@echo "2. Test package installation: pip install -e .[dev]"
-	@echo "3. Test basic imports: python -c 'import nautex.cli'"
-
 # Build and publish targets
 build:
 	@echo "Building package..."
@@ -139,7 +139,3 @@ clean:
 	rm -rf venv/
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
-
-
-run-inspector:
-	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector

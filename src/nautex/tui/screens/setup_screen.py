@@ -449,7 +449,6 @@ class SetupApp(App):
 
     def on_mount(self) -> None:
         """Called when the app starts."""
-        mcp_config_service = MCPConfigService()
         setup_screen = SetupScreen(
             config_service=self.config_service,
             project_root=self.project_root,

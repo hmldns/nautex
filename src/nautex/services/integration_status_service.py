@@ -10,6 +10,7 @@ from ..models.config import NautexConfig
 from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
 from .mcp_config_service import MCPConfigService, MCPConfigStatus
+from .agent_rules_service import AgentRulesService, AgentRulesStatus
 from ..api.client import NautexAPIError
 from ..models.integration_status import IntegrationStatus
 
@@ -23,6 +24,7 @@ class IntegrationStatusService:
         self,
         config_service: ConfigurationService,
         mcp_config_service: MCPConfigService,
+        agent_rules_service: AgentRulesService,
         nautex_api_service: Optional[NautexAPIService],
         project_root: Optional[Path]
     ):
@@ -31,11 +33,13 @@ class IntegrationStatusService:
         Args:
             config_service: Service for configuration management
             mcp_config_service: Service for MCP configuration management
+            agent_rules_service: Service for agent rules management
             nautex_api_service: Service for Nautex API operations (can be None if not configured)
             project_root: Root directory for the project
         """
         self.config_service = config_service
         self.mcp_config_service = mcp_config_service
+        self.agent_rules_service = agent_rules_service
         self.project_root = project_root or Path.cwd()
         self._nautex_api_service = nautex_api_service
 
@@ -61,6 +65,7 @@ class IntegrationStatusService:
             await self._check_network_connectivity(status)
             await self._check_api_connectivity(status)
             self._check_mcp_status(status)
+            self._check_agent_rules_status(status)
 
         return status
 
@@ -69,6 +74,12 @@ class IntegrationStatusService:
         logger.debug("Checking MCP configuration...")
         status.mcp_status, status.mcp_config_path = self.mcp_config_service.check_mcp_configuration()
         logger.debug(f"MCP status: {status.mcp_status}, path: {status.mcp_config_path}")
+
+    def _check_agent_rules_status(self, status: IntegrationStatus) -> None:
+        """Check agent rules status."""
+        logger.debug("Checking agent rules...")
+        status.agent_rules_status, status.agent_rules_path = self.agent_rules_service.check_rules_file()
+        logger.debug(f"Agent rules status: {status.agent_rules_status}, path: {status.agent_rules_path}")
 
     async def _check_network_connectivity(self, status: IntegrationStatus) -> None:
         """Test network connectivity to API host with short timeout."""

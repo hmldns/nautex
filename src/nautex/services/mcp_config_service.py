@@ -1,11 +1,13 @@
 """MCP Configuration Service for managing IDE mcp.json integration."""
-
+import importlib.resources
 import json
 import os
 from enum import Enum
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any, Literal
 import logging
+
+from src.nautex.services import ConfigurationService
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -31,37 +33,31 @@ class MCPConfigService:
     like Cursor.
     """
 
-    def __init__(self, project_root: Optional[Path] = None):
-        """Initialize the MCP config service.
+    def __init__(self, config_service: ConfigurationService, subpath: str):
+        """Initialize the MCP configuration service.
 
         Args:
-            project_root: Root directory for the project. Defaults to current working directory.
+            config_service: The configuration service to use
+            subpath: The subpath to use for MCP configuration
         """
-        self.project_root = project_root or Path.cwd()
+        self.config_service = config_service
+        self.subpath = Path(subpath)
 
-        # Load the MCP config template
-        template_path = Path(__file__).parent.parent / "consts" / "mcp_config_template.json"
-        try:
-            with open(template_path, 'r', encoding='utf-8') as f:
-                self.nautex_config_template = json.load(f)["mcpServers"]["nautex"]
-        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to load MCP config template: {e}")
-            # Fallback template
-            self.nautex_config_template = {
-              "mcpServers": {
-                "nautex": {
-                  "command": "nautex",
-                  "args": ["mcp"]
-                }
-              }
+        self.nautex_config_template = {
+          "mcpServers": {
+            "nautex": {
+              "command": "uv",
+              "args": ["nautex", "mcp"]
             }
+          }
+        }
 
 
     def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:
         """Check the status of MCP configuration integration.
 
-        Locates mcp.json file with priority: local ./.cursor/mcp.json, 
-        then global ~/.cursor/mcp.json. Validates 'nautex' entry against template.
+        Locates mcp.json file with priority: local ./{subpath}/mcp.json, 
+        then global ~/{subpath}/mcp.json. Validates 'nautex' entry against template.
 
         Returns:
             Tuple of (status, path_to_config_file)
@@ -69,20 +65,20 @@ class MCPConfigService:
             - MCPConfigStatus.MISCONFIGURED: File exists but nautex entry is incorrect
             - MCPConfigStatus.NOT_FOUND: No mcp.json file found or no nautex entry
         """
-        # Check local .cursor/mcp.json first
-        local_mcp_path = self.project_root / ".cursor" / "mcp.json"
+        # Check local {subpath}/mcp.json first
+        local_mcp_path = self.config_service.cwd / self.subpath / "mcp.json"
         if local_mcp_path.exists():
             status = self._validate_mcp_file(local_mcp_path)
             return status, local_mcp_path
 
-        # Check global ~/.cursor/mcp.json
-        global_mcp_path = Path.home() / ".cursor" / "mcp.json"
+        # Check global ~/{subpath}/mcp.json
+        global_mcp_path = Path.home() / self.subpath / "mcp.json"
         if global_mcp_path.exists():
             status = self._validate_mcp_file(global_mcp_path)
             return status, global_mcp_path
 
         # No mcp.json found
-        logger.debug("No mcp.json file found in local or global .cursor directories")
+        logger.debug(f"No mcp.json file found in local or global {self.subpath} directories")
         return MCPConfigStatus.NOT_FOUND, None
 
     def _validate_mcp_file(self, mcp_path: Path) -> MCPConfigStatus:
@@ -147,7 +143,7 @@ class MCPConfigService:
             nautex_config.get("args") == required_args
         )
 
-    def write_mcp_configuration(self, location: Literal['global', 'local']) -> bool:
+    def write_mcp_configuration(self, location: Literal['global', 'local'] = 'local') -> bool:
         """Write or update MCP configuration with Nautex CLI server entry.
 
         Reads the target mcp.json (or creates if not exists), adds/updates
@@ -155,8 +151,8 @@ class MCPConfigService:
 
         Args:
             location: Where to write the configuration
-                     'global' - ~/.cursor/mcp.json
-                     'local' - ./.cursor/mcp.json (in project root)
+                     'global' - ~/{subpath}/mcp.json
+                     'local' - ./{subpath}/mcp.json (in project root)
 
         Returns:
             True if configuration was successfully written, False otherwise
@@ -164,9 +160,9 @@ class MCPConfigService:
         try:
             # Determine target path
             if location == 'global':
-                target_path = Path.home() / ".cursor" / "mcp.json"
+                target_path = Path.home() / self.subpath / "mcp.json"
             elif location == 'local':
-                target_path = self.project_root / ".cursor" / "mcp.json"
+                target_path = self.config_service.cwd / self.subpath / "mcp.json"
             else:
                 raise ValueError(f"Invalid location: {location}. Must be 'global' or 'local'")
 
@@ -174,6 +170,8 @@ class MCPConfigService:
             target_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Load existing config or create new one
+            mcp_config = {}
+
             if target_path.exists():
                 try:
                     with open(target_path, 'r', encoding='utf-8') as f:
@@ -184,7 +182,6 @@ class MCPConfigService:
                     mcp_config = {}
             else:
                 logger.debug(f"Creating new mcp.json at {target_path}")
-                mcp_config = {}
 
             # Ensure mcp_config is a dict
             if not isinstance(mcp_config, dict):
@@ -221,20 +218,25 @@ class MCPConfigService:
         Returns:
             Recommended location for MCP configuration
         """
-        # Check if there's already a local .cursor directory
-        local_cursor_dir = self.project_root / ".cursor"
-        if local_cursor_dir.exists():
-            return 'local'
 
-        # Check if this looks like a development project (has common dev files)
-        dev_indicators = [
-            "package.json", "pyproject.toml", "Cargo.toml", "go.mod", 
-            ".git", "src", "lib", "Makefile", "requirements.txt"
-        ]
+        # For now preferring always local
+        return 'local'
 
-        for indicator in dev_indicators:
-            if (self.project_root / indicator).exists():
-                return 'local'
+        #
+        # # Check if there's already a local subpath directory
+        # local_subpath_dir = self.config_service.project_root / self.subpath
+        # if local_subpath_dir.exists():
+        #     return 'local'
+        #
+        # # Check if this looks like a development project (has common dev files)
+        # dev_indicators = [
+        #     "package.json", "pyproject.toml", "Cargo.toml", "go.mod",
+        #     ".git", "src", "lib", "Makefile", "requirements.txt"
+        # ]
+        #
+        # for indicator in dev_indicators:
+        #     if (self.config_service.project_root / indicator).exists():
+        #         return 'local'
 
         # Default to global
-        return 'global'
+        # return 'global'

@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from .config import NautexConfig
 from ..api.api_models import AccountInfo
 from ..services.mcp_config_service import MCPConfigStatus
+from ..services.agent_rules_service import AgentRulesStatus
 
 
 @dataclass(kw_only=True)
@@ -26,6 +27,14 @@ class IntegrationStatus:
     api_connected: bool = False
     account_info: Optional[AccountInfo] = None
 
+    # MCP configuration status
+    mcp_status: MCPConfigStatus = MCPConfigStatus.NOT_FOUND
+    mcp_config_path: Optional[Path] = None
+
+    # Agent rules status
+    agent_rules_status: AgentRulesStatus = AgentRulesStatus.NOT_FOUND
+    agent_rules_path: Optional[Path] = None
+
     @property
     def project_selected(self):
         return self.config and self.config.project_id
@@ -37,11 +46,11 @@ class IntegrationStatus:
 
     @property
     def mcp_config_set(self):
-        return None
+        return self.mcp_status == MCPConfigStatus.OK
 
     @property
     def agent_rules_set(self):
-        return None
+        return self.agent_rules_status == AgentRulesStatus.OK
 
     @property
     def integration_ready(self) -> bool:
@@ -71,5 +80,7 @@ class IntegrationStatus:
         if not self.mcp_config_set:
             return "Ready to work, need to setup MCP properly"
 
-        return "Fully integrated and ready to work"
+        if not self.agent_rules_set:
+            return "Ready to work, need to setup agent rules properly"
 
+        return "Fully integrated and ready to work"

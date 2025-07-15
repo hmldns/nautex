@@ -87,7 +87,7 @@ class IntegrationStatusPanel(HorizontalGroup):
         yield self.status_project
         yield self.status_plan
         yield self.status_mcp
-
+        yield self.agent_rules
 
     def update_data(self, integration_status: IntegrationStatus) -> None:
         # Network status
@@ -98,30 +98,3 @@ class IntegrationStatusPanel(HorizontalGroup):
         self.status_plan.update_status(integration_status.plan_selected)
         self.status_mcp.update_status(integration_status.mcp_config_set)
         self.agent_rules.update_status(integration_status.agent_rules_set)
-
-        # self.update_status("network", "🟢" if integration_status.network_connected
-        # else "🔴" if integration_status.config_loaded and integration_status.config_summary and integration_status.config_summary.get(
-        #     "has_token")
-        # else "⚪")
-        #
-        # # API status
-        # self.update_status("api", "🟢" if integration_status.api_connected
-        # else "🔴" if integration_status.config_loaded and integration_status.config_summary and integration_status.config_summary.get(
-        #     "has_token") and integration_status.network_connected
-        # else "⚪")
-        #
-        # # Project status
-        # self.update_status("project",
-        #                    "🟢" if integration_status.config_summary and integration_status.config_summary.get(
-        #                        "project_id")
-        #                    else "⚪")
-        #
-        # # Plan status
-        # self.update_status("plan",
-        #                    "🟢" if integration_status.config_summary and integration_status.config_summary.get("plan_id")
-        #                    else "⚪")
-        #
-        # # MCP status
-        # self.update_status("mcp", "🟢" if integration_status.mcp_status == MCPConfigStatus.OK
-        # else "🔴" if integration_status.mcp_status == MCPConfigStatus.MISCONFIGURED
-        # else "⚪")

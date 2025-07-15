@@ -13,6 +13,7 @@ from .services.document_service import DocumentService
 from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run, \
     mcp_handle_next_scope
 from .services.mcp_config_service import MCPConfigService
+from .services.agent_rules_service import AgentRulesService
 from .api import create_api_client
 import json
 
@@ -77,7 +78,8 @@ def main() -> None:
 
     # 1. Base services that don't depend on other services
     config_service = ConfigurationService(project_root)
-    mcp_config_service = MCPConfigService()
+    mcp_config_service = MCPConfigService(config_service, ".cursor") # TODO other vendors
+    agent_rules_service = AgentRulesService(config_service, ".cursor")
 
     # 2. Load configuration or set default
     config = config_service.load_configuration()
@@ -91,6 +93,7 @@ def main() -> None:
     integration_status_service = IntegrationStatusService(
         config_service=config_service,
         mcp_config_service=mcp_config_service,
+        agent_rules_service=agent_rules_service,
         nautex_api_service=nautex_api_service,
         project_root=project_root
     )

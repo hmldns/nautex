@@ -49,7 +49,7 @@ nautex = "nautex.cli:main"
 Homepage = "https://github.com/hmldns/nautex"
 Repository = "https://github.com/hmldns/nautex"
 Documentation = "https://github.com/hmldns/nautex#readme"
-"Bug Reports" = "https://github.com/nautex-ai/nautex/issues"
+"Bug Reports" = "https://github.com/hmldns/nautex/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -58,7 +58,7 @@ where = ["src"]
 "" = "src"
 
 [tool.setuptools.package-data]
-nautex = ["consts/**/*"]
+nautex = ["rules/**/*"]
 
 
 [tool.black]

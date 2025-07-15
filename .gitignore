@@ -31,3 +31,6 @@ venv
 .pypirc
 
 dist
+
+.cursor
+.nautex

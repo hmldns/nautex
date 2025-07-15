@@ -151,6 +151,7 @@ class ConfigWriteDialog(Screen):
     def on_key(self, event: events.Key) -> None:
         """Handle key events for keyboard shortcuts."""
         if event.key == "escape":
+            event.stop()
             self.dismiss(False)
 
     def write_config(self):

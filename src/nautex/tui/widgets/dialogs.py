@@ -65,6 +65,7 @@ class ConfirmationDialog(Screen):
     def on_key(self, event: events.Key) -> None:
         """Handle key events for keyboard shortcuts."""
         if event.key == "escape":
+            event.stop()
             self.dismiss(False)
         elif event.key == "enter":
             self.dismiss(True)

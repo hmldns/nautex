@@ -5,7 +5,7 @@ Nautex AI acts as a Product and Project manager for coding agents, speeding up A
 
 By [Ivan Makarov](https://x.com/ivan_mkrv)
 
-# How setup
+# Setup
 
 1. Go to the new project folder and run in the terminal:
 ```bash

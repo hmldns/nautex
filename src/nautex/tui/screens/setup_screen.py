@@ -53,6 +53,24 @@ class SetupScreen(Screen):
     ]
 
     CSS = """
+    #header {
+        height: auto;
+        padding: 0;
+        background: $primary-darken-2;
+        color: $text;
+        text-style: bold;
+        margin: 0 0 1 0;
+        text-align: center;
+    }
+
+    #environment_info {
+        height: auto;
+        padding: 0 1;
+        margin: 1 0 0 0;
+        color: $text;
+        text-align: right;
+    }
+
     #status_section {
         height: auto;
         margin: 0;
@@ -122,7 +140,7 @@ class SetupScreen(Screen):
         self.setup_data = {}
 
         # Create API token link (using Static with markup instead of Link)
-        api_token_link = Static("[link=https://app.nautex.ai/new_token](app.nautex.ai/new_token)[/link]", markup=True)
+        api_token_link = Static("[link=https://app.nautex.ai/settings/nautex-api]Get one from: app.nautex.ai/settings/nautex-api[/link]", markup=True)
 
         # Widget references
         self.integration_status_widget = IntegrationStatusWidget()
@@ -203,6 +221,7 @@ class SetupScreen(Screen):
     async def set_token(self, token: str) -> None:
         self.config_service.config.api_token = SecretStr(token)
         tkm = self.config_service.config.api_token.get_secret_value()
+        self.config_service.save_token_to_nautex_env(tkm)
         self.config_service.save_configuration()
 
         # Refresh the projects list when token is set
@@ -306,6 +325,9 @@ class SetupScreen(Screen):
 
 
     def compose(self) -> ComposeResult:
+        # Header with centered title
+        yield Static("Nautex MCP server: Setup", id="header")
+
         with Vertical(id="status_section"):
             yield self.integration_status_widget
         # with Vertical(id="system_info_section"):
@@ -327,6 +349,8 @@ class SetupScreen(Screen):
                 yield self.projects_list
                 yield self.impl_plans_list
 
+        # Environment info with CWD before footer
+        yield Static(f"Current Working Directory: {self.config_service.cwd}", id="environment_info")
         yield Footer()
 
     async def on_mount(self) -> None:

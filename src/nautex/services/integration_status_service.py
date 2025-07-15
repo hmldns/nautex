@@ -107,6 +107,7 @@ class IntegrationStatusService:
             status.api_connected = False
             status.api_response_time = None
 
+
     def start_polling(self, on_update: Optional[Callable[[IntegrationStatus], None]] = None, interval: Optional[float] = None) -> None:
         """Start a background task to poll for integration status updates.
 

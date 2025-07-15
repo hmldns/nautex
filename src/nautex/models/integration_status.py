@@ -34,9 +34,14 @@ class IntegrationStatus:
     def plan_selected(self):
         return self.config and self.config.plan_id
 
-    # MCP integration status
-    mcp_config_set: bool = False
 
+    @property
+    def mcp_config_set(self):
+        return None
+
+    @property
+    def agent_rules_set(self):
+        return None
 
     @property
     def integration_ready(self) -> bool:
@@ -55,9 +60,9 @@ class IntegrationStatus:
         if not self.config_loaded:
             return "Configuration not found - run 'nautex setup'"
         if not self.network_connected:
-            return "Network connectivity failed - check internet connection"
+            return "Network connectivity failed - check internet connection or Host URL"
         if not self.api_connected:
-            return "API connectivity failed - check token and API host"
+            return "API connectivity failed - check token"
         if not self.project_selected:
             return "Project not selected - run 'nautex setup'"
         if not self.plan_selected:

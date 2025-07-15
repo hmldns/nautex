@@ -1,3 +1,5 @@
+from typing import Optional
+
 from textual.widgets import Static, Button, Digits
 from textual.containers import Horizontal, HorizontalGroup
 
@@ -34,12 +36,15 @@ class StatusDisplay(Static):
         self.status_flag = flag
 
     def _disp_render_status(self) -> str:
-        return "✅" if self.status_flag else "⚠️"
+        if self.status_flag is not None:
+            return "✅" if self.status_flag else "⚠️"
+        else:
+            return "❓"
 
     def _disp_render(self) -> str:
         return f"{self._disp_render_status()} {self.label_text}"
 
-    def update_status(self, status_flag: bool) -> None:
+    def update_status(self, status_flag: Optional[bool]) -> None:
         self.set_status(status_flag)
         self.update(self._disp_render())
 
@@ -89,6 +94,10 @@ class IntegrationStatusPanel(HorizontalGroup):
 
         self.status_network.update_status(integration_status.network_connected)
         self.status_api.update_status(integration_status.api_connected)
+        self.status_project.update_status(integration_status.project_selected)
+        self.status_plan.update_status(integration_status.plan_selected)
+        self.status_mcp.update_status(integration_status.mcp_config_set)
+        self.agent_rules.update_status(integration_status.agent_rules_set)
 
         # self.update_status("network", "🟢" if integration_status.network_connected
         # else "🔴" if integration_status.config_loaded and integration_status.config_summary and integration_status.config_summary.get(

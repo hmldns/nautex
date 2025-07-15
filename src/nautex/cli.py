@@ -84,7 +84,7 @@ def main() -> None:
 
     # 3. Initialize API client and service if config is available
 
-    api_client = create_api_client(base_url=config.api_host, test_mode=config.api_test_mode)
+    api_client = create_api_client(base_url=config.api_host, test_mode=False)
     nautex_api_service = NautexAPIService(api_client, config_service)
 
     # 4. Services that depend on other services

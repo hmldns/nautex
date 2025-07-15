@@ -1,6 +1,6 @@
 """Pydantic models for configuration management."""
 
-from typing import Optional
+from typing import Optional, Dict
 from pydantic import SecretStr, Field
 from pydantic_settings import BaseSettings
 
@@ -13,17 +13,15 @@ class NautexConfig(BaseSettings):
     """
     api_host: str = Field("https://api.nautex.ai", description="Base URL for the Nautex.ai API")
     api_token: Optional[SecretStr] = Field(None, description="Bearer token for Nautex.ai API authentication")
+
     agent_instance_name: str = Field("Coding Agent", description="User-defined name for this CLI instance")
     project_id: Optional[str] = Field(None, description="Selected Nautex.ai project ID")
     plan_id: Optional[str] = Field(None, description="Selected implementation plan ID")
     documents_path: Optional[str] = Field(None, description="Path to store downloaded documents")
 
-    api_test_mode: bool = Field(False, description="Enable test mode for API client to use dummy responses",
-                               exclude=True)
-
     class Config:
         """Pydantic configuration for environment variables and JSON files."""
-        env_file = ".env"
+        env_file = [] # we got custom loading calls
         env_file_encoding = "utf-8"
         env_prefix = "NAUTEX_"  # Environment variables should be prefixed with NAUTEX_k
         case_sensitive = False
@@ -33,3 +31,10 @@ class NautexConfig(BaseSettings):
     def get_token(self):
         """Get the API token from the config."""
         return self.api_token.get_secret_value() if self.api_token else None
+
+
+    def to_config_dict(self) -> Dict:
+        return self.model_dump(exclude_none=True,
+                               exclude={"api_host", "api_token"} # don't serializing these 2
+                              )
+

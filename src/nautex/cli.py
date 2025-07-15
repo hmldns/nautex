@@ -134,6 +134,7 @@ def main() -> None:
         # Initialize MCP service
         try:
             mcp_service = MCPService(
+                config_service=config_service,
                 nautex_api_service=nautex_api_service,  # This can be None
                 plan_context_service=plan_context_service,
                 document_service=document_service

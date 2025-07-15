@@ -43,7 +43,7 @@ class MCPConfigService:
 
         self.nautex_config_template = {
             "nautex": {
-              "command": "uv",
+              "command": "uvx",
               "args": ["nautex", "mcp"]
             }
         }

@@ -202,6 +202,15 @@ class ConfigurationService:
         with open(self.nautex_env_file, 'w') as f:
             f.write(f"{NautexConfig.Config.env_prefix + 'api_token'.upper()}={token}\n")
 
+        self._ensure_gitignore(self.nautex_env_file.parent)
+
+    def _ensure_gitignore(self, path: Path):
+        """Ensure .gitignore exists in .nautex dir with .env entry."""
+        gitignore_path = path / ".gitignore"
+        if not gitignore_path.exists():
+            with open(gitignore_path, 'w') as f:
+                f.write(".env\n")
+        
     def config_exists(self) -> bool:
         """Check if a configuration file exists.
 

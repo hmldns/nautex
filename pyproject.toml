@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nautex"
-version = "0.1"
+version = "0.1.0"
 description = "Command-line interface for Nautex.ai platform MCP integration for guiding coding agents by software requirements specifications"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,14 +13,16 @@ authors = [
     {name = "Ivan Makarov", email = "ivan@nautex.ai"}
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
+    "Environment :: Console",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Software Development :: Tools",
-    "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Utilities",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX"
 ]
 
 dependencies = [

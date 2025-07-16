@@ -1,7 +1,19 @@
 
-This is MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the conding agents. 
+This is an MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the Cursor IDE. 
 
-Nautex AI acts as a Product and Project manager for coding agents, speeding up AI assisted development by communicating requirements well.
+# Motivation
+
+Since LLM Coding Agents do not attend team meetings, this tool addresses the challenge of conveying the product and 
+technical vision to them.
+
+# How It Works 
+
+
+Nautex AI acts as an Architect, Technical Product Manager, and Project Manager for coding agents, 
+speeding up AI-assisted development by communicating requirements effectively. 
+This MCP server pulls guidance instructions from Nautex AI; tasks contain to-do items, 
+references to the affected files, and requirements that are automatically synced for the Coding Agent's availability.
+
 
 By [Ivan Makarov](https://x.com/ivan_mkrv)
 

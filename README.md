@@ -7,6 +7,17 @@ By [Ivan Makarov](https://x.com/ivan_mkrv)
 
 # Setup
 
+## Via Cursor deeplink
+
+1. Click link
+
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=nautex&config=JTdCJTIyY29tbWFuZCUyMiUzQSUyMnV2eCUyMG5hdXRleCUyMG1jcCUyMiU3RA%3D%3D)
+
+2. Prompt in Agent mode: `Help me setup nautex project`
+3. Continue with terminal UI flow below, depending on the existing environment and response. 
+
+## Via Terminal UI
+
 1. Go to the new project folder and run in the terminal:
 ```bash
 uvx nautex setup

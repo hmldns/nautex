@@ -3,8 +3,7 @@ This is an MCP server that integrates PRD and TRD building tool [Nautex AI](http
 
 # Motivation
 
-Since LLM Coding Agents do not attend team meetings, this toolchain addresses the challenge of conveying complete and detailed product and 
-technical vision to them. This app uses step by step plan that covers specification but not overwhelmes coding agents, so they do work better.
+Since LLM Coding Agents do not attend team meetings, there is the challenge of conveying complete and detailed product and technical requirements to them. This app uses step by step plan that covers specification but not overwhelmes coding agents, so they do work better.
 
 # How It Works 
 

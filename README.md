@@ -22,7 +22,7 @@ By [Ivan Makarov](https://x.com/ivan_mkrv)
 ⬇️ 📚 **Check Presentation** ⬇️ 
 
 <details>
-<summary>Usage Flow Presentation</summary>
+<summary>Usage Flow Presentation (unfold me)</summary>
 
 ## Requirements Specifications
 

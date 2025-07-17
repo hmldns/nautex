@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hmldns-nautex-badge.png)](https://mseep.ai/app/hmldns-nautex)
+
 
 This is an MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the Cursor IDE. 
 

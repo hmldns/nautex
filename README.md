@@ -1,16 +1,19 @@
 
-This is an MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the Cursor IDE. 
+This is an MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the Coding Agents.
+
+Supported agents: Cursor, Claude Code (coming soon), Gemini CLI (coming soon)
 
 # Motivation
 
 Since LLM Coding Agents do not attend team meetings, there is the challenge of conveying complete and detailed product and technical requirements to them. 
 
 Nautex AI tool-chain manages step by step guiding of Coding Agents so they implement specification using small, relevant and testable steps. 
+
 Core principles are: 
-a) start from foundational parts, de-risk them, then build up; 
-b) do not overwhelm Coding Agents by large problem at once;
-c) plan project files map and link them to requirements and to tasks: Coding Agents don't get lost, you know how to navigate brand new code base;
-c) manage developer attention for verification and validation in right moment for review.
+1) start from foundational parts, de-risk them, then build up; 
+2) do not overwhelm Coding Agents by large problem at once;
+3) plan project files map and link them to requirements and to tasks: Coding Agents don't get lost, you know how to navigate brand new code base;
+4) manage developer attention for verification and validation in right moment for review.
 
 # How It Works 
 
@@ -20,8 +23,6 @@ This MCP server pulls guidance instructions from Nautex AI; tasks contain to-do 
 references to the affected files, and requirements that are automatically synced for the Coding Agent's availability.
 
 By [Ivan Makarov](https://x.com/ivan_mkrv)
-
-
 
 
 ⬇️ 📚 **Check Presentation** ⬇️ 

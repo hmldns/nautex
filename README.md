@@ -5,7 +5,12 @@ This is an MCP server that integrates PRD and TRD building tool [Nautex AI](http
 
 Since LLM Coding Agents do not attend team meetings, there is the challenge of conveying complete and detailed product and technical requirements to them. 
 
-This tool-chain uses step by step plan that covers specification but not overwhelmes coding agents, so they do work better.
+Nautex AI tool-chain manages step by step guiding of Coding Agents so they implement specification using small, relevant and testable steps. 
+Core principles are: 
+a) start from foundational parts, de-risk them, then build up; 
+b) do not overwhelm Coding Agents by large problem at once;
+c) plan project files map and link them to requirements and to tasks: Coding Agents don't get lost, you know how to navigate brand new code base;
+c) manage developer attention for verification and validation in right moment for review.
 
 # How It Works 
 
@@ -62,7 +67,7 @@ Next, configure the MCP server for Cursor integration: connect to the Nautex clo
 
 Set the MCP server parameters and provide usage rules for Cursor. Use mouse clicks for automation—the terminal UI functions like a web page.
 
-This utility is available on GitHub (link to follow).
+This utility is available on GitHub.
 
 Once all indicators are green, initiate plan execution.
 

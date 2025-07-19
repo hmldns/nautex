@@ -144,13 +144,9 @@ def main() -> None:
             mcp_server_set_service_instance(mcp_service)
 
             # Check for MCP subcommands
-            if hasattr(args, 'mcp_command') and args.mcp_command == "test":
+            if args.mcp_command == "test":
                 handle_test_commands(args)
             else:
-                # Handle regular MCP command without asyncio.run
-                if not nautex_api_service:
-                    print("MCP server starting with limited functionality. Use 'nautex setup' to configure.", file=sys.stderr)
-
                 # Run the MCP server in the main thread
                 mcp_server_run()
 

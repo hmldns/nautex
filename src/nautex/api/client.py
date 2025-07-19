@@ -177,7 +177,7 @@ class NautexAPIClient:
 
                     # Handle client errors (4xx) - don't retry
                     elif 400 <= response.status < 500:
-                        logger.error(f"Client error {response.status}: {response_text}")
+                        # logger.error(f"Client error {response.status}: {response_text}")
                         raise NautexAPIError(
                             f"Client error {response.status}: {response_text}",
                             status_code=response.status,
@@ -423,7 +423,7 @@ class NautexAPIClient:
             return AccountInfo.model_validate(acc_data)
 
         except NautexAPIError as e:
-            logger.error(f"Failed to get account info: {e}")
+            # logger.error(f"Failed to get account info: {e}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error in get_account_info: {e}")

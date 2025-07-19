@@ -215,7 +215,7 @@ class SetupScreen(Screen):
             return False, "API token must be at least 8 characters"
 
         try:
-            acc_info = await self.api_service.get_account_info(token_override=value, timeout=1.0)
+            acc_info = await self.api_service.get_account_info(token_override=value, raise_exception=True, timeout=1.0)
             self.system_info_widget.update_system_info(
                 email=acc_info.profile_email,
             )

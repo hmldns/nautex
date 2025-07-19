@@ -110,7 +110,7 @@ class IntegrationStatusService:
             status.api_connected = bool(acc_info)
             status.account_info = acc_info
         except Exception as e:
-            logger.warning(f"API connectivity check failed: {e}")
+            # logger.warning(f"API connectivity check failed: {e}")
             status.api_connected = False
             status.api_response_time = None
 

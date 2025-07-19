@@ -121,7 +121,7 @@ class NautexAPIService:
     # API endpoint implementations
 
 
-    async def get_account_info(self, *, token_override: Optional[str] = None, timeout: Optional[float] = None) -> AccountInfo:
+    async def get_account_info(self, *, token_override: Optional[str] = None, raise_exception: bool = True, timeout: Optional[float] = None) -> Optional[AccountInfo]:
         """Retrieve account information using the current token.
 
         Returns:
@@ -133,8 +133,9 @@ class NautexAPIService:
         try:
             return await self.api_client.get_account_info(token_override=token_override, timeout=timeout)
         except NautexAPIError as e:
-            logger.error(f"Failed to get account info: {e}")
-            raise
+            if raise_exception:
+                raise
+            return None
 
     async def verify_token_and_get_account_info(self, token: Optional[str] = None) -> AccountInfo:
         # TODO update

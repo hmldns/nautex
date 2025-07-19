@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from pydantic import ValidationError
 
-from ..models.config import NautexConfig
+from ..models.config import NautexConfig, AgentType
+from ..agent_setups.base import AgentSetupBase, AgentSetupNotSelected
+from ..agent_setups.cursor import CursorAgentSetup
+from ..agent_setups.claude import ClaudeAgentSetup
 
 
 class ConfigurationError(Exception):
@@ -58,6 +61,31 @@ class ConfigurationService:
             return Path(self.config.documents_path)
         else:
             return self.nautex_dir / "docs"
+
+    @property
+    def agent_setup(self) -> Optional[AgentSetupBase]:
+        """Get the agent setup base for the configured agent type.
+
+        Returns:
+            AgentSetupBase implementation for the configured agent type.
+
+        Raises:
+            ValueError: If the agent type is not supported.
+        """
+        if self.config.agent_type == AgentType.CURSOR:
+            return CursorAgentSetup(self)
+        elif self.config.agent_type == AgentType.CLAUDE:
+            return ClaudeAgentSetup(self)
+        else:
+            return AgentSetupNotSelected(self, AgentType.NOT_SELECTED.value)
+
+    def get_supported_agent_types(self) -> List[AgentType]:
+        """Get a list of supported agent types.
+
+        Returns:
+            List of supported agent types as strings.
+        """
+        return AgentType.list()
 
     def load_configuration(self) -> NautexConfig:
         """Load configuration from .nautex/config.json and environment variables.
@@ -143,11 +171,11 @@ class ConfigurationService:
 
                 # Delete reference to encourage deallocation (shredded data is already cleared)
                 del line
-                
+
         gc.collect()  # Force GC to reclaim sooner 
 
         return result
-    
+
     def _load_environment_variables(self) -> Dict[str, Any]:
         """Load environment variables with NAUTEX_ prefix.
 
@@ -210,7 +238,7 @@ class ConfigurationService:
         if not gitignore_path.exists():
             with open(gitignore_path, 'w') as f:
                 f.write(".env\n")
-        
+
     def config_exists(self) -> bool:
         """Check if a configuration file exists.
 

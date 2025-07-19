@@ -1,17 +1,13 @@
 """Integration Status Service for managing API validation, config validation, and MCP status."""
 
-import time
 import logging
 import asyncio
 from typing import Optional, Tuple, Dict, Any, Callable
-from pathlib import Path
-
-from ..models.config import NautexConfig
 from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
 from .mcp_config_service import MCPConfigService, MCPConfigStatus
-from .agent_rules_service import AgentRulesService, AgentRulesStatus
-from ..api.client import NautexAPIError
+from .agent_rules_service import AgentRulesService
+
 from ..models.integration_status import IntegrationStatus
 
 # Set up logging
@@ -62,8 +58,10 @@ class IntegrationStatusService:
         if status.config_loaded:
             await self._check_network_connectivity(status)
             await self._check_api_connectivity(status)
-            self._check_mcp_status(status)
-            self._check_agent_rules_status(status)
+
+            if self.config_service.config.agent_type_selected:
+                self._check_mcp_status(status)
+                self._check_agent_rules_status(status)
 
         return status
 
@@ -76,7 +74,7 @@ class IntegrationStatusService:
     def _check_agent_rules_status(self, status: IntegrationStatus) -> None:
         """Check agent rules status."""
         logger.debug("Checking agent rules...")
-        status.agent_rules_status, status.agent_rules_path = self.agent_rules_service.check_rules_file()
+        status.agent_rules_status, status.agent_rules_path = self.agent_rules_service.validate_rules()
         logger.debug(f"Agent rules status: {status.agent_rules_status}, path: {status.agent_rules_path}")
 
     async def _check_network_connectivity(self, status: IntegrationStatus) -> None:

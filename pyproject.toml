@@ -60,10 +60,6 @@ where = ["src"]
 [tool.setuptools.package-dir]
 "" = "src"
 
-[tool.setuptools.package-data]
-nautex = ["rules/**/*"]
-
-
 [tool.black]
 line-length = 88
 target-version = ['py310']

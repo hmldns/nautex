@@ -1,10 +1,6 @@
-``` markdown
----
-description: Workflow reference for Nautex MCP usage for project implementation guidance
-globs: **/*
-alwaysApply: true
----
 
+
+COMMON_WORKFLOW_PROMPT = """
 # General background and workflow
 
 This document outlines the workflow for an AI Coding Agent interacting with the Nautex AI platform via the Model-Context-Protocol (MCP).
@@ -219,3 +215,5 @@ Do not proceed with any further tasks or commands.
 
 Report the error to the user, providing any details from the error message.
 This ensures that problems are addressed promptly and prevents the workflow from continuing in an inconsistent or unpredictable state. After reporting the error, wait for further instructions.
+"""
+

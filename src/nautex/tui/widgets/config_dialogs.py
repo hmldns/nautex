@@ -1,16 +1,21 @@
 """Dialog widgets for configuration operations in the Nautex TUI."""
 
 from pathlib import Path
-from typing import Literal, Optional, Callable
+from typing import Literal, Optional, Callable, List
 
-from textual.widgets import Static, Button, Label
+from textual.widgets import Static, Button, Label, Select
 from textual.containers import Horizontal, Vertical, Center, Middle
 from textual.screen import Screen
 from textual import events
 from textual.reactive import reactive
+from textual.widgets._select import NoSelection
 
+from ...agent_setups.base import AgentRulesStatus
+from ...models.config import AgentType
 from ...services.mcp_config_service import MCPConfigService, MCPConfigStatus
-from ...services.agent_rules_service import AgentRulesService, AgentRulesStatus
+from ...services.agent_rules_service import AgentRulesService
+from ...services.config_service import ConfigurationService
+from ...services.integration_status_service import IntegrationStatusService
 from ...utils import path2display
 
 
@@ -97,10 +102,10 @@ class ConfigWriteDialog(Screen):
         super().__init__(**kwargs)
         self.title_text = title
         self.message_text = message
+        self.status_text = ""
+        self.path_text = ""
         self.result_text = ""
         self.error_text = ""
-        self.path_text = ""
-        self.status_text = ""
         self.button_handlers = {}
 
     def compose(self):
@@ -117,33 +122,19 @@ class ConfigWriteDialog(Screen):
                     with Horizontal(id="buttons"):
                         for button_id, button_info in self.get_buttons().items():
                             yield Button(button_info["label"], id=button_id, variant=button_info.get("variant", "primary"))
-                        yield Button("Cancel", id="cancel", variant="default")
+                        yield Button("Close", id="close", variant="default")
 
     def get_buttons(self):
-        """Get the buttons to display in the dialog.
-
-        Returns:
-            A dictionary mapping button IDs to button information.
-            Each button info is a dictionary with keys:
-            - label: The button label
-            - variant: The button variant (default: "primary")
-
-        This method should be overridden by subclasses to define their own buttons.
-        """
+        """Get the buttons to display in the dialog. Override in subclasses."""
         return {}
 
     def register_button_handler(self, button_id: str, handler: Callable):
-        """Register a handler for a button.
-
-        Args:
-            button_id: The ID of the button
-            handler: The handler function to call when the button is pressed
-        """
+        """Register a handler for a button."""
         self.button_handlers[button_id] = handler
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
-        if event.button.id == "cancel":
+        if event.button.id == "close":
             self.dismiss(False)
         elif event.button.id in self.button_handlers:
             self.button_handlers[event.button.id]()
@@ -154,57 +145,94 @@ class ConfigWriteDialog(Screen):
             event.stop()
             self.dismiss(False)
 
-    def write_config(self):
-        """Write the configuration. To be implemented by subclasses."""
-        pass
+    def update_status_display(self, status_text: str = None, path_text: str = None):
+        """Update status and path display."""
+        if status_text is not None:
+            self.status_text = status_text
+            try:
+                self.query_one("#status", Static).update(status_text)
+            except:
+                pass
+
+        if path_text is not None:
+            self.path_text = path_text
+            try:
+                self.query_one("#path", Static).update(path_text)
+            except:
+                pass
 
     def update_result(self, success: bool, message: str):
         """Update the result message."""
         if success:
             self.result_text = message
             self.error_text = ""
+            try:
+                self.query_one("#result", Static).update(message)
+                self.query_one("#error", Static).update("")
+            except:
+                pass
         else:
             self.result_text = ""
             self.error_text = message
-        self.refresh()
+            try:
+                self.query_one("#result", Static).update("")
+                self.query_one("#error", Static).update(message)
+            except:
+                pass
+
+    def write_config(self):
+        """Write the configuration. Override in subclasses."""
+        pass
 
 
 class MCPConfigWriteDialog(ConfigWriteDialog):
     """Dialog for writing MCP configuration."""
 
     def __init__(self, mcp_service: MCPConfigService, **kwargs):
+        # Load current status first
+        self.mcp_service = mcp_service
+        mcp_status, mcp_path = mcp_service.check_mcp_configuration()
+
+        # Prepare initial content
+        status_text = self._format_status_text(mcp_status)
+        path_text = self._format_path_text(mcp_status, mcp_path)
+
         super().__init__(
             title="Manage MCP Configuration",
-            message="",
+            message="Configure MCP integration for your agent",
             **kwargs
         )
-        self.mcp_service = mcp_service
 
-        # Get current status
-        self.status, self.path = self.mcp_service.check_mcp_configuration()
-
-        # Set status text
-        if self.status == MCPConfigStatus.OK:
-            self.status_text = f"Status: [green]OK[/green] - MCP configuration is properly set up"
-        elif self.status == MCPConfigStatus.MISCONFIGURED:
-            self.status_text = f"Status: [yellow]MISCONFIGURED[/yellow] - MCP configuration exists but is incorrect"
-        else:  # NOT_FOUND
-            self.status_text = f"Status: [red]NOT FOUND[/red] - MCP configuration not found"
-
-        # Set path text
-        if self.path:
-            self.path_text = f"Current path: {path2display(self.path)}"
-        else:
-            path = self.mcp_service.get_config_path()
-            self.path_text = f"Will be written to: {path}"
+        # Set initial status data
+        self.mcp_status = mcp_status
+        self.mcp_path = mcp_path
+        self.status_text = status_text
+        self.path_text = path_text
 
         # Register button handlers
         self.register_button_handler("write_config", self.write_config)
         self.register_button_handler("update_config", self.write_config)
 
+    def _format_status_text(self, status: MCPConfigStatus) -> str:
+        """Format status text based on MCP status."""
+        if status == MCPConfigStatus.OK:
+            return f"Status: [green]OK[/green] - MCP configuration is properly set up"
+        elif status == MCPConfigStatus.MISCONFIGURED:
+            return f"Status: [yellow]MISCONFIGURED[/yellow] - MCP configuration exists but is incorrect"
+        else:  # NOT_FOUND
+            return f"Status: [red]NOT FOUND[/red] - MCP configuration not found"
+
+    def _format_path_text(self, status: MCPConfigStatus, path: Optional[Path]) -> str:
+        """Format path text based on current MCP path."""
+        if path:
+            return f"Current path: {path2display(path)}"
+        else:
+            config_path = self.mcp_service.get_config_path()
+            return f"Will be written to: {config_path}"
+
     def get_buttons(self):
         """Get the buttons to display in the dialog based on current state."""
-        if self.status in [MCPConfigStatus.OK, MCPConfigStatus.MISCONFIGURED]:
+        if self.mcp_status in [MCPConfigStatus.OK, MCPConfigStatus.MISCONFIGURED]:
             return {
                 "update_config": {
                     "label": "Update Configuration",
@@ -221,63 +249,166 @@ class MCPConfigWriteDialog(ConfigWriteDialog):
 
     def write_config(self):
         """Write the MCP configuration."""
-        success = self.mcp_service.write_mcp_configuration('local')
+        success = self.mcp_service.write_mcp_configuration()
         if success:
-            self.update_result(True, f"Successfully wrote MCP configuration")
+            self.update_result(True, "Successfully wrote MCP configuration")
+            # Refresh status after successful write
+            self.mcp_status, self.mcp_path = self.mcp_service.check_mcp_configuration()
+            self.update_status_display(
+                status_text=self._format_status_text(self.mcp_status),
+                path_text=self._format_path_text(self.mcp_status, self.mcp_path)
+            )
         else:
-            self.update_result(False, f"Failed to write MCP configuration")
+            self.update_result(False, "Failed to write MCP configuration")
+
+
+class AgentSelectionDialog(ConfigWriteDialog):
+    """Dialog for selecting and configuring an agent."""
+
+    def __init__(self, config_service: ConfigurationService,
+                 integration_status_service: IntegrationStatusService, **kwargs):
+
+        # Load current data first
+        self.config_service = config_service
+        self.integration_status_service = integration_status_service
+        self.agent_types = config_service.get_supported_agent_types()
+
+        current_agent = config_service.config.agent_type
+        status_text = f"Current agent: [green]{current_agent}[/green]" if current_agent != AgentType.NOT_SELECTED else "No agent selected"
+
+        super().__init__(
+            title="Select Agent",
+            message="Choose an AI agent to guide:",
+            **kwargs
+        )
+
+        # Set initial data
+        self.current_agent_type = current_agent
+        self.selected_agent_type = current_agent
+        self.status_text = status_text
+
+        # Register button handlers
+        self.register_button_handler("select_agent", self.select_agent_type)
+
+    def compose(self):
+        """Compose the dialog layout."""
+        with Center():
+            with Middle():
+                with Vertical(id="dialog"):
+                    yield Static(self.title_text, id="title")
+                    yield Static(self.message_text, id="message")
+                    yield Static(self.status_text, id="status")
+
+                    # Agent type selection dropdown
+                    agent_options = [(agent_type.value, agent_type) for agent_type in self.agent_types]
+                    yield Select(
+                        options=agent_options,
+                        value=self.current_agent_type if self.current_agent_type != AgentType.NOT_SELECTED else Select.BLANK,
+                        id="agent_select"
+                    )
+
+                    yield Static(self.result_text, id="result", classes="success")
+                    yield Static(self.error_text, id="error", classes="error")
+
+                    with Horizontal(id="buttons"):
+                        for button_id, button_info in self.get_buttons().items():
+                            yield Button(button_info["label"], id=button_id, variant=button_info.get("variant", "primary"))
+                        yield Button("Close", id="close", variant="default")
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        """Handle select change events."""
+        if event.select.id == "agent_select":
+            self.selected_agent_type = event.value
+
+    def get_buttons(self):
+        """Get the buttons to display in the dialog."""
+        return {
+            "select_agent": {
+                "label": "Select Agent",
+                "variant": "primary"
+            }
+        }
+
+    def select_agent_type(self):
+        """Save the selected agent type to the configuration."""
+        try:
+            # Update the configuration
+            config = self.config_service.config
+            config.agent_type = self.selected_agent_type
+
+            # Save the configuration
+            self.config_service.save_configuration(config)
+
+            self.update_result(True, f"Successfully selected agent: {self.selected_agent_type}")
+
+            # Update current agent type display
+            self.current_agent_type = self.selected_agent_type
+            status_text = f"Current agent: [green]{self.selected_agent_type}[/green]"
+            self.update_status_display(status_text=status_text)
+
+            # Close dialog after successful selection
+            # self.app.call_later(self.dismiss, True)
+            self.dismiss(True)
+        except Exception as e:
+            self.update_result(False, f"Failed to select agent: {e}")
 
 
 class AgentRulesWriteDialog(ConfigWriteDialog):
     """Dialog for writing agent rules."""
 
     def __init__(self, rules_service: AgentRulesService, **kwargs):
+        # Load current status first
+        self.rules_service = rules_service
+        rules_status, rules_path = rules_service.validate_rules()
+        rules_info = rules_service.get_rules_info()
+
+        # Prepare initial content
+        status_text = self._format_status_text(rules_status)
+
         super().__init__(
             title="Manage Agent Rules",
-            message="",
+            message="Configure workflow rules for your agent",
             **kwargs
         )
-        self.rules_service = rules_service
 
-        # Get current status
-        self.status, self.path = self.rules_service.check_rules_file()
-
-        # Set status text
-        if self.status == AgentRulesStatus.OK:
-            self.status_text = f"Status: [green]OK[/green] - Agent rules are properly set up"
-        elif self.status == AgentRulesStatus.OUTDATED:
-            self.status_text = f"Status: [yellow]OUTDATED[/yellow] - Agent rules exist but are outdated"
-        else:  # NOT_FOUND
-            self.status_text = f"Status: [red]NOT FOUND[/red] - Agent rules not found"
-
-        # Set path text
-        if self.path:
-            self.path_text = f"Current path: {self.path}"
-        else:
-            path = self.rules_service.get_rules_path()
-            self.path_text = f"Will be written to: {path2display(path)}"
+        # Set initial data
+        self.rules_status = rules_status
+        self.rules_path = rules_path
+        self.status_text = status_text
+        self.path_text = rules_info
 
         # Register button handlers
         self.register_button_handler("write_rules", self.write_config)
         self.register_button_handler("update_rules", self.write_config)
 
+    def _format_status_text(self, status: AgentRulesStatus) -> str:
+        """Format status text based on rules status."""
+        if status == AgentRulesStatus.OK:
+            return f"Status: [green]OK[/green] - Agent rules are properly set up"
+        elif status == AgentRulesStatus.OUTDATED:
+            return f"Status: [yellow]OUTDATED[/yellow] - Agent rules exist but are outdated"
+        elif status == AgentRulesStatus.IOERROR:
+            return f"Status: [red]ERROR[/red] - IO Error accessing rules file"
+        else:  # NOT_FOUND
+            return f"Status: [red]NOT FOUND[/red] - Agent rules not found"
+
     def get_buttons(self):
         """Get the buttons to display in the dialog based on current state."""
-        if self.status == AgentRulesStatus.OK:
+        if self.rules_status == AgentRulesStatus.OK:
             return {
                 "update_rules": {
                     "label": "Update Rules",
                     "variant": "primary"
                 }
             }
-        elif self.status == AgentRulesStatus.OUTDATED:
+        elif self.rules_status == AgentRulesStatus.OUTDATED:
             return {
                 "update_rules": {
                     "label": "Update Rules",
                     "variant": "warning"
                 }
             }
-        else:  # NOT_FOUND
+        else:  # NOT_FOUND or IOERROR
             return {
                 "write_rules": {
                     "label": "Write Rules",
@@ -287,8 +418,15 @@ class AgentRulesWriteDialog(ConfigWriteDialog):
 
     def write_config(self):
         """Write the agent rules."""
-        success = self.rules_service.write_rules_file('local')
+        success = self.rules_service.ensure_rules()
         if success:
-            self.update_result(True, f"Successfully wrote agent rules")
+            self.update_result(True, "Successfully wrote agent rules")
+            # Refresh status after successful write
+            self.rules_status, self.rules_path = self.rules_service.validate_rules()
+            rules_info = self.rules_service.get_rules_info()
+            self.update_status_display(
+                status_text=self._format_status_text(self.rules_status),
+                path_text=rules_info
+            )
         else:
-            self.update_result(False, f"Failed to write agent rules")
+            self.update_result(False, "Failed to write agent rules")

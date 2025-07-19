@@ -5,12 +5,9 @@ from textual.widgets import DataTable, Static
 from textual.containers import Vertical
 from textual.reactive import reactive
 
-from ...services.config_service import ConfigurationService
-from ...services.integration_status_service import IntegrationStatusService
 from ...services.mcp_config_service import MCPConfigStatus
-from ...services.agent_rules_service import AgentRulesStatus
-from ...models.config import NautexConfig
-from ...models.integration_status import IntegrationStatus
+from ...agent_setups.base import AgentRulesStatus
+
 
 
 class SystemInfoWidget(Vertical):

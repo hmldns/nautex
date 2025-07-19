@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from pydantic import SecretStr
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -17,12 +18,13 @@ from ..widgets import (
     LoadableList,
     SystemInfoWidget,
 )
-from ..widgets.config_dialogs import MCPConfigWriteDialog, AgentRulesWriteDialog
+from ..widgets.config_dialogs import MCPConfigWriteDialog, AgentRulesWriteDialog, AgentSelectionDialog
 from ...models.integration_status import IntegrationStatus
 from ...services.config_service import ConfigurationService, ConfigurationError
 from ...services.integration_status_service import IntegrationStatusService
 from ...services.mcp_config_service import MCPConfigService, MCPConfigStatus
-from ...services.agent_rules_service import AgentRulesService, AgentRulesStatus
+from ...services.agent_rules_service import AgentRulesService
+from ...agent_setups.base import AgentRulesStatus
 from ...services.nautex_api_service import NautexAPIService
 from ...models.config import NautexConfig
 from ...utils import path2display
@@ -53,6 +55,7 @@ class SetupScreen(Screen):
         Binding("escape", "quit", "Quit"),
         Binding("tab", "next_input", "Next Field"),
         Binding("enter", "next_input", "Next Field"),
+        Binding("ctrl+y", "show_agent_selection_dialog", "Select Agent Type"),
         Binding("ctrl+t", "show_mcp_dialog", "MCP Config"),
         Binding("ctrl+r", "show_agent_rules_dialog", "Agent Rules"),
     ]
@@ -416,26 +419,33 @@ class SetupScreen(Screen):
         # Focus the next widget
         self.focusable_widgets[self.current_focus_index].focus()
 
-    async def action_show_mcp_dialog(self) -> None:
+    async def show_dialog(self, dialog):
 
-        dialog = MCPConfigWriteDialog(mcp_service=self.mcp_config_service)
-        result = await self.app.push_screen(dialog)
+        async def sd():
+            result = await self.app.push_screen_wait(dialog)
 
-        if result:
-            # Refresh the system info to show updated status
             await self._update_system_info()
             await self.update_integration_status()
+
+        self.run_worker(sd())
+
+    async def action_show_mcp_dialog(self) -> None:
+        dialog = MCPConfigWriteDialog(mcp_service=self.mcp_config_service)
+        await self.show_dialog(dialog)
 
 
     async def action_show_agent_rules_dialog(self) -> None:
-
         dialog = AgentRulesWriteDialog(rules_service=self.agent_rules_service)
-        result = await self.app.push_screen(dialog)
+        await self.show_dialog(dialog)
 
-        if result:
-            # Refresh the system info to show updated status
-            await self._update_system_info()
-            await self.update_integration_status()
+    async def action_show_agent_selection_dialog(self) -> None:
+        dialog = AgentSelectionDialog(
+            config_service=self.config_service,
+            integration_status_service=self.integration_status_service
+        )
+
+        await self.show_dialog(dialog)
+
 
     async def _update_system_info(self) -> None:
         """Update the system info widget with current data."""
@@ -443,7 +453,7 @@ class SetupScreen(Screen):
         agent_type = self.config_service.config.agent_type
 
         mcp_config_status, _ = self.mcp_config_service.check_mcp_configuration()
-        agent_rules_status, _ = self.agent_rules_service.check_rules_file()
+        agent_rules_status, _ = self.agent_rules_service.validate_rules()
 
         self.system_info_widget.update_system_info(
             host=self.config_service.config.api_host,

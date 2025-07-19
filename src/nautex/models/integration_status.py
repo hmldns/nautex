@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 from .config import NautexConfig
 from ..api.api_models import AccountInfo
 from ..services.mcp_config_service import MCPConfigStatus
-from ..services.agent_rules_service import AgentRulesStatus
+from ..agent_setups.base import AgentRulesStatus
 
 
 @dataclass(kw_only=True)
@@ -43,6 +43,8 @@ class IntegrationStatus:
     def plan_selected(self):
         return self.config and self.config.plan_id
 
+    def agent_type_selected(self):
+        return self.config.agent_type_selected
 
     @property
     def mcp_config_set(self):
@@ -78,6 +80,9 @@ class IntegrationStatus:
             return "Project not selected - run 'uv nautex setup'"
         if not self.plan_selected:
             return "Implementation plan not selected - run 'uv nautex setup'"
+
+        if not self.agent_type_selected():
+            return "Agent type not selected - press 'Ctrl+Y' to select agent type"
 
         if not self.mcp_config_set:
             return "MCP configuration needed - press 'Ctrl+T' to configure MCP integration"

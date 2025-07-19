@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 
 from .config import NautexConfig
 from ..api.api_models import AccountInfo
+from ..prompts.consts import CMD_NAUTEX_SETUP
 from ..services.mcp_config_service import MCPConfigStatus
 from ..agent_setups.base import AgentRulesStatus
 
@@ -71,23 +72,23 @@ class IntegrationStatus:
     def status_message(self) -> str:
         """Returns a status message based on the first failed check."""
         if not self.config_loaded:
-            return "Configuration not found - run 'uv nautex setup'"
+            return f"Configuration not found - run '{CMD_NAUTEX_SETUP}'"
         if not self.network_connected:
-            return "Network connectivity failed - check internet connection or Host URL"
+            return f"Network connectivity failed - check internet connection or Host URL"
         if not self.api_connected:
-            return "API connectivity failed - check token"
+            return f"API connectivity failed - check token"
         if not self.project_selected:
-            return "Project not selected - run 'uv nautex setup'"
+            return f"Project not selected - run '{CMD_NAUTEX_SETUP}'"
         if not self.plan_selected:
-            return "Implementation plan not selected - run 'uv nautex setup'"
+            return f"Implementation plan not selected - run '{CMD_NAUTEX_SETUP}'"
 
         if not self.agent_type_selected():
-            return "Agent type not selected - press 'Ctrl+Y' to select agent type"
+            return f"Agent type not selected - press 'Ctrl+Y' to select agent type"
 
         if not self.mcp_config_set:
-            return "MCP configuration needed - press 'Ctrl+T' to configure MCP integration"
+            return f"MCP configuration needed - press 'Ctrl+T' to configure MCP integration"
 
         if not self.agent_rules_set:
-            return "Agent rules needed - press 'Ctrl+R' to configure agent workflow rules"
+            return f"Agent rules needed - press 'Ctrl+R' to configure agent workflow rules"
 
-        return "Fully integrated and ready to work"
+        return f"Fully integrated and ready to work"

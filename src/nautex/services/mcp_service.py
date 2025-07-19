@@ -12,6 +12,7 @@ from ..models.mcp import convert_scope_context_to_mcp_response, MCPTaskOperation
 
 from .document_service import DocumentService
 from ..api.api_models import TaskOperation
+from ..prompts.consts import CMD_NAUTEX_SETUP
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ async def mcp_handle_list_projects() -> Dict[str, Any]:
         if not service.is_configured():
             return {
                 "success": False,
-                "error": "Nautex CLI is not configured. Run 'nautex setup' to configure the CLI first.",
+                "error": f"Nautex CLI is not configured. Run '{CMD_NAUTEX_SETUP}' to configure the CLI first.",
                 "configured": False
             }
 
@@ -215,7 +216,7 @@ def _check_configured():
     if not mcp_service().is_configured():
         return False, {
             "success": False,
-            "error": "Nautex MCP is not configured. Run 'nautex setup' to configure the CLI first.",
+            "error": f"Nautex MCP is not configured. Run '{CMD_NAUTEX_SETUP}' to configure the CLI first.",
             "configured": False
         }
 

@@ -15,10 +15,9 @@ from .services.ui_service import UIService
 from .services.config_service import ConfigurationService
 from .services.nautex_api_service import NautexAPIService
 from .services.integration_status_service import IntegrationStatusService
-from .services.plan_context_service import PlanContextService
 from .services.document_service import DocumentService
 from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run, \
-    mcp_handle_next_scope
+    mcp_handle_next_scope, mcp_handle_status
 from .services.mcp_config_service import MCPConfigService
 from .services.agent_rules_service import AgentRulesService
 from .api import create_api_client
@@ -31,7 +30,7 @@ def handle_test_commands(args):
     Args:
         args: Command line arguments
     """
-    if hasattr(args, 'test_command') and args.test_command == "next_scope":
+    if args.test_command == "next_scope":
         # Run the next_scope test command
         # Call the next_scope function and get the result
         result = asyncio.run(mcp_handle_next_scope())
@@ -41,8 +40,19 @@ def handle_test_commands(args):
             print(json.dumps(result["data"], indent=4))
         else:
             print(json.dumps(result, indent=4))
+
+    elif args.test_command == "status":
+        # Run the next_scope test command
+        # Call the next_scope function and get the result
+        result = asyncio.run(mcp_handle_status())
+
+        # Print the result with proper indentation
+        if result["success"] and "data" in result:
+            print(json.dumps(result["data"], indent=4))
+        else:
+            print(json.dumps(result, indent=4))
     else:
-        print("Please specify a test command. Available commands: next_scope")
+        print("Please specify a test command. Available commands: next_scope, status.")
 
 
 def main() -> None:
@@ -71,8 +81,9 @@ def main() -> None:
     mcp_test_parser = mcp_subparsers.add_parser("test", help="Test MCP functionality")
     mcp_test_subparsers = mcp_test_parser.add_subparsers(dest="test_command", help="Test commands")
 
-    # MCP test next_scope command
+    # MCP test commands
     mcp_test_next_scope_parser = mcp_test_subparsers.add_parser("next_scope", help="Test next_scope functionality")
+    mcp_test_status_parser = mcp_test_subparsers.add_parser("status", help="Test status functionality")
 
     args = parser.parse_args()
 
@@ -101,9 +112,6 @@ def main() -> None:
         nautex_api_service=nautex_api_service,
     )
 
-    plan_context_service = PlanContextService(
-        integration_status_service=integration_status_service
-    )
 
     # Initialize document service
     document_service = DocumentService(
@@ -114,7 +122,6 @@ def main() -> None:
     # 5. UI service for TUI commands
     ui_service = UIService(
         config_service=config_service,
-        plan_context_service=plan_context_service,
         integration_status_service=integration_status_service,
         api_service=nautex_api_service,
         mcp_config_service=mcp_config_service,
@@ -136,7 +143,7 @@ def main() -> None:
             mcp_service = MCPService(
                 config_service=config_service,
                 nautex_api_service=nautex_api_service,  # This can be None
-                plan_context_service=plan_context_service,
+                integration_status_service=integration_status_service,
                 document_service=document_service
             )
 

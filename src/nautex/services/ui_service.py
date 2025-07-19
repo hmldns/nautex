@@ -4,7 +4,6 @@ from typing import Optional
 from pathlib import Path
 
 from ..services.config_service import ConfigurationService
-from ..services.plan_context_service import PlanContextService
 from ..services.integration_status_service import IntegrationStatusService
 from ..services.nautex_api_service import NautexAPIService
 from ..models.plan_context import PlanContext
@@ -17,7 +16,6 @@ class UIService:
     def __init__(
         self, 
         config_service: ConfigurationService,
-        plan_context_service: PlanContextService,
         integration_status_service: IntegrationStatusService,
         api_service: NautexAPIService,
         mcp_config_service=None,
@@ -27,14 +25,12 @@ class UIService:
 
         Args:
             config_service: Service for configuration management
-            plan_context_service: Service for plan context management
             integration_status_service: Service for integration status management
             api_service: Service for API interactions
             mcp_config_service: Service for MCP configuration management
             agent_rules_service: Service for agent rules management
         """
         self.config_service = config_service
-        self.plan_context_service = plan_context_service
         self.integration_status_service = integration_status_service
         self.api_service = api_service
         self.mcp_config_service = mcp_config_service

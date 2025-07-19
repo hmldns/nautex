@@ -6,7 +6,6 @@ from .ui_service import UIService
 from .mcp_config_service import MCPConfigService
 from .integration_status_service import IntegrationStatusService
 from ..models.integration_status import IntegrationStatus
-from .plan_context_service import PlanContextService
 from .mcp_service import MCPService
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     "UIService",
     "MCPConfigService",
     "IntegrationStatusService",
-    "PlanContextService",
     "MCPService",
 ]

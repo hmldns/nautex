@@ -3,10 +3,9 @@ from typing import Dict, Any, Optional, List
 
 from fastmcp import FastMCP
 
-from . import ConfigurationService
+from . import ConfigurationService, IntegrationStatusService
 from ..models.config import NautexConfig
 from .nautex_api_service import NautexAPIService
-from .plan_context_service import PlanContextService
 from ..api.client import NautexAPIError
 from ..models.mcp import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateRequest, MCPTaskUpdateResponse
 
@@ -66,7 +65,7 @@ class MCPService:
         self,
         config_service: ConfigurationService,
         nautex_api_service: NautexAPIService,
-        plan_context_service: PlanContextService,
+        integration_status_service: IntegrationStatusService,
         document_service: Optional['DocumentService'] = None
     ):
         """Initialize the MCP service.
@@ -74,13 +73,12 @@ class MCPService:
         Args:
             config: Nautex configuration (can be None if not configured)
             nautex_api_service: Service for Nautex API operations (can be None if not configured)
-            plan_context_service: Service for plan context management
             document_service: Service for document operations (optional)
         """
         self.config_service = config_service
         self.nautex_api_service = nautex_api_service
-        self.plan_context_service = plan_context_service
         self.document_service = document_service
+        self.integration_status_service = integration_status_service
         self._documents_loaded_for_session = False
         self._designators_paths: Dict[str, str] = {}
 
@@ -131,26 +129,13 @@ async def mcp_handle_status() -> Dict[str, Any]:
     try:
         logger.debug("Executing status tool")
         service = _instance
-        context = await service.plan_context_service.get_plan_context()
+        status = await service.integration_status_service.get_integration_status()
 
         return {
             "success": True,
-            # "data": {
-            #     "config_loaded": context.config_loaded,
-            #     "config_path": str(context.config_path) if context.config_path else None,
-            #     "mcp_status": context.mcp_status,
-            #     "mcp_config_path": str(context.mcp_config_path) if context.mcp_config_path else None,
-            #     "api_connected": context.api_connected,
-            #     "api_response_time": context.api_response_time,
-            #     "next_task": {
-            #         "task_designator": context.next_task.task_designator,
-            #         "name": context.next_task.name,
-            #         "description": context.next_task.description,
-            #         "status": context.next_task.status
-            #     } if context.next_task else None,
-            #     "advised_action": context.advised_action,
-            #     "config_summary": context.config_summary
-            # }
+            "data": {
+                "status_message": status.status_message
+            }
         }
     except Exception as e:
         logger.error(f"Error in status tool: {e}")

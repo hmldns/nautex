@@ -69,26 +69,33 @@ class IntegrationStatus:
         ])
 
     @property
-    def status_message(self) -> str:
-        """Returns a status message based on the first failed check."""
+    def status_message(self, from_mcp: bool = False) -> str:
+        """Returns a status message based on the first failed check.
+
+        Args:
+            from_mcp: If True, adds CMD_NAUTEX_SETUP suggestion at the beginning.
+                     If False, provides original UI-specific actions.
+        """
+        mcp_prefix = f"Run '{CMD_NAUTEX_SETUP}' to configure, then " if from_mcp else ""
+
         if not self.config_loaded:
             return f"Configuration not found - run '{CMD_NAUTEX_SETUP}'"
         if not self.network_connected:
-            return f"Network connectivity failed - check internet connection or Host URL"
+            return f"Network connectivity failed - {mcp_prefix}check internet connection or Host URL"
         if not self.api_connected:
-            return f"API connectivity failed - check token"
+            return f"API connectivity failed - {mcp_prefix}check token"
         if not self.project_selected:
-            return f"Project not selected - run '{CMD_NAUTEX_SETUP}'"
+            return f"Project not selected - {mcp_prefix}select project from list"
         if not self.plan_selected:
-            return f"Implementation plan not selected - run '{CMD_NAUTEX_SETUP}'"
+            return f"Implementation plan not selected - {mcp_prefix}select plan in list"
 
         if not self.agent_type_selected():
-            return f"Agent type not selected - press 'Ctrl+Y' to select agent type"
+            return f"Agent type not selected - {mcp_prefix}press 'Ctrl+Y' to select agent type"
 
         if not self.mcp_config_set:
-            return f"MCP configuration needed - press 'Ctrl+T' to configure MCP integration"
+            return f"MCP configuration needed - {mcp_prefix}press 'Ctrl+T' to configure MCP integration"
 
         if not self.agent_rules_set:
-            return f"Agent rules needed - press 'Ctrl+R' to configure agent workflow rules"
+            return f"Agent rules needed - {mcp_prefix}press 'Ctrl+R' to configure agent workflow rules"
 
         return f"Fully integrated and ready to work"

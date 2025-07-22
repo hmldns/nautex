@@ -129,6 +129,7 @@ You should see the terminal user interface
 - Ensure you've got right MCP config: manually or via TUI (it will merge with any existing config)
 <details>
 <summary>For cursor</summary>
+
 - in `.cursor/mcp.json`, 
 
 ```json

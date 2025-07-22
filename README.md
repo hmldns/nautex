@@ -1,7 +1,7 @@
 
 This is an MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the Coding Agents.
 
-Supported agents: Cursor, Claude Code (coming soon), Gemini CLI (coming soon)
+Supported agents: Cursor, Claude Code, Gemini CLI (coming soon)
 
 # Motivation
 
@@ -125,7 +125,11 @@ You should see the terminal user interface
    - Go back to the CLI UI
 - Select project
 - Select implementation plan
-- Ensure you've got right MCP config in `.cursor/mcp.json`, manually or via TUI (it will merge with any existing config)
+- Select agent type
+- Ensure you've got right MCP config: manually or via TUI (it will merge with any existing config)
+<details>
+<summary>For cursor</summary>
+- in `.cursor/mcp.json`, 
 
 ```json
 {
@@ -140,12 +144,26 @@ You should see the terminal user interface
   }
 }
 ```
-- Ensure nautex workflow rules are in `.cursor/rules/` folder via TUI command.
+- Rules are in `.cursor/rules/` folder via TUI command.
+</details>
+
+<details>
+<summary>For Claude Code</summary>
+
+Additionally to TUI setup, add MCP server to Claude via command:
+```
+claude mcp add nautex -s local -- uvx nautex mcp
+```
+
+Note: you need to set MCP via TUI and via command (will be automated later)
+
+- Rules are in `./CLAUDE.md` after set via TUI.
+</details>
 
 3. (Optional) Check MCP server response ```uvx nautex mcp test next_scope```
-
-4. Tell cursor in Agent mode: 
+4. Check MCP configuration works and Coding Agent sees the tools: 
+ > Check nautex status
+5. Tell Coding Agent: 
  > Pull nautex rules and proceed to the next scope
 
-5. Proceed with the plan by reviewing progress and supporting the Agent with validation feedback and inputs.
-
+6. Proceed with the plan by reviewing progress and supporting the Agent with validation feedback and inputs.

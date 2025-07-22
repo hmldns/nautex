@@ -25,10 +25,11 @@ references to the affected files, and requirements that are automatically synced
 By [Ivan Makarov](https://x.com/ivan_mkrv)
 
 
-⬇️ 📚 **Check Presentation** ⬇️ 
+⬇️⬇️⬇️ 📚 **Check Presentation** ⬇️⬇️⬇️
+
 
 <details>
-<summary>Usage Flow Presentation (unfold me)</summary>
+<summary>💡 Usage Flow Presentation (unfold me)</summary>
 
 ## Requirements Specifications
 

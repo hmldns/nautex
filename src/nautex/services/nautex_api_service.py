@@ -42,11 +42,11 @@ class NautexAPIService:
         return rv
 
 
-    async def check_network_connectivity(self, timeout: float = 3.0) -> Tuple[bool, Optional[float], Optional[str]]:
+    async def check_network_connectivity(self, timeout: float = 5.0) -> Tuple[bool, Optional[float], Optional[str]]:
         """Check network connectivity to the API host with short timeout.
 
         Args:
-            timeout: Request timeout in seconds (default: 3.0)
+            timeout: Request timeout in seconds (default: 5.0)
 
         Returns:
             Tuple of (is_connected, response_time, error_message)

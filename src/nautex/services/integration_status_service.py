@@ -83,8 +83,7 @@ class IntegrationStatusService:
         try:
             logger.debug("Testing network connectivity...")
 
-            # Quick network connectivity check with 3 second timeout
-            network_ok, response_time, error_msg = await self._nautex_api_service.check_network_connectivity(timeout=1.0)
+            network_ok, response_time, error_msg = await self._nautex_api_service.check_network_connectivity(timeout=5.0)
 
             # Store network status as a custom attribute
             status.network_connected = network_ok

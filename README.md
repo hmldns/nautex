@@ -168,3 +168,7 @@ Note: you need to set MCP via TUI and via command (will be automated later)
  > Pull nautex rules and proceed to the next scope
 
 6. Proceed with the plan by reviewing progress and supporting the Agent with validation feedback and inputs.
+
+# Best practice from the community
+
+<a href="https://discord.gg/nautex" target="_blank"><img src="doc/join_discord.png" alt="drawing" width="200"/></a>

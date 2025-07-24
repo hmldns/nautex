@@ -37,7 +37,11 @@ The chatbot conducts a briefing session with you, gathering questions and ideas 
 
 (Example: A project I initiated to explore WebRTC.)
 
+Product requirements:
 ![howitworks_specifications](doc/howitworks_specifications.png)
+
+Technical requirements:
+![howitworks_diagram.png](doc/howitworks_diagram.png)
 
 ## Specification Refinement
 
@@ -75,7 +79,7 @@ Once all indicators are green, initiate plan execution.
 
 ![howitworks_integration](doc/howitworks_integration.png)
 
-## Coding in Cursor
+## Coding in Cursor / Claude Code
 
 In agent mode, instruct: "pull nautex rules, and proceed with the next scope."
 
@@ -168,6 +172,10 @@ Note: you need to set MCP via TUI and via command (will be automated later)
  > Pull nautex rules and proceed to the next scope
 
 6. Proceed with the plan by reviewing progress and supporting the Agent with validation feedback and inputs.
+
+# Projects built with nautex
+
+- [Collaborative Pixel Canvas](https://pixall.art) - [repo](https://github.com/hmldns/pix-canvas)
 
 # Best practice from the community
 

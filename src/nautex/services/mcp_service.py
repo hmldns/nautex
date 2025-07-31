@@ -131,11 +131,26 @@ async def mcp_handle_status() -> Dict[str, Any]:
         service = _instance
         status = await service.integration_status_service.get_integration_status()
 
+        if service.config.project_id and service.config.plan_id:
+            try:
+                # need this to notify API service that MCP is working
+                implementation_plan = await service.nautex_api_service.get_implementation_plan(
+                    project_id=service.config.project_id,
+                    plan_id=service.config.plan_id,
+                    from_mcp=True
+                )
+            except Exception as e:
+                logger.error(f"Error retrieving implementation plan: {e}")
+                # Continue even if plan retrieval fails
+        
+        # Prepare response data
+        response_data = {
+            "status_message": status.status_message,
+        }
+
         return {
             "success": True,
-            "data": {
-                "status_message": status.status_message
-            }
+            "data": response_data
         }
     except Exception as e:
         logger.error(f"Error in status tool: {e}")

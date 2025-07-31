@@ -58,6 +58,7 @@ class IntegrationStatusService:
         if status.config_loaded:
             await self._check_network_connectivity(status)
             await self._check_api_connectivity(status)
+            await self._update_implementation_plan(status)
 
             if self.config_service.config.agent_type_selected:
                 self._check_mcp_status(status)
@@ -113,6 +114,15 @@ class IntegrationStatusService:
             status.api_connected = False
             status.api_response_time = None
 
+    async def _update_implementation_plan(self, status: IntegrationStatus):
+        """Update the implementation plan."""
+        try:
+            if self.config_service.config.plan_id:
+                plan = await self._nautex_api_service.get_implementation_plan(status.config.project_id, status.config.plan_id)
+                status.implementation_plan = plan
+
+        except Exception:
+            raise
 
     def start_polling(self, on_update: Optional[Callable[[IntegrationStatus], None]] = None, interval: Optional[float] = None) -> None:
         """Start a background task to poll for integration status updates.

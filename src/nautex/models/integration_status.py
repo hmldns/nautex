@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from .config import NautexConfig
-from ..api.api_models import AccountInfo
+from ..api.api_models import AccountInfo, ImplementationPlan
 from ..prompts.consts import CMD_NAUTEX_SETUP
 from ..services.mcp_config_service import MCPConfigStatus
 from ..agent_setups.base import AgentRulesStatus
@@ -35,6 +35,8 @@ class IntegrationStatus:
     # Agent rules status
     agent_rules_status: AgentRulesStatus = AgentRulesStatus.NOT_FOUND
     agent_rules_path: Optional[Path] = None
+
+    implementation_plan: Optional[ImplementationPlan] = None
 
     @property
     def project_selected(self):

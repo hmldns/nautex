@@ -19,6 +19,7 @@ from ..widgets import (
     SystemInfoWidget,
 )
 from ..widgets.config_dialogs import MCPConfigWriteDialog, AgentRulesWriteDialog, AgentSelectionDialog
+from ..widgets.info_help_dialog import InfoHelpDialog
 from ...models.integration_status import IntegrationStatus
 from ...services.config_service import ConfigurationService, ConfigurationError
 from ...services.integration_status_service import IntegrationStatusService
@@ -58,6 +59,7 @@ class SetupScreen(Screen):
         Binding("ctrl+y", "show_agent_selection_dialog", "Select Agent Type"),
         Binding("ctrl+t", "show_mcp_dialog", "MCP Config"),
         Binding("ctrl+r", "show_agent_rules_dialog", "Agent Rules"),
+        Binding("f1", "show_info_help", "Info & Help"),
     ]
 
     CSS = """
@@ -448,6 +450,11 @@ class SetupScreen(Screen):
             integration_status_service=self.integration_status_service
         )
 
+        await self.show_dialog(dialog)
+
+    async def action_show_info_help(self) -> None:
+        """Show the info and help dialog."""
+        dialog = InfoHelpDialog()
         await self.show_dialog(dialog)
 
 

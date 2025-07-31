@@ -24,6 +24,16 @@ class AgentType(str, Enum):
         """
         return [agent_type for agent_type in cls]
 
+    def display_name(self) -> str:
+
+        if self == AgentType.NOT_SELECTED:
+            return "Not Selected"
+        elif self == AgentType.CURSOR:
+            return "Cursor"
+        elif self == AgentType.CLAUDE:
+            return "Claude Code"
+        return self.value.title()
+
 
 class NautexConfig(BaseSettings):
     """Main configuration model using pydantic-settings for .env support.

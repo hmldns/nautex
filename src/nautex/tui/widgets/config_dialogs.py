@@ -300,7 +300,7 @@ class AgentSelectionDialog(ConfigWriteDialog):
                     yield Static(self.status_text, id="status")
 
                     # Agent type selection dropdown
-                    agent_options = [(agent_type.value, agent_type) for agent_type in self.agent_types]
+                    agent_options = [(agent_type.display_name(), agent_type) for agent_type in self.agent_types]
                     yield Select(
                         options=agent_options,
                         value=self.current_agent_type if self.current_agent_type != AgentType.NOT_SELECTED else Select.BLANK,

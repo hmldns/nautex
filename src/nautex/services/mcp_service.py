@@ -221,7 +221,7 @@ async def mcp_handle_list_plans(project_id: str) -> Dict[str, Any]:
         if not configured:
             return error_response
 
-        plans = await mcp_service().nautex_api_service.list_implementation_plans(project_id)
+        plans = await mcp_service().nautex_api_service.list_implementation_plans(project_id, from_mcp=True)
 
         return {
             "success": True,
@@ -278,7 +278,8 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
 
         next_scope = await service.nautex_api_service.next_scope(
             project_id=service.config.project_id,
-            plan_id=service.config.plan_id
+            plan_id=service.config.plan_id,
+            from_mcp=True
         )
 
         if next_scope:
@@ -374,7 +375,8 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
         response = await service.nautex_api_service.update_tasks(
             project_id=service.config.project_id,
             plan_id=service.config.plan_id,
-            operations=task_operations
+            operations=task_operations,
+            from_mcp=True
         )
 
         return MCPTaskUpdateResponse(

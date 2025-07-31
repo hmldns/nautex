@@ -235,17 +235,23 @@ class NautexAPIClient:
         else:
             raise NautexAPIError(f"Request failed after {max_retries} attempts")
 
-    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None) -> APIResponse:
+    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None, from_mcp: bool = False) -> APIResponse:
         """Make a GET request.
 
         Args:
             endpoint_url: Full endpoint URL
             headers: Request headers
             timeout: Optional custom timeout in seconds
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             Parsed JSON response
         """
+        # Add from_mcp query parameter if True
+        if from_mcp:
+            separator = "&" if "?" in endpoint_url else "?"
+            endpoint_url += f"{separator}from_mcp=true"
+            
         resp = await self._request("GET", endpoint_url, headers, timeout=timeout)
         return APIResponse(**resp)
 
@@ -253,7 +259,8 @@ class NautexAPIClient:
         self, 
         endpoint_url: str, 
         headers: Dict[str, str], 
-        json_payload: Dict[str, Any]
+        json_payload: Dict[str, Any],
+        from_mcp: bool = False
     ) -> Dict[str, Any]:
         """Make a POST request.
 
@@ -261,10 +268,16 @@ class NautexAPIClient:
             endpoint_url: Full endpoint URL
             headers: Request headers
             json_payload: JSON request body
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             Parsed JSON response
         """
+        # Add from_mcp query parameter if True
+        if from_mcp:
+            separator = "&" if "?" in endpoint_url else "?"
+            endpoint_url += f"{separator}from_mcp=true"
+            
         return await self._request("POST", endpoint_url, headers, json_payload)
 
     def setup_token(self, token: str | Callable[[], None]) -> None:
@@ -455,11 +468,12 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in list_projects: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def list_implementation_plans(self, project_id: str) -> List[ImplementationPlan]:
+    async def list_implementation_plans(self, project_id: str, from_mcp: bool = False) -> List[ImplementationPlan]:
         """List implementation plans for a specific project.
 
         Args:
             project_id: ID of the project
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             List of implementation plans
@@ -471,7 +485,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}")
 
         try:
-            response_data = await self.get(url, headers)
+            response_data = await self.get(url, headers, from_mcp=from_mcp)
 
             # Parse response into list of ImplementationPlan models
             plans_data = response_data.data.get('plans', [])
@@ -484,12 +498,13 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in list_implementation_plans: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_next_task(self, project_id: str, plan_id: str) -> Optional[Task]:
+    async def get_next_task(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional[Task]:
         """Get the next available task for a project/plan.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             Next task or None if no tasks available
@@ -501,7 +516,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}/{self.ENDPOINT_TASKS}/next")
 
         try:
-            response_data = await self.get(url, headers)
+            response_data = await self.get(url, headers, from_mcp=from_mcp)
 
             # Handle case where no task is available
             if not response_data or 'task' not in response_data:
@@ -526,7 +541,8 @@ class NautexAPIClient:
         self, 
         project_id: str, 
         plan_id: str, 
-        task_designators: List[str]
+        task_designators: List[str],
+        from_mcp: bool = False
     ) -> List[Task]:
         """Get information for specific tasks.
 
@@ -534,6 +550,7 @@ class NautexAPIClient:
             project_id: ID of the project
             plan_id: ID of the implementation plan
             task_designators: List of task identifiers
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             List of tasks
@@ -550,7 +567,7 @@ class NautexAPIClient:
         }
 
         try:
-            response_data = await self.post(url, headers, request_data)
+            response_data = await self.post(url, headers, request_data, from_mcp=from_mcp)
             logger.debug(f"Successfully retrieved {len(response_data.get('tasks', []))} tasks for project {project_id}, plan {plan_id}")
 
             # Parse response into list of Task models
@@ -569,7 +586,8 @@ class NautexAPIClient:
         project_id: str, 
         plan_id: str, 
         task_designator: str, 
-        status: str
+        status: str,
+        from_mcp: bool = False
     ) -> Task:
         """Update the status of a task.
 
@@ -578,6 +596,7 @@ class NautexAPIClient:
             plan_id: ID of the implementation plan
             task_designator: Task identifier
             status: New status for the task
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             Updated task
@@ -594,7 +613,7 @@ class NautexAPIClient:
         }
 
         try:
-            response_data = await self.post(url, headers, request_data)
+            response_data = await self.post(url, headers, request_data, from_mcp=from_mcp)
             logger.debug(f"Successfully updated task {task_designator} status to {status}")
 
             # Parse response into Task model
@@ -613,7 +632,8 @@ class NautexAPIClient:
         project_id: str, 
         plan_id: str, 
         task_designator: str, 
-        content: str
+        content: str,
+        from_mcp: bool = False
     ) -> Dict[str, Any]:
         """Add a note to a task.
 
@@ -622,6 +642,7 @@ class NautexAPIClient:
             plan_id: ID of the implementation plan
             task_designator: Task identifier
             content: Note content
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             Confirmation dictionary
@@ -638,7 +659,7 @@ class NautexAPIClient:
         }
 
         try:
-            response_data = await self.post(url, headers, request_data)
+            response_data = await self.post(url, headers, request_data, from_mcp=from_mcp)
             logger.debug(f"Successfully added note to task {task_designator}")
 
             # Return confirmation
@@ -660,7 +681,8 @@ class NautexAPIClient:
         self, 
         project_id: str, 
         plan_id: str, 
-        operations: List["TaskOperation"]
+        operations: List["TaskOperation"],
+        from_mcp: bool = False
     ) -> Dict[str, Any]:
         """Update multiple tasks in a batch operation.
 
@@ -671,6 +693,7 @@ class NautexAPIClient:
                 - task_designator: The designator of the task to update
                 - updated_status: Optional new status for the task
                 - new_note: Optional new note to add to the task
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             API response containing the results of the operations
@@ -686,7 +709,7 @@ class NautexAPIClient:
         request_data = TaskOperationRequest(operations=operations).model_dump()
 
         try:
-            response_data = await self.post(url, headers, request_data)
+            response_data = await self.post(url, headers, request_data, from_mcp=from_mcp)
             logger.debug(f"Successfully executed batch update for {len(operations)} tasks")
 
             # Return the API response
@@ -699,13 +722,14 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in update_tasks_batch: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_document_tree(self, project_id: str, doc_designator: str) -> Optional[Document]:
+    async def get_document_tree(self, project_id: str, doc_designator: str, from_mcp: bool = False) -> Optional[Document]:
         """
         Get a document tree by designator.
 
         Args:
             project_id: The ID of the project
             doc_designator: The designator of the document
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             A Document object containing the document tree, or None if the document was not found
@@ -715,7 +739,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/documents/{doc_designator}/tree")
 
         try:
-            response = await self.get(url, headers)
+            response = await self.get(url, headers, from_mcp=from_mcp)
 
             # Handle APIResponse wrapper
             if response.status == "success" and response.data:
@@ -737,12 +761,13 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in get_document_tree: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_implementation_plan(self, project_id: str, plan_id: str) -> Optional[ImplementationPlan]:
+    async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional[ImplementationPlan]:
         """Get a specific implementation plan by plan_id.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             An ImplementationPlan object containing the plan details, or None if the plan was not found
@@ -755,7 +780,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}")
 
         try:
-            response = await self.get(url, headers)
+            response = await self.get(url, headers, from_mcp=from_mcp)
 
             # Handle APIResponse wrapper
             if response.status == "success" and response.data:
@@ -777,12 +802,13 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in get_implementation_plan: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_next_scope(self, project_id: str, plan_id: str) -> Optional[ScopeContext]:
+    async def get_next_scope(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional[ScopeContext]:
         """Get the next scope for a specific project and plan.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             A ScopeContext object containing the next scope information, or None if no scope is available
@@ -795,7 +821,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}/scope/next")
 
         try:
-            response = await self.get(url, headers)
+            response = await self.get(url, headers, from_mcp=from_mcp)
 
             # Handle case where no scope is available
             if not response.data or 'scope' not in response.data:

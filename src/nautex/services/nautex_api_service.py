@@ -188,11 +188,12 @@ class NautexAPIService:
             logger.error(f"Failed to list projects: {e}")
             raise
 
-    async def list_implementation_plans(self, project_id: str) -> List[ImplementationPlan]:
+    async def list_implementation_plans(self, project_id: str, from_mcp: bool = False) -> List[ImplementationPlan]:
         """List implementation plans for a specific project.
 
         Args:
             project_id: ID of the project
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             List of implementation plans
@@ -201,17 +202,18 @@ class NautexAPIService:
             NautexAPIError: If API call fails
         """
         try:
-            return await self.api_client.list_implementation_plans(project_id)
+            return await self.api_client.list_implementation_plans(project_id, from_mcp=from_mcp)
         except NautexAPIError as e:
             logger.error(f"Failed to list implementation plans for project {project_id}: {e}")
             raise
 
-    async def next_scope(self, project_id: str, plan_id: str) -> Optional["ScopeContext"]:
+    async def next_scope(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional["ScopeContext"]:
         """Get the next scope for a specific project and plan.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             A ScopeContext object containing the next scope information, or None if no scope is available
@@ -221,12 +223,12 @@ class NautexAPIService:
         """
 
         try:
-            return await self.api_client.get_next_scope(project_id, plan_id)
+            return await self.api_client.get_next_scope(project_id, plan_id, from_mcp=from_mcp)
         except NautexAPIError as e:
             logger.error(f"Failed to get next scope for project {project_id}, plan {plan_id}: {e}")
             raise
 
-    async def update_tasks(self, project_id: str, plan_id: str, operations: List["TaskOperation"]) -> APIResponse:
+    async def update_tasks(self, project_id: str, plan_id: str, operations: List["TaskOperation"], from_mcp: bool = False) -> APIResponse:
         """Update multiple tasks in a batch operation.
 
         Args:
@@ -236,6 +238,7 @@ class NautexAPIService:
                 - task_designator: The designator of the task to update
                 - updated_status: Optional new status for the task
                 - new_note: Optional new note to add to the task
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             API response containing the results of the operations
@@ -245,18 +248,19 @@ class NautexAPIService:
         """
 
         try:
-            response_data = await self.api_client.update_tasks_batch(project_id, plan_id, operations)
+            response_data = await self.api_client.update_tasks_batch(project_id, plan_id, operations, from_mcp=from_mcp)
             return APIResponse.model_validate(response_data)
         except NautexAPIError as e:
             logger.error(f"Failed to execute batch task update: {e}")
             raise
 
-    async def get_implementation_plan(self, project_id: str, plan_id: str) -> Optional["ImplementationPlan"]:
+    async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional["ImplementationPlan"]:
         """Get a specific implementation plan by plan_id.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             An ImplementationPlan object containing the plan details, or None if the plan was not found
@@ -266,17 +270,18 @@ class NautexAPIService:
         """
 
         try:
-            return await self.api_client.get_implementation_plan(project_id, plan_id)
+            return await self.api_client.get_implementation_plan(project_id, plan_id, from_mcp=from_mcp)
         except NautexAPIError as e:
             logger.error(f"Failed to get implementation plan {plan_id} for project {project_id}: {e}")
             raise
 
-    async def get_document_tree(self, project_id: str, doc_designator: str) -> Optional["Document"]:
+    async def get_document_tree(self, project_id: str, doc_designator: str, from_mcp: bool = False) -> Optional["Document"]:
         """Get a document tree by designator.
 
         Args:
             project_id: The ID of the project
             doc_designator: The designator of the document
+            from_mcp: Whether the request is coming from MCP
 
         Returns:
             A Document object containing the document tree, or None if the document was not found
@@ -286,7 +291,7 @@ class NautexAPIService:
         """
 
         try:
-            return await self.api_client.get_document_tree(project_id, doc_designator)
+            return await self.api_client.get_document_tree(project_id, doc_designator, from_mcp=from_mcp)
         except NautexAPIError as e:
             logger.error(f"Failed to get document tree for {doc_designator} in project {project_id}: {e}")
             raise

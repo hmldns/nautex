@@ -332,6 +332,10 @@ class SetupScreen(Screen):
         self.app.log(f"Implementation plan selection changed: {selected_item.name if hasattr(selected_item, 'name') else selected_item}")
 
         self.config_service.config.plan_id = selected_item.id
+
+        # touching the plan for pushing notification for an onboarding process
+        plan = await self.api_service.get_implementation_plan(self.config_service.config.project_id,
+                                                              self.config_service.config.plan_id)
         self.config_service.save_configuration()
 
 

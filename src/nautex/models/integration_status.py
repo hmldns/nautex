@@ -46,6 +46,7 @@ class IntegrationStatus:
     def plan_selected(self):
         return self.config and self.config.plan_id
 
+    @property
     def agent_type_selected(self):
         return self.config.agent_type_selected
 
@@ -66,6 +67,7 @@ class IntegrationStatus:
             self.api_connected,
             self.project_selected,
             self.plan_selected,
+            self.agent_type_selected,
             self.mcp_config_set,
             self.agent_rules_set,
         ])
@@ -91,7 +93,7 @@ class IntegrationStatus:
         if not self.plan_selected:
             return f"Implementation plan not selected - {mcp_prefix}select plan in list"
 
-        if not self.agent_type_selected():
+        if not self.agent_type_selected:
             return f"Agent type not selected - {mcp_prefix}press 'Ctrl+Y' to select agent type"
 
         if not self.mcp_config_set:

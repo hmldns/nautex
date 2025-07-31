@@ -70,13 +70,13 @@ class IntegrationStatusPanel(HorizontalGroup):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.status_network = StatusDisplay("Connection")
-        self.status_api =     StatusDisplay("API")
-        self.status_project = StatusDisplay("Project")
-        self.status_plan =    StatusDisplay("Plan")
-        self.status_mcp =     StatusDisplay("MCP Config")
-        self.agent_rules =     StatusDisplay("Agent Rules")
-
+        self.status_network =       StatusDisplay("Connection")
+        self.status_api =           StatusDisplay("API")
+        self.status_project =       StatusDisplay("Project")
+        self.status_plan =          StatusDisplay("Plan")
+        self.status_agent_type  =   StatusDisplay("Agent Type")
+        self.status_mcp =           StatusDisplay("MCP Config")
+        self.agent_rules =          StatusDisplay("Agent Rules")
 
         self.border_title = "Integration Status"
 
@@ -86,6 +86,7 @@ class IntegrationStatusPanel(HorizontalGroup):
         yield self.status_api
         yield self.status_project
         yield self.status_plan
+        yield self.status_agent_type
         yield self.status_mcp
         yield self.agent_rules
 
@@ -96,5 +97,6 @@ class IntegrationStatusPanel(HorizontalGroup):
         self.status_api.update_status(integration_status.api_connected)
         self.status_project.update_status(integration_status.project_selected)
         self.status_plan.update_status(integration_status.plan_selected)
+        self.status_agent_type.update_status(integration_status.agent_type_selected)
         self.status_mcp.update_status(integration_status.mcp_config_set)
         self.agent_rules.update_status(integration_status.agent_rules_set)

@@ -27,6 +27,10 @@ NEVER EDIT FILES IN `.nautex` directory
 
 # Commands
 
+## `status`
+
+Whenever you asked to get nautex status, you should call this command, it is ok to call it before other commands to check that integration works correctly.
+
 ## `next_scope`
 
 This is the primary command to fetch the next set of tasks from the Nautex platform. When called, it returns an object containing the tasks that the agent should work on.

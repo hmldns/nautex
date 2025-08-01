@@ -463,7 +463,7 @@ class SetupScreen(Screen):
         # Get agent_type from config
         agent_type = self.config_service.config.agent_type
 
-        mcp_config_status, _ = self.mcp_config_service.check_mcp_configuration()
+        mcp_config_status, _ = await self.mcp_config_service.check_mcp_configuration()
         agent_rules_status, _ = self.agent_rules_service.validate_rules()
 
         self.system_info_widget.update_system_info(

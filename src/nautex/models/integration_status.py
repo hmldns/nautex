@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 from .config import NautexConfig
 from ..api.api_models import AccountInfo, ImplementationPlan
 from ..prompts.consts import CMD_NAUTEX_SETUP
-from ..services.mcp_config_service import MCPConfigStatus
+from ..utils.mcp_utils import MCPConfigStatus
 from ..agent_setups.base import AgentRulesStatus
 
 

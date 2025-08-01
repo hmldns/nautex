@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional, Any
 from pathlib import Path
 
-from ..services.mcp_config_service import MCPConfigStatus
+from ..utils.mcp_utils import MCPConfigStatus
 from ..api.api_models import Task
 
 

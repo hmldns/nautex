@@ -1,5 +1,6 @@
 """Dialog widgets for configuration operations in the Nautex TUI."""
 
+import asyncio
 from pathlib import Path
 from typing import Literal, Optional, Callable, List
 
@@ -12,7 +13,8 @@ from textual.widgets._select import NoSelection
 
 from ...agent_setups.base import AgentRulesStatus
 from ...models.config import AgentType
-from ...services.mcp_config_service import MCPConfigService, MCPConfigStatus
+from ...services.mcp_config_service import MCPConfigService
+from ...utils.mcp_utils import MCPConfigStatus
 from ...services.agent_rules_service import AgentRulesService
 from ...services.config_service import ConfigurationService
 from ...services.integration_status_service import IntegrationStatusService
@@ -103,7 +105,7 @@ class ConfigWriteDialog(Screen):
         self.title_text = title
         self.message_text = message
         self.status_text = ""
-        self.path_text = ""
+        self.info_text = ""
         self.result_text = ""
         self.error_text = ""
         self.button_handlers = {}
@@ -116,7 +118,7 @@ class ConfigWriteDialog(Screen):
                     yield Static(self.title_text, id="title")
                     yield Static(self.message_text, id="message")
                     yield Static(self.status_text, id="status")
-                    yield Static(self.path_text, id="path")
+                    yield Static(self.info_text, id="path")
                     yield Static(self.result_text, id="result", classes="success")
                     yield Static(self.error_text, id="error", classes="error")
                     with Horizontal(id="buttons"):
@@ -137,7 +139,13 @@ class ConfigWriteDialog(Screen):
         if event.button.id == "close":
             self.dismiss(False)
         elif event.button.id in self.button_handlers:
-            self.button_handlers[event.button.id]()
+            handler = self.button_handlers[event.button.id]
+            if asyncio.iscoroutinefunction(handler):
+                # If the handler is async, create a task for it
+                asyncio.create_task(handler())
+            else:
+                # If the handler is not async, call it directly
+                handler()
 
     def on_key(self, event: events.Key) -> None:
         """Handle key events for keyboard shortcuts."""
@@ -145,8 +153,13 @@ class ConfigWriteDialog(Screen):
             event.stop()
             self.dismiss(False)
 
-    def update_status_display(self, status_text: str = None, path_text: str = None):
-        """Update status and path display."""
+    def update_status_display(self, status_text: str = None, info_text: str = None):
+        """Update status and information display.
+        
+        Args:
+            status_text: The status text to display
+            info_text: The information text to display
+        """
         if status_text is not None:
             self.status_text = status_text
             try:
@@ -154,10 +167,10 @@ class ConfigWriteDialog(Screen):
             except:
                 pass
 
-        if path_text is not None:
-            self.path_text = path_text
+        if info_text is not None:
+            self.info_text = info_text
             try:
-                self.query_one("#path", Static).update(path_text)
+                self.query_one("#path", Static).update(info_text)
             except:
                 pass
 
@@ -189,29 +202,35 @@ class MCPConfigWriteDialog(ConfigWriteDialog):
     """Dialog for writing MCP configuration."""
 
     def __init__(self, mcp_service: MCPConfigService, **kwargs):
-        # Load current status first
         self.mcp_service = mcp_service
-        mcp_status, mcp_path = mcp_service.check_mcp_configuration()
-
-        # Prepare initial content
-        status_text = self._format_status_text(mcp_status)
-        path_text = self._format_path_text(mcp_status, mcp_path)
-
+        
+        # Initialize with default values
+        self.mcp_status = MCPConfigStatus.NOT_FOUND
+        self.mcp_path = None
+        
         super().__init__(
             title="Manage MCP Configuration",
             message="Configure MCP integration for your agent",
             **kwargs
         )
-
-        # Set initial status data
-        self.mcp_status = mcp_status
-        self.mcp_path = mcp_path
-        self.status_text = status_text
-        self.path_text = path_text
-
+        
+        # Set initial status text
+        self.status_text = "Loading configuration status..."
+        self.info_text = "Please wait..."
+        
         # Register button handlers
         self.register_button_handler("write_config", self.write_config)
         self.register_button_handler("update_config", self.write_config)
+        
+    async def on_mount(self) -> None:
+
+        # Load current status
+        self.mcp_status, self.mcp_path = await self.mcp_service.check_mcp_configuration()
+        
+        # Update status display
+        status_text = self._format_status_text(self.mcp_status)
+        info_text = await self._format_info_text(self.mcp_status, self.mcp_path)
+        self.update_status_display(status_text=status_text, info_text=info_text)
 
     def _format_status_text(self, status: MCPConfigStatus) -> str:
         """Format status text based on MCP status."""
@@ -222,13 +241,9 @@ class MCPConfigWriteDialog(ConfigWriteDialog):
         else:  # NOT_FOUND
             return f"Status: [red]NOT FOUND[/red] - MCP configuration not found"
 
-    def _format_path_text(self, status: MCPConfigStatus, path: Optional[Path]) -> str:
-        """Format path text based on current MCP path."""
-        if path:
-            return f"Current path: {path2display(path)}"
-        else:
-            config_path = self.mcp_service.get_config_path()
-            return f"Will be written to: {config_path}"
+    async def _format_info_text(self, status: MCPConfigStatus, path: Optional[Path]) -> str:
+        """Format information text based on current MCP configuration."""
+        return await self.mcp_service.get_configuration_info()
 
     def get_buttons(self):
         """Get the buttons to display in the dialog based on current state."""
@@ -247,16 +262,17 @@ class MCPConfigWriteDialog(ConfigWriteDialog):
                 }
             }
 
-    def write_config(self):
+    async def write_config(self):
         """Write the MCP configuration."""
-        success = self.mcp_service.write_mcp_configuration()
+        success = await self.mcp_service.write_mcp_configuration()
         if success:
             self.update_result(True, "Successfully wrote MCP configuration")
             # Refresh status after successful write
-            self.mcp_status, self.mcp_path = self.mcp_service.check_mcp_configuration()
+            self.mcp_status, self.mcp_path = await self.mcp_service.check_mcp_configuration()
+            info_text = await self._format_info_text(self.mcp_status, self.mcp_path)
             self.update_status_display(
                 status_text=self._format_status_text(self.mcp_status),
-                path_text=self._format_path_text(self.mcp_status, self.mcp_path)
+                info_text=info_text
             )
         else:
             self.update_result(False, "Failed to write MCP configuration")
@@ -375,7 +391,7 @@ class AgentRulesWriteDialog(ConfigWriteDialog):
         self.rules_status = rules_status
         self.rules_path = rules_path
         self.status_text = status_text
-        self.path_text = rules_info
+        self.info_text = rules_info
 
         # Register button handlers
         self.register_button_handler("write_rules", self.write_config)
@@ -426,7 +442,7 @@ class AgentRulesWriteDialog(ConfigWriteDialog):
             rules_info = self.rules_service.get_rules_info()
             self.update_status_display(
                 status_text=self._format_status_text(self.rules_status),
-                path_text=rules_info
+                info_text=rules_info
             )
         else:
             self.update_result(False, "Failed to write agent rules")

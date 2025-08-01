@@ -5,7 +5,8 @@ import asyncio
 from typing import Optional, Tuple, Dict, Any, Callable
 from .config_service import ConfigurationService, ConfigurationError
 from .nautex_api_service import NautexAPIService
-from .mcp_config_service import MCPConfigService, MCPConfigStatus
+from .mcp_config_service import MCPConfigService
+from ..utils.mcp_utils import MCPConfigStatus
 from .agent_rules_service import AgentRulesService
 
 from ..models.integration_status import IntegrationStatus
@@ -61,15 +62,15 @@ class IntegrationStatusService:
             await self._update_implementation_plan(status)
 
             if self.config_service.config.agent_type_selected:
-                self._check_mcp_status(status)
+                await self._check_mcp_status(status)
                 self._check_agent_rules_status(status)
 
         return status
 
-    def _check_mcp_status(self, status: IntegrationStatus) -> None:
+    async def _check_mcp_status(self, status: IntegrationStatus) -> None:
         """Check MCP integration status."""
         logger.debug("Checking MCP configuration...")
-        status.mcp_status, status.mcp_config_path = self.mcp_config_service.check_mcp_configuration()
+        status.mcp_status, status.mcp_config_path = await self.mcp_config_service.check_mcp_configuration()
         logger.debug(f"MCP status: {status.mcp_status}, path: {status.mcp_config_path}")
 
     def _check_agent_rules_status(self, status: IntegrationStatus) -> None:

@@ -5,7 +5,7 @@ from textual.widgets import DataTable, Static
 from textual.containers import Vertical
 from textual.reactive import reactive
 
-from ...services.mcp_config_service import MCPConfigStatus
+from ...utils.mcp_utils import MCPConfigStatus
 from ...agent_setups.base import AgentRulesStatus
 
 

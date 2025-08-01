@@ -2,13 +2,14 @@
 from pathlib import Path
 from typing import Tuple, Optional
 
-from .base import AgentSetupBase, AgentRulesStatus
+from .base import AgentRulesStatus
+from .files_based_mcp import FilesBasedMCPAgentSetup
 from ..models.config import AgentType
 from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..utils import path2display
 
 
-class CursorAgentSetup(AgentSetupBase):
+class CursorAgentSetup(FilesBasedMCPAgentSetup):
     """Cursor agent setup and configuration.
 
     This class provides Cursor-specific implementation of the agent setup interface.

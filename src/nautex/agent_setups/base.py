@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 import logging
 import warnings
+import asyncio
+
+from ..utils.mcp_utils import MCPConfigStatus, validate_mcp_file, write_mcp_configuration
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -96,6 +99,41 @@ class AgentSetupBase(ABC):
     @abstractmethod
     def ensure_rules(self) -> bool:
         raise UnboundLocalError()
+        
+    @abstractmethod
+    async def get_mcp_configuration_info(self) -> str:
+        """Get information about the MCP configuration.
+        
+        Returns:
+            String with information about the MCP configuration path
+        """
+        raise NotImplementedError()
+        
+    @abstractmethod
+    async def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:
+        """Check the status of MCP configuration integration.
+
+        Checks if the MCP configuration file exists and validates the 'nautex' entry against template.
+
+        Returns:
+            Tuple of (status, path_to_config_file)
+            - MCPConfigStatus.OK: Nautex entry exists and is correctly configured
+            - MCPConfigStatus.MISCONFIGURED: File exists but nautex entry is incorrect
+            - MCPConfigStatus.NOT_FOUND: No MCP configuration file found or no nautex entry
+        """
+        raise NotImplementedError()
+        
+    @abstractmethod
+    async def write_mcp_configuration(self) -> bool:
+        """Write or update MCP configuration with Nautex CLI server entry.
+
+        Reads the target MCP configuration file (or creates if not exists), adds/updates
+        the 'nautex' server entry in mcpServers object, and saves the file.
+
+        Returns:
+            True if configuration was successfully written, False otherwise
+        """
+        raise NotImplementedError()
 
 
 class AgentSetupNotSelected(AgentSetupBase):
@@ -109,4 +147,28 @@ class AgentSetupNotSelected(AgentSetupBase):
         return AgentRulesStatus.AGENT_TYPE_NOT_SELECTED, Path("")
 
     def ensure_rules(self) -> bool:
+        return False
+        
+    async def get_mcp_configuration_info(self) -> str:
+        """Get information about the MCP configuration.
+        
+        Returns:
+            String with information about the MCP configuration path
+        """
+        return "Agent Type not selected."
+        
+    async def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:
+        """Check the status of MCP configuration integration.
+
+        Returns:
+            Tuple of (status, path_to_config_file) indicating that no agent type is selected
+        """
+        return MCPConfigStatus.NOT_FOUND, None
+        
+    async def write_mcp_configuration(self) -> bool:
+        """Write or update MCP configuration with Nautex CLI server entry.
+
+        Returns:
+            False since no agent type is selected
+        """
         return False

@@ -126,6 +126,7 @@ You should see the terminal user interface
    - Chat with the bot for capturing requirements. 
    - After initial documents generation Create files map of the project inside the map.
    - Then, after reviewing resulted map create implementation plan.
+   - You can follow `Connect Coding Agent` onboarding flow or setup via TUI. Button will disappear on first MCP request
    - Go back to the CLI UI
 - Select project
 - Select implementation plan
@@ -149,18 +150,20 @@ You should see the terminal user interface
   }
 }
 ```
+
+**Note:** At config update Cursor asks via popup either you want to enable new MCP, answer yes. In any case in 
+`File -> Preferences -> Cursor Preferences -> Tools & Integrations` nautex MCP should be enabled and green. 
+
 - Rules are in `.cursor/rules/` folder via TUI command.
 </details>
 
 <details>
 <summary>For Claude Code</summary>
 
-Additionally to TUI setup, add MCP server to Claude via command:
+TUI setup is going to launch this command via a menu for setting up nautex MCP:
 ```
 claude mcp add nautex -s local -- uvx nautex mcp
 ```
-
-Note: you need to set MCP via TUI and via command (will be automated later)
 
 - Rules are in `./CLAUDE.md` after set via TUI.
 </details>

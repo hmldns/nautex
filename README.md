@@ -79,11 +79,11 @@ Once all indicators are green, initiate plan execution.
 
 ![howitworks_integration](doc/howitworks_integration.png)
 
-## Coding in Cursor / Claude Code
+## Coding with Coding Agents
 
 In agent mode, instruct: "pull nautex rules, and proceed with the next scope."
 
-At this stage, your specifications are synchronized in the .nautex directory and accessible to Cursor. The MCP server continuously monitors their relevance.
+At this stage, your specifications are synchronized in the .nautex directory and accessible to the Coding Agent. The MCP server continuously monitors their relevance.
 
 That's it. You then review and accept substantial code segments that fully align with your expectations and requirements.
 

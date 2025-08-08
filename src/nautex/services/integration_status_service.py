@@ -57,6 +57,7 @@ class IntegrationStatusService:
         )
 
         if status.config_loaded:
+
             await self._check_network_connectivity(status)
             await self._check_api_connectivity(status)
             await self._update_implementation_plan(status)

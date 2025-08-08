@@ -71,4 +71,4 @@ class IntegrationStatusWidget(Vertical):
         if integration_status.integration_ready:
             self.status_text.update("✅ Ready to work")
         else:
-            self.status_text.update(f"⚠️ {integration_status.status_message}")
+            self.status_text.update(f"⚠️ {integration_status.get_status_message()}")

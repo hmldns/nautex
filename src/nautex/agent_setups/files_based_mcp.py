@@ -60,7 +60,8 @@ class FilesBasedMCPAgentSetup(AgentSetupBase):
         if mcp_path is not None:
             path_exists = await asyncio.to_thread(lambda: (self.cwd / mcp_path).exists())
             if path_exists:
-                status = await asyncio.to_thread(validate_mcp_file, self.cwd / mcp_path)
+                # Pass the current working directory for cwd validation
+                status = await asyncio.to_thread(validate_mcp_file, self.cwd / mcp_path, self.cwd)
                 return status, self.cwd / mcp_path
 
         # No MCP configuration file found
@@ -72,10 +73,13 @@ class FilesBasedMCPAgentSetup(AgentSetupBase):
 
         Reads the target MCP configuration file (or creates if not exists), adds/updates
         the 'nautex' server entry in mcpServers object, and saves the file.
+        
+        The current working directory (cwd) is added to the configuration.
 
         Returns:
             True if configuration was successfully written, False otherwise
         """
         # Get the MCP configuration path
         target_path = self.cwd / self.get_agent_mcp_config_path()
-        return await asyncio.to_thread(write_mcp_configuration, target_path)
+        # Pass the current working directory to be added to the configuration
+        return await asyncio.to_thread(write_mcp_configuration, target_path, self.cwd)

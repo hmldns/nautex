@@ -72,8 +72,8 @@ class IntegrationStatus:
             self.agent_rules_set,
         ])
 
-    @property
-    def status_message(self, from_mcp: bool = False) -> str:
+
+    def get_status_message(self, from_mcp: bool = False) -> str:
         """Returns a status message based on the first failed check.
 
         Args:

@@ -126,9 +126,10 @@ class MCPService:
 
 async def mcp_handle_status() -> Dict[str, Any]:
     """Implementation of the status functionality."""
+    service = _instance
+
     try:
         logger.debug("Executing status tool")
-        service = _instance
         status = await service.integration_status_service.get_integration_status()
 
         if service.config.project_id and service.config.plan_id:
@@ -145,7 +146,7 @@ async def mcp_handle_status() -> Dict[str, Any]:
         
         # Prepare response data
         response_data = {
-            "status_message": status.status_message,
+            "status_message": status.get_status_message(from_mcp=True),
         }
 
         return {
@@ -156,7 +157,8 @@ async def mcp_handle_status() -> Dict[str, Any]:
         logger.error(f"Error in status tool: {e}")
         return {
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "cwd": str(service.config_service.cwd)
         }
 
 @mcp.tool

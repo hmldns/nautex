@@ -72,7 +72,7 @@ JSON fields are just examples "//" escaped lines are explanations.
       "status": "NOT_STARTED",
       "type": "CODE",
       "requirements": ["PRD-201"], // reference to the specific requirements in PRD file (document)
-      "files": ["src/services/auth_service.py", "src/api/auth_routes.py"], // reference to files related to the task and expected to be updated / created; referenced directory will have trailing "/", e.g. src/services/
+      "files": ["src/services/auth_service.py", "src/api/auth_routes.py"], // reference to files related to the task and expected to be updated / created; referenced directory will have trailing "/", e.g. src/services/ 
       "context_note": "T",
       "instructions": "",
       "in_focus": true,
@@ -211,6 +211,7 @@ Each task object has a `type` that informs the agent about the nature of the wor
 -   **Follow Instructions:** The `instructions` field of a task provides general guidance according to the task type and status.
 -   **Be Methodical:** Address reasonable number of tasks at a time. Complete the full workflow for a task (`IN_PROGRESS` -> Implement -> `DONE`) before moving to the next.
 -   **Communicate Clearly:** Use the `tasks_update` command to provide clear and immediate feedback on your progress. This is essential for the health of the project on the Nautex platform.
+-   **Manage referenced files consistently:** Operate with files referenced by tasks, be aware that all paths are relative to the project root.
 
 # Dealing with Errors
 

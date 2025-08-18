@@ -300,6 +300,41 @@ class Document(BaseModel):
 
         return result
 
+    def _render_relations(self, node: Node) -> str:
+        """Render relations grouped by type.
+        
+        Groups relations by type and formats them as:
+        Type1: Req1, Req2, Req3 | Type2: Req4, Req5
+        
+        Args:
+            node: The node containing relations to render
+            
+        Returns:
+            Formatted relations string or empty string if no relations
+        """
+        if not node.relations:
+            return ""
+        
+        # Group relations by type
+        relations_by_type = {}
+        for relation in node.relations:
+            relation_type = relation.get('type', 'unknown')
+            target = relation.get('target', '')
+            if target:
+                if relation_type not in relations_by_type:
+                    relations_by_type[relation_type] = []
+                relations_by_type[relation_type].append(target)
+        
+        # Create formatted relations string
+        relation_parts = []
+        for rel_type, targets in relations_by_type.items():
+            if targets:
+                targets_str = ", ".join(targets)
+                relation_parts.append(f"{rel_type.title()}: {targets_str}")
+
+        rels = ' | '.join(relation_parts) if relation_parts else ""
+
+        return f"`Relations {rels}`" if rels else ""
 
     def _render_node_markdown(self, node: Node, lines: List[str], depth: int = 1):
         """
@@ -320,20 +355,35 @@ class Document(BaseModel):
             else:
                 return ""
 
+        designator = _render_designator(node)
+
         if is_chapter:
             # Add chapter heading with appropriate depth
             heading_level = "#" * (depth + 1)  # +1 because document title is h1
-            lines.append(f"{heading_level} {_render_designator(node)} {node.title}")
-            lines.append("")
+            lines.append(f"{heading_level} {designator} {node.title}")
+            # lines.append("")
 
         # Add content if present
         if node.content:
+            relations_str = self._render_relations(node)
+            content_lines = node.content.strip().split('\n')
+            is_multiline = len(content_lines) > 1
+            
             if is_chapter:
                 # For chapters, content goes after the heading
                 lines.append(node.content)
+                if relations_str:
+                    lines.append(f"{relations_str}")
             else:
-                # For non-chapters (atomic requirements), content is a paragraph starting with designator
-                lines.append(f"{_render_designator(node)} {node.content}")
+
+                if is_multiline:
+                    lines.append(f"{designator}")
+                    lines.extend(content_lines)
+                    if relations_str:
+                        lines.append(f"{relations_str}")
+                else:
+                    lines.append(f"{designator} {node.content} {relations_str}")
+
             lines.append("")
 
         # Process children recursively

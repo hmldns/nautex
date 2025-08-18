@@ -18,7 +18,10 @@ The core workflow is as follows:
 2.  **Acknowledge Tasks:** After receiving tasks, update their status to `In Progress` using the `tasks_update` for those tasks that are marked as "In Focus" AND are going to be actionable withing one coherent chunk of Coding Agent work.
     This signals to the platform that you have started working on them and it is helpful for you for tasks handover between chat sessions.
 3.  **Compose relevant context:** The Coding Agent must compose the context from the documents referenced in the tasks and understand their context and goals. 
-    Reading full requirements document is always preferable. Alternatively search by full designators would work, make sure you pull the full records content from adjacent lines. Always resolve other requirements references by other requirements. 
+    - Reading full requirements document is always preferable. 
+    - Alternatively search by full designators would work, make sure you pull the full records content from adjacent lines. 
+    - Always resolve other requirements references by other requirements.
+    - When referenced document element is section, whole section should be loaded into context. 
 4.  **Implement Tasks:** Analyze the task details (description, type, requirements, associated files) and perform the necessary actions, such as writing or modifying code.
 5.  **Complete Tasks:** Once a task is fully implemented, update its status to `Done` using the `tasks_update` command.
 6.  **Repeat:** Continue this cycle until `next_scope` returns no new tasks.

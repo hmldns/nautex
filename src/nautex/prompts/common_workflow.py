@@ -22,6 +22,8 @@ The core workflow is as follows:
     - Alternatively search by full designators would work, make sure you pull the full records content from adjacent lines. 
     - Always resolve other requirements references by other requirements.
     - When referenced document element is section, whole section should be loaded into context. 
+    - Navigate by hierarchy: Major sections start with ## [TRD-X], subsections with ### [TRD-XXX], use document outline or search these patterns to jump between topics, always absorb whole relevant sections.
+
 4.  **Implement Tasks:** Analyze the task details (description, type, requirements, associated files) and perform the necessary actions, such as writing or modifying code.
 5.  **Complete Tasks:** Once a task is fully implemented, update its status to `Done` using the `tasks_update` command.
 6.  **Repeat:** Continue this cycle until `next_scope` returns no new tasks.

@@ -84,7 +84,7 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
     INST_START_CODING = "Implement the required files changes for this task. "
     INST_CONTINUE_CODING = "Continue the implementation of this coding task. "
     INST_START_REVIEW = "Guide user through results review for the scope tasks. "
-    INST_CONTINUE_REVIEW = "Continue reviewing process with user, gaining feedback from them. "
+    INST_CONTINUE_REVIEW = f"Continue reviewing process with user, gaining feedback from them. Don't put status to \"{TaskStatus.DONE}\" until direct confirmation is provided."
     INST_START_TESTING = "Test the implementation of the tasks in the scope according to the requirements and tasks. "
     INST_CONTINUE_TESTING = "Continue testing of the tasks in the scope according to the requirements and tasks. "
     INST_PROVIDE_INPUT = "Provide the required input data and info from user for this task. "
@@ -96,25 +96,27 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
     INST_TASK_DONE = "Completed task."
     INST_TASK_BLOCKED = "This task is blocked. Address the blocking issues before proceeding. "
 
+    INST_PUT_STATUS_TO_IN_PROGRESS = f"Put task status to \"{TaskStatus.IN_PROGRESS}\". "
+
     # --- Lookup Table for Task Instructions ---
     # The table is structured as: (status, type, mode) -> (context_note, instruction)
     # This table assumes the task is in focus (is_in_focus=True).
     in_focus_instruction_map = {
         # --- Mode: ExecuteSubtasks ---
         (TaskStatus.NOT_STARTED, TaskType.CODE, ScopeContextMode.ExecuteSubtasks): ("",
-                                                                                    INST_START_CODING),
+                                                                                    INST_START_CODING + INST_PUT_STATUS_TO_IN_PROGRESS),
         (TaskStatus.IN_PROGRESS, TaskType.CODE, ScopeContextMode.ExecuteSubtasks): ("",
                                                                                     INST_CONTINUE_CODING),
         (TaskStatus.NOT_STARTED, TaskType.REVIEW, ScopeContextMode.ExecuteSubtasks): ("",
-                                                                                      INST_START_REVIEW),
+                                                                                      INST_START_REVIEW + INST_PUT_STATUS_TO_IN_PROGRESS),
         (TaskStatus.IN_PROGRESS, TaskType.REVIEW, ScopeContextMode.ExecuteSubtasks): ("",
                                                                                       INST_START_REVIEW + INST_CONTINUE_REVIEW),
         (TaskStatus.NOT_STARTED, TaskType.TEST, ScopeContextMode.ExecuteSubtasks): ("",
-                                                                                    INST_START_TESTING),
+                                                                                    INST_START_TESTING + INST_PUT_STATUS_TO_IN_PROGRESS),
         (TaskStatus.IN_PROGRESS, TaskType.TEST, ScopeContextMode.ExecuteSubtasks): ("",
                                                                                     INST_CONTINUE_TESTING),
         (TaskStatus.NOT_STARTED, TaskType.INPUT, ScopeContextMode.ExecuteSubtasks): ("",
-                                                                                     INST_PROVIDE_INPUT),
+                                                                                     INST_PROVIDE_INPUT + INST_PUT_STATUS_TO_IN_PROGRESS),
         (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.ExecuteSubtasks): ("",
                                                                                      INST_CONTINUE_FOR_INPUT),
 
@@ -136,7 +138,9 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
         return ("", INST_TASK_BLOCKED)
 
     # Then check if the task is not in focus
-    if not is_in_focus:
+    if is_in_focus:
+        pass
+    else:
         if has_subtasks:
             return NOTE_IRRELEVANT_TASK, INST_SUBTASKS
         else:

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Tuple, Optional, List, Dict
 
 from .base import AgentSetupBase, AgentRulesStatus
+from .section_managed_rules_mixin import SectionManagedRulesMixin
 from ..models.config import AgentType
 from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..prompts.consts import (
@@ -23,7 +24,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ClaudeAgentSetup(AgentSetupBase):
+class ClaudeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
     """Claude agent setup and configuration.
 
     This class provides Claude-specific implementation of the agent setup interface.
@@ -139,68 +140,8 @@ class ClaudeAgentSetup(AgentSetupBase):
         """Path to the root CLAUDE.md file."""
         return self.cwd / "CLAUDE.md"
 
-    def validate_rules(self) -> Tuple[AgentRulesStatus, Optional[Path]]:
-        """Validate both .nautex/CLAUDE.md and root CLAUDE.md reference section."""
-        rules_path = self.get_rules_path()
-        
-        # Check if .nautex/CLAUDE.md exists with correct content
-        if not rules_path.exists():
-            return AgentRulesStatus.NOT_FOUND, None
-            
-        status = self._validate_rules_file(rules_path, self.workflow_rules_content)
-        if status != AgentRulesStatus.OK:
-            return status, rules_path
-            
-        # Also check if root CLAUDE.md has the reference section with correct content
-        if not self.root_claude_path.exists():
-            return AgentRulesStatus.OUTDATED, rules_path
-            
-        # Check if section exists and has correct content
-        current_content = self.root_claude_path.read_text(encoding='utf-8')
-        section_bounds = self.section_service.find_section_boundaries(current_content)
-        
-        if not section_bounds:
-            return AgentRulesStatus.OUTDATED, rules_path
-        
-        # Extract and compare section content
-        start, end = section_bounds
-        current_section = current_content[start:end]
-        # Use same format as in update_section method
-        expected_section = f"{NAUTEX_SECTION_START}\n\n{NAUTEX_RULES_REFERENCE_CONTENT.strip()}\n\n{NAUTEX_SECTION_END}"
-        
-        if current_section.strip() != expected_section.strip():
-            return AgentRulesStatus.OUTDATED, rules_path
-            
-        return AgentRulesStatus.OK, rules_path
-
-    def ensure_rules(self) -> bool:
-        """Ensure both .nautex/CLAUDE.md and root CLAUDE.md reference exist and are up-to-date."""
-        try:
-            # First check if everything is already valid
-            status, _ = self.validate_rules()
-            if status == AgentRulesStatus.OK:
-                return True  # Nothing to do
-            
-            # Create/update full rules file in .nautex/CLAUDE.md
-            rules_path = self.get_rules_path()
-            rules_path.parent.mkdir(parents=True, exist_ok=True)
-            rules_path.write_text(self.workflow_rules_content, encoding='utf-8')
-            
-            # Ensure root CLAUDE.md has reference section (preserving user content)
-            # This will check content and only update if different
-            self.section_service.ensure_file_with_section(
-                self.root_claude_path,
-                NAUTEX_RULES_REFERENCE_CONTENT,
-                DEFAULT_RULES_TEMPLATE
-            )
-            
-            # Validate again to confirm everything is OK
-            final_status, _ = self.validate_rules()
-            return final_status == AgentRulesStatus.OK
-
-        except Exception as e:
-            logger.error(f"Error ensuring rules: {e}")
-            return False
+    def get_root_rules_path(self) -> Path:
+        return self.root_claude_path
 
     @property
     def workflow_rules_content(self) -> str:
@@ -208,3 +149,9 @@ class ClaudeAgentSetup(AgentSetupBase):
 
     def get_rules_info(self) -> str:
         return f"Rules Path: {path2display(self.get_rules_path())}"
+
+    def get_reference_section_content(self) -> str:
+        return NAUTEX_RULES_REFERENCE_CONTENT
+
+    def get_default_rules_template(self) -> str:
+        return DEFAULT_RULES_TEMPLATE

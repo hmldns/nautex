@@ -13,6 +13,7 @@ from ..models.config import NautexConfig, AgentType
 from ..agent_setups.base import AgentSetupBase, AgentSetupNotSelected
 from ..agent_setups.cursor import CursorAgentSetup
 from ..agent_setups.claude import ClaudeAgentSetup
+from ..agent_setups.codex import CodexAgentSetup
 
 
 class ConfigurationError(Exception):
@@ -76,6 +77,8 @@ class ConfigurationService:
             return CursorAgentSetup(self)
         elif self.config.agent_type == AgentType.CLAUDE:
             return ClaudeAgentSetup(self)
+        elif self.config.agent_type == AgentType.CODEX:
+            return CodexAgentSetup(self)
         else:
             return AgentSetupNotSelected(self, AgentType.NOT_SELECTED.value)
 

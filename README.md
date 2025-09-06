@@ -160,12 +160,45 @@ You should see the terminal user interface
 <details>
 <summary>For Claude Code</summary>
 
-TUI setup is going to launch this command via a menu for setting up nautex MCP:
+TUI setup launches this command to add Nautex MCP:
 ```
 claude mcp add nautex -s local -- uvx nautex mcp
 ```
 
 - Rules are in `./CLAUDE.md` after set via TUI.
+- Verify integration: run `claude mcp list` and ensure an entry like `nautex: uvx nautex mcp - ✓ Connected` is present.
+</details>
+
+<details>
+<summary>For Codex</summary>
+
+Codex uses a file-based MCP config at `~/.codex/config.toml`. Nautex will merge/update this file and create a backup `config.toml.bak` before the first overwrite if needed.
+
+- Rules live under `.nautex/AGENTS.md`, with a managed reference section in the root `AGENTS.md`.
+- Verify integration in Codex: open the MCP command UI (e.g., use the `/mcp` command) and confirm `nautex` is listed/enabled. Alternatively, inspect `~/.codex/config.toml` for a `nautex` entry pointing to `uvx nautex mcp`.
+</details>
+
+<details>
+<summary>For OpenCode</summary>
+
+OpenCode uses a per-project config `opencode.json` in the repository root. Nautex writes/updates this file, preserving unrelated fields and backing up unparsable files once to `opencode.json.bak`.
+
+Minimal required structure written by Nautex:
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "nautex": {
+      "type": "local",
+      "command": ["uvx", "nautex", "mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+- Rules live under `.nautex/AGENTS.md`, with a managed reference section in the root `AGENTS.md`.
+- Verify integration: from OpenCode, invoke the Nautex MCP tool and run `status` (e.g., “nautex: status”). You should see the Nautex server respond. Optionally inspect `opencode.json` as shown above.
 </details>
 
 3. (Optional) Check MCP server response ```uvx nautex mcp test next_scope```

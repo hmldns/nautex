@@ -12,8 +12,8 @@ from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..prompts.consts import (
     NAUTEX_SECTION_START,
     NAUTEX_SECTION_END,
-    NAUTEX_RULES_REFERENCE_CONTENT,
-    DEFAULT_RULES_TEMPLATE
+    DEFAULT_RULES_TEMPLATE,
+    rules_reference_content_for,
 )
 from ..services.section_managed_file_service import SectionManagedFileService
 from ..utils import path2display
@@ -151,7 +151,7 @@ class ClaudeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
         return f"Rules Path: {path2display(self.get_rules_path())}"
 
     def get_reference_section_content(self) -> str:
-        return NAUTEX_RULES_REFERENCE_CONTENT
+        return rules_reference_content_for("CLAUDE.md")
 
     def get_default_rules_template(self) -> str:
         return DEFAULT_RULES_TEMPLATE

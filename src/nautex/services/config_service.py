@@ -14,6 +14,7 @@ from ..agent_setups.base import AgentSetupBase, AgentSetupNotSelected
 from ..agent_setups.cursor import CursorAgentSetup
 from ..agent_setups.claude import ClaudeAgentSetup
 from ..agent_setups.codex import CodexAgentSetup
+from ..agent_setups.opencode import OpenCodeAgentSetup
 
 
 class ConfigurationError(Exception):
@@ -79,6 +80,8 @@ class ConfigurationService:
             return ClaudeAgentSetup(self)
         elif self.config.agent_type == AgentType.CODEX:
             return CodexAgentSetup(self)
+        elif self.config.agent_type == AgentType.OPENCODE:
+            return OpenCodeAgentSetup(self)
         else:
             return AgentSetupNotSelected(self, AgentType.NOT_SELECTED.value)
 

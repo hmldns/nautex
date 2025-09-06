@@ -12,6 +12,8 @@ from ..services.section_managed_file_service import SectionManagedFileService
 from ..prompts.consts import (
     NAUTEX_SECTION_START,
     NAUTEX_SECTION_END,
+    rules_reference_content_for,
+    default_agents_rules_template_for,
 )
 from ..utils import path2display
 from ..utils.mcp_toml_utils import validate_mcp_toml_file, write_mcp_toml_configuration
@@ -19,25 +21,7 @@ from ..utils.mcp_utils import MCPConfigStatus
 import asyncio
 
 
-# Reference section content for Codex AGENT.md (same pattern as Claude, file name adjusted)
-AGENT_RULES_REFERENCE_CONTENT = """# Nautex MCP Integration
-
-This project uses Nautex Model-Context-Protocol (MCP). Nautex manages requirements and task-driven LLM assisted development.
- 
-Whenever user requests to operate with nautex, the following applies: 
-
-- read full Nautex workflow guidelines from `.nautex/AGENTS.md`
-- note that all paths managed by nautex are relative to the project root
-- note primary workflow commands: `next_scope`, `tasks_update` 
-- NEVER edit files in `.nautex` directory
-"""
-
-
-DEFAULT_CODEX_RULES_TEMPLATE = """# AGENTS.md
-
-This file provides guidance to Codex when working with code in this repository.
-
-"""
+# Default template will be provided via function at call time
 
 
 class CodexAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
@@ -120,7 +104,8 @@ class CodexAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
         return f"Rules Path: {path2display(self.get_rules_path())}"
 
     def get_reference_section_content(self) -> str:
-        return AGENT_RULES_REFERENCE_CONTENT
+        return rules_reference_content_for("AGENTS.md")
 
     def get_default_rules_template(self) -> str:
-        return DEFAULT_CODEX_RULES_TEMPLATE
+        # Avoid relying on instance type (may be str in some contexts)
+        return default_agents_rules_template_for("AGENTS.md", AgentType.CODEX.display_name())

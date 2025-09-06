@@ -27,6 +27,34 @@ class MCPScopeResponse(BaseModel):
     documents_paths: Dict[str, str] = Field(default_factory=dict, description="Map of document designators to paths") 
     tasks: List[MCPScopeTask] = Field(default_factory=list, description="List of tasks in a tree structure")
 
+    def render_response(self) -> Dict[str, Any]:
+        """Render response dict excluding empty strings and empty arrays.
+
+        - Excludes keys whose values are empty strings ""
+        - Excludes keys whose values are empty lists []
+        - Processes nested structures recursively (e.g., tasks and subtasks)
+        """
+        def _prune(value: Any) -> Any:
+            # Recurse dictionaries
+            if isinstance(value, dict):
+                out = {}
+                for k, v in value.items():
+                    pruned = _prune(v)
+                    # Exclude empty strings and empty lists only
+                    if pruned == "":
+                        continue
+                    if isinstance(pruned, list) and len(pruned) == 0:
+                        continue
+                    out[k] = pruned
+                return out
+            # Recurse lists
+            if isinstance(value, list):
+                return [ _prune(v) for v in value ]
+            return value
+
+        raw = self.model_dump()
+        return _prune(raw)
+
 MCPScopeTask.model_rebuild()
 
 

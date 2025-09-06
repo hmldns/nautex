@@ -308,7 +308,7 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
             response_scope = convert_scope_context_to_mcp_response(next_scope, docs_lut)
             return {
                 "success": True,
-                "data": response_scope.model_dump(),
+                "data": response_scope.render_response(),
             }
         else:
             return {

@@ -1,7 +1,12 @@
 
 This is an MCP server that integrates PRD and TRD building tool [Nautex AI](https://nautex.ai) with the Coding Agents.
 
-Supported agents: Cursor, Claude Code, Gemini CLI (coming soon)
+Supported agents:
+- Claude Code
+- Codex
+- Cursor
+- OpenCode
+- Gemini CLI (coming soon)
 
 # Motivation
 

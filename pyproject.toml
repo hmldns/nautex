@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nautex"
-version = "0.2.13"
+version = "0.2.15"
 description = "Nautex AI MCP server that works as Product and Project manager for coding agents"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.11"
 license = "MIT"
 authors = [
     {name = "Ivan Makarov", email = "ivan@nautex.ai"}
@@ -17,8 +17,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Environment :: Console",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Code Generators",
     "Topic :: Utilities",
     "Operating System :: Microsoft :: Windows",
@@ -33,7 +31,8 @@ dependencies = [
     "fastmcp>=2.8.1",
     "python-dotenv>=1.0.0,<2.0.0",
     "aiofiles>=20.0.0",
-    "tomlkit>=0.13.0"
+    "tomlkit>=0.13.0",
+    "tomli>=2.0.1"
 ]
 
 [project.optional-dependencies]

@@ -1,14 +1,12 @@
 """Utility functions for MCP configuration in TOML format (for Codex).
 
-Strict TOML parsing via `tomllib` (Python 3.11+).
-No ad‑hoc text fallbacks.
+Strict TOML parsing via `tomli` (Python 3.10).
 """
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import logging
-import tomllib
+import tomli
 
 from .mcp_utils import MCPConfigStatus
 import tomlkit
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _toml_load(path: Path) -> Dict[str, Any]:
     try:
         with open(path, "rb") as f:
-            return tomllib.load(f)
+            return tomli.load(f)
     except Exception as e:
         logger.error(f"Error reading/parsing TOML at {path}: {e}")
         raise
@@ -30,7 +28,7 @@ def _toml_dump(data: Dict[str, Any]) -> str:
     return tomlkit.dumps(data)
 
 
-def validate_mcp_toml_file(mcp_path: Path, cwd: Optional[Path] = None) -> MCPConfigStatus:
+def validate_mcp_toml_file(mcp_path: Path, cwd: Path | None = None) -> MCPConfigStatus:
     try:
         if not mcp_path.exists():
             return MCPConfigStatus.NOT_FOUND
@@ -59,7 +57,7 @@ def validate_mcp_toml_file(mcp_path: Path, cwd: Optional[Path] = None) -> MCPCon
         return MCPConfigStatus.MISCONFIGURED
 
 
-def write_mcp_toml_configuration(target_path: Path, cwd: Optional[Path] = None) -> bool:
+def write_mcp_toml_configuration(target_path: Path, cwd: Path | None = None) -> bool:
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
 

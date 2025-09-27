@@ -280,12 +280,17 @@ class Document(BaseModel):
         # Build the line with title and designator
         line = indent + marker + node.title
         descr = node.properties.get('Description')
+        relations_str = self._render_relations(node)
+
         if descr:
             # Calculate the appropriate indentation for description
             base_len = len(line)
             indent_pos = max(50, base_len + 5)  # Either 50 chars or line length + 5, whichever is greater
             padding = " " * (indent_pos - base_len)
             line += f"{padding}// {descr}"
+
+        if relations_str:
+            line += f" {relations_str}"
 
         result.append(line)
 

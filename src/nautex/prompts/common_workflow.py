@@ -15,7 +15,7 @@ The agent's goal is to implement a plan provided by Nautex. This is achieved thr
 
 The core workflow is as follows:
 1.  **Fetch Scope:** Use the `next_scope` command to retrieve the current set of active tasks from Nautex.
-2.  **Acknowledge Tasks:** After receiving tasks, update their status to `In Progress` using the `tasks_update` for those tasks that are marked as "In Focus" AND are going to be actionable withing one coherent chunk of Coding Agent work.
+2.  **Acknowledge Tasks:** After receiving tasks, update their status to `In progress` using the `tasks_update` for those tasks that are marked as "In Focus" AND are going to be actionable withing one coherent chunk of Coding Agent work.
     This signals to the platform that you have started working on them and it is helpful for you for tasks handover between chat sessions.
 3.  **Compose relevant context:** The Coding Agent must compose the context from the documents referenced in the tasks and understand their context and goals. 
     - Reading full requirements document is always preferable. 
@@ -76,8 +76,8 @@ JSON fields are just examples "//" escaped lines are explanations.
       "designator": "T-1",
       "name": "Implement User Authentication",
       "description": "Create the backend infrastructure for user registration and login.",
-      "status": "NOT_STARTED",
-      "type": "CODE",
+      "status": "Not started",
+      "type": "Code",
       "requirements": ["PRD-201"], // reference to the specific requirements in PRD file (document)
       "files": ["src/services/auth_service.py", "src/api/auth_routes.py"], // reference to files related to the task and expected to be updated / created; referenced directory will have trailing "/", e.g. src/services/ 
       "context_note": "T",
@@ -91,8 +91,8 @@ JSON fields are just examples "//" escaped lines are explanations.
           "designator": "T-2",
           "name": "Create Authentication Service",
           "description": "Implement the business logic for user authentication, including password hashing and token generation.",
-          "status": "NOT_STARTED",
-          "type": "CODE",
+          "status": "Not started",
+          "type": "Code",
           "requirements": ["TRD-55", "TRD-56"], // references to the specific requirements in TRD file (document)
           "files": ["src/services/auth_service.py"],
           "context_note": "...",
@@ -105,8 +105,8 @@ JSON fields are just examples "//" escaped lines are explanations.
           "designator": "T-3",
           "name": "Create Authentication API Endpoint",
           "description": "Create a public API endpoint for user login.",
-          "status": "NOT_STARTED",
-          "type": "CODE",
+          "status": "Not started",
+          "type": "Code",
           "requirements": ["PRD-201"],
           "files": ["src/api/auth_routes.py"],
           "context_note": "...",
@@ -118,8 +118,8 @@ JSON fields are just examples "//" escaped lines are explanations.
           "designator": "T-4",
           "name": "Test Authentication Implementation",
           "description": "Write and execute tests to verify the implemented authentication service and endpoints work correctly.",
-          "status": "NOT_STARTED",
-          "type": "TEST",
+          "status": "Not started",
+          "type": "Test",
           "requirements": ["TRD-55", "TRD-56", "PRD-201"],
           "files": ["tests/test_auth_service.py", "tests/test_auth_routes.py"],
           "context_note": "...",
@@ -132,8 +132,8 @@ JSON fields are just examples "//" escaped lines are explanations.
           "designator": "T-4",
           "name": "Review Authentication Flow",
           "description": "Ask the user to review the implemented authentication endpoints to ensure they meet expectations.",
-          "status": "NOT_STARTED",
-          "type": "REVIEW",
+          "status": "Not started",
+          "type": "Review",
           "requirements": [],
           "files": [],
           "context_note": "...",
@@ -158,7 +158,7 @@ Tasks that are not in focus are given for context for progress handing over and 
 
 ## `tasks_update`
 
-This command is used to report changes in task status back to the Nautex platform. You should call this command whenever a task's status changes (e.g., from `PENDING` to `IN_PROGRESS`, or from `IN_PROGRESS` to `DONE`).
+This command is used to report changes in task status back to the Nautex platform. You should call this command whenever a task's status changes (e.g., from `Not started` to `In progress`, or from `In progress` to `Done`).
 
 -   **Usage:** Send a list of one or more `MCPScopeTask` objects with their `status` field updated. Only include the tasks whose statuses have changed.
 -   **Important:** Timely updates are crucial for the platform to track progress accurately.
@@ -170,17 +170,17 @@ This command is used to report changes in task status back to the Nautex platfor
   "operations": [
     {
       "task_designator": "T-1",
-      "updated_status": "IN_PROGRESS",
+      "updated_status": "In progress",
       "new_note": "Starting work on the main authentication task. Subtasks will be addressed sequentially."
     },
     {
       "task_designator": "T-2",
-      "updated_status": "DONE",
+      "updated_status": "Done",
       "new_note": "The 'AuthService' class has been implemented in 'src/services/auth_service.py' as per the requirements. Password hashing and JWT generation are complete."
     },
     {
       "task_designator": "T-3",
-      "updated_status": "BLOCKED",
+      "updated_status": "Blocked",
       "new_note": "Blocked: Waiting for clarification on the expected JSON response format for the '/login' endpoint. I will proceed with other tasks until this is resolved."
     },
     {
@@ -196,19 +196,19 @@ This command is used to report changes in task status back to the Nautex platfor
 
 Tasks progress through a simple lifecycle, managed by the agent. The valid statuses are:
 
-1.  **NOT_STARTED**: The default initial state of a task.
-2.  **PENDING**: The task has been pulled as part of `next_scope` and is expected to be taken into implementation.
-3.  **IN_PROGRESS**: The Coding Agent should set this status as soon as starts executing task.
-4.  **DONE**: The agent sets this status once all work for the task is complete.
+1.  **Not started**: The default initial state of a task.
+2.  **In progress**: Set this as soon as you start executing the task.
+3.  **Done**: Set this once all work for the task is complete.
+4.  **Blocked**: Use when progress is blocked and a note explains why.
 
 # Task Types
 
 Each task object has a `type` that informs the agent about the nature of the work required. The valid types are:
 
--   **CODE**: The primary task type. The agent is expected to write or modify application source code based on the provided `description` and `requirements`.
--   **REVIEW**: This task requires user validation. The `description` will contain a script for the agent to follow, guiding it on what to show the user (e.g., code, application behavior, UI flow) and what specific feedback to ask for. This is a critical step for de-risking the project.
--   **TEST**: This task involves writing or executing tests to verify that the code works as expected. The `description` will describe the test cases or strategy (e.g., "Write unit tests for the `calculate_total` function, covering positive, negative, and zero values."). Referenced requirements should be taken in account as sell.
--   **INPUT**: This task requires the agent to gather specific information, often from the user. The `description` will detail what is needed (e.g., API keys, `.env` file settings, configuration data) and provide a script for how to ask the user for it.
+-   **Code**: The primary task type. The agent is expected to write or modify application source code based on the provided `description` and `requirements`.
+-   **Review**: This task requires user validation. The `description` will contain a script for the agent to follow, guiding it on what to show the user (e.g., code, application behavior, UI flow) and what specific feedback to ask for. This is a critical step for de-risking the project.
+-   **Test**: This task involves writing or executing tests to verify that the code works as expected. The `description` will describe the test cases or strategy (e.g., "Write unit tests for the `calculate_total` function, covering positive, negative, and zero values."). Referenced requirements should be taken in account as sell.
+-   **Input**: This task requires the agent to gather specific information, often from the user. The `description` will detail what is needed (e.g., API keys, `.env` file settings, configuration data) and provide a script for how to ask the user for it.
 
 # Interaction Goals and Guiding Principles
 
@@ -216,7 +216,7 @@ Each task object has a `type` that informs the agent about the nature of the wor
      You **must** open these local markdown files to read the requirements and fully understand the task's context and goals. Documents are downloaded and stored locally in a directories provided.
 -   **Obey the Scope:** The agent's primary directive is to work within the confines of the tasks provided by Nautex. Do not modify files or implement functionality not explicitly mentioned in the current task's scope.
 -   **Follow Instructions:** The `instructions` field of a task provides general guidance according to the task type and status.
--   **Be Methodical:** Address reasonable number of tasks at a time. Complete the full workflow for a task (`IN_PROGRESS` -> Implement -> `DONE`) before moving to the next.
+-   **Be Methodical:** Address reasonable number of tasks at a time. Complete the full workflow for a task (`In progress` -> Implement -> `Done`) before moving to the next.
 -   **Communicate Clearly:** Use the `tasks_update` command to provide clear and immediate feedback on your progress. This is essential for the health of the project on the Nautex platform.
 -   **Manage referenced files consistently:** Operate with files referenced by tasks, be aware that all paths are relative to the project root.
 
@@ -228,4 +228,3 @@ Do not proceed with any further tasks or commands.
 Report the error to the user, providing any details from the error message.
 This ensures that problems are addressed promptly and prevents the workflow from continuing in an inconsistent or unpredictable state. After reporting the error, wait for further instructions.
 """
-

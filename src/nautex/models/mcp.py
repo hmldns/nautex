@@ -259,7 +259,6 @@ class MCPTaskOperation(BaseModel):
     """Model representing a single operation on a task for MCP."""
     task_designator: str = Field(..., description="Unique task identifier like TASK-123")
     updated_status: Optional[TaskStatus] = Field(None, description="New status for the task")
-    updated_type: Optional[TaskType] = Field(None, description="New type for the task")
     new_note: Optional[str] = Field(None, description="New note content to add to the task")
 
 

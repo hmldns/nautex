@@ -7,11 +7,12 @@ from . import ConfigurationService, IntegrationStatusService
 from ..models.config import NautexConfig
 from .nautex_api_service import NautexAPIService
 from ..api.client import NautexAPIError
-from ..models.mcp import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateRequest, MCPTaskUpdateResponse
+from ..models.mcp import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateResponse
 
 from .document_service import DocumentService
 from ..api.api_models import TaskOperation
 from ..prompts.consts import CMD_NAUTEX_SETUP
+from ..api.scope_context_model import TaskStatus
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -32,6 +33,72 @@ def mcp_server_set_service_instance(service_instance):
     global _instance
     _instance = service_instance
     logger.debug("Global MCP service instance set")
+
+
+def _normalize_sep_lower(value: str) -> str:
+    """Normalize a string by lowercasing and collapsing separators to spaces.
+
+    Treats '_', '-' and any whitespace as equivalent separators and reduces
+    multiple separators to a single space.
+    """
+    # Avoid import of re at module top to keep dependencies light here
+    import re
+    return re.sub(r"[\s_\-]+", " ", value.strip().lower())
+
+
+def normalize_task_status(value: Optional[Any]) -> Optional[TaskStatus]:
+    """Normalize various status inputs to TaskStatus.
+
+    Accepts common variations like enum names (e.g., 'IN_PROGRESS'), hyphen/underscore
+    separated forms (e.g., 'in-progress', 'in_progress'), and case-insensitive values.
+
+    If value cannot be matched, raises a ValueError with a message similar to
+    Pydantic's enum validation error, but without external links.
+    """
+    if value is None:
+        return None
+    if isinstance(value, TaskStatus):
+        return value
+    if isinstance(value, str):
+        norm = _normalize_sep_lower(value)
+
+        # Build lookup allowing both enum .value and .name
+        lookup: Dict[str, TaskStatus] = {}
+        for st in TaskStatus:
+            lookup[_normalize_sep_lower(st.value)] = st
+            lookup[_normalize_sep_lower(st.name)] = st
+
+        matched = lookup.get(norm)
+        if matched:
+            return matched
+
+    # Prepare error similar to Pydantic's, without the docs link
+    allowed_vals = [s.value for s in TaskStatus]
+    allowed_msg = ", ".join(f"'{v}'" for v in allowed_vals[:-1])
+    if allowed_msg:
+        allowed_msg = f"{allowed_msg} or '{allowed_vals[-1]}'"
+    else:
+        allowed_msg = f"'{allowed_vals[-1]}'"
+
+    input_type = type(value).__name__
+    input_repr = repr(value)
+    msg = (
+        "1 validation error for MCPTaskOperation\n"
+        "updated_status\n  "
+        f"Input should be {allowed_msg} [type=enum, input_value={input_repr}, input_type={input_type}]"
+    )
+    raise ValueError(msg)
+
+def sanitize_pydantic_error_message(exc: BaseException) -> str:
+    """Strip the help URL line from Pydantic error messages.
+
+    Example line removed:
+    "For further information visit https://errors.pydantic.dev/..."
+    """
+    import re
+    msg = str(exc)
+    msg = re.sub(r"\n\s*For further information visit https?://errors\.pydantic\.dev[^\n]*", "", msg)
+    return msg
 
 def mcp_server_run():
     """Run the MCP server in the main thread.
@@ -371,23 +438,35 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
         # Convert the operations to MCPTaskOperation objects
         mcp_task_operations = []
         for op in operations:
-            mcp_task_operation = MCPTaskOperation(
-                task_designator=op["task_designator"],
-                updated_status=op.get("updated_status"),
-                updated_type=op.get("updated_type"),
-                new_note=op.get("new_note")
-            )
+            try:
+                normalized_status = normalize_task_status(op.get("updated_status"))
+                mcp_task_operation = MCPTaskOperation(
+                    task_designator=op["task_designator"],
+                    updated_status=normalized_status,
+                    new_note=op.get("new_note")
+                )
+            except Exception as e:
+                return MCPTaskUpdateResponse(
+                    success=False,
+                    error=sanitize_pydantic_error_message(e)
+                )
+
             mcp_task_operations.append(mcp_task_operation)
 
         # Convert MCPTaskOperation objects to TaskOperation objects for the API
         task_operations = []
         for op in mcp_task_operations:
-            task_operation = TaskOperation(
-                task_designator=op.task_designator,
-                updated_status=op.updated_status,
-                updated_type=op.updated_type,
-                new_note=op.new_note
-            )
+            try:
+                task_operation = TaskOperation(
+                    task_designator=op.task_designator,
+                    updated_status=op.updated_status,
+                    new_note=op.new_note
+                )
+            except Exception as e:
+                return MCPTaskUpdateResponse(
+                    success=False,
+                    error=sanitize_pydantic_error_message(e)
+                )
             task_operations.append(task_operation)
 
         response = await service.nautex_api_service.update_tasks(
@@ -413,7 +492,7 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
         logger.error(f"Error in update tasks tool: {e}")
         return MCPTaskUpdateResponse(
             success=False,
-            error=str(e)
+            error=sanitize_pydantic_error_message(e)
         )
 
 

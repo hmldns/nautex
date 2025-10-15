@@ -127,31 +127,7 @@ class TaskOperation(BaseModel):
     """Model representing a single operation on a task."""
     task_designator: str = Field(..., description="Unique task identifier like TASK-123")
     updated_status: Optional[TaskStatus] = Field(None, description="New status for the task")
-    updated_type: Optional[TaskType] = Field(None, description="New type for the task")
     new_note: Optional[str] = Field(None, description="New note content to add to the task")
-
-    class Config:
-        json_schema_extra = {
-            "examples": [
-                {
-                    "task_designator": "TASK-789",
-                    "updated_status": "in_progress"
-                },
-                {
-                    "task_designator": "TASK-789",
-                    "updated_type": "Code"
-                },
-                {
-                    "task_designator": "TASK-789",
-                    "new_note": "Implementation notes here"
-                },
-                {
-                    "task_designator": "TASK-789",
-                    "updated_status": "done",
-                    "new_note": "Task completed with additional notes"
-                }
-            ]
-        }
 
 
 class ErrorMessage(BaseModel):

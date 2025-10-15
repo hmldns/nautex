@@ -3,9 +3,10 @@
 # Commands
 CMD_NAUTEX_SETUP = 'uvx nautex setup'
 
-CMD_STATUS = 'nautex_status'
-CMD_NEXT_SCOPE = 'nautex_next_scope'
-CMD_TASKS_UPDATE = 'nautex_tasks_update'
+# __ is how the tool name is proclaimed via mcp lib
+CMD_STATUS = 'nautex__status'
+CMD_NEXT_SCOPE = 'nautex__next_scope'
+CMD_TASKS_UPDATE = 'nautex__tasks_update'
 
 # Directories
 DIR_NAUTEX = '.nautex'

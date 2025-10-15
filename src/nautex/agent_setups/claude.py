@@ -87,9 +87,16 @@ class ClaudeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
             # Look for a line like "nautex: uvx nautex mcp - ✓ Connected"
             nautex_pattern = r"nautex:\s+uvx\s+nautex\s+mcp\s+-\s+([✓✗])\s+(Connected|Error)"
             match = re.search(nautex_pattern, output)
-            
-            if match:
-                status_symbol = match.group(1)
+
+            # Also check for debug setup: "nautex: uv run python -m nautex.cli mcp - ✓ Connected"
+            nautex_pattern_debug = r"nautex:\s+uv\s+run\s+python\s+-m\s+nautex\.cli\s+mcp\s+-\s+([✓✗])\s+(Connected|Error)"
+            match_debug_setup = re.search(nautex_pattern_debug, output)
+
+            # Use whichever pattern matched
+            final_match = match or match_debug_setup
+
+            if final_match:
+                status_symbol = final_match.group(1)
                 if status_symbol == "✓":
                     return MCPConfigStatus.OK, None
                 else:

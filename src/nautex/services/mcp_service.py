@@ -230,7 +230,7 @@ async def mcp_handle_status() -> Dict[str, Any]:
         }
 
 @mcp.tool
-async def nautex_status() -> Dict[str, Any]:
+async def status() -> Dict[str, Any]:
     """Get comprehensive status and context information for Nautex CLI."""
     return await mcp_handle_status()
 
@@ -399,7 +399,7 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
 
 
 @mcp.tool
-async def nautex_next_scope() -> Dict[str, Any]:
+async def next_scope() -> Dict[str, Any]:
     """Get the next scope for the current project and plan."""
     return await mcp_handle_next_scope()
 
@@ -497,7 +497,7 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
 
 
 @mcp.tool
-async def nautex_update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Update multiple tasks in a batch operation.
 
     Args:

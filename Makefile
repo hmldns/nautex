@@ -130,6 +130,13 @@ run-mcp:
 run-mcp-inspector:
 	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector
 
+dev-claude-mcp-setup:
+	claude mcp remove nautex
+	claude mcp add nautex -s local -- uv run python -m nautex.cli mcp
+
+dev-nautex-setup:
+	uv run python -m nautex.cli setup
+
 # Cleanup
 clean:
 	@echo "Cleaning build artifacts..."

@@ -33,4 +33,7 @@ venv
 dist
 
 .cursor
+.claude
 .nautex
+uv.lock
+CLAUDE.md

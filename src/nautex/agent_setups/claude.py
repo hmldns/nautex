@@ -14,6 +14,7 @@ from ..prompts.consts import (
     NAUTEX_SECTION_END,
     DEFAULT_RULES_TEMPLATE,
     rules_reference_content_for,
+    DIR_NAUTEX,
 )
 from ..services.section_managed_file_service import SectionManagedFileService
 from ..utils import path2display
@@ -133,7 +134,7 @@ class ClaudeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
             return False
 
     def get_rules_path(self,) -> Path:
-        return self.cwd / ".nautex" / "CLAUDE.md"
+        return self.cwd / DIR_NAUTEX / "CLAUDE.md"
     
     @property
     def root_claude_path(self) -> Path:

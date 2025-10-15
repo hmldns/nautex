@@ -14,6 +14,7 @@ from ..prompts.consts import (
     NAUTEX_SECTION_END,
     rules_reference_content_for,
     default_agents_rules_template_for,
+    DIR_NAUTEX,
 )
 from ..utils import path2display
 from ..utils.mcp_toml_utils import validate_mcp_toml_file, write_mcp_toml_configuration
@@ -84,7 +85,7 @@ class CodexAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
     # ---------- Rules paths ----------
     def get_rules_path(self) -> Path:
         """Full rules content lives in `.nautex/AGENT.md`."""
-        return self.cwd / Path(".nautex") / self.rules_filename
+        return self.cwd / Path(DIR_NAUTEX) / self.rules_filename
 
     @property
     def root_agent_path(self) -> Path:

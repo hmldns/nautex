@@ -1,20 +1,29 @@
 
 
+# Commands
 CMD_NAUTEX_SETUP = 'uvx nautex setup'
+
+CMD_STATUS = 'nautex_status'
+CMD_NEXT_SCOPE = 'nautex_next_scope'
+CMD_TASKS_UPDATE = 'nautex_tasks_update'
+
+# Directories
+DIR_NAUTEX = '.nautex'
+DIR_NAUTEX_DOCS = f"{DIR_NAUTEX}/docs"
 
 NAUTEX_SECTION_START = '<!-- NAUTEX_SECTION_START -->'
 NAUTEX_SECTION_END = '<!-- NAUTEX_SECTION_END -->'
 
-NAUTEX_RULES_REFERENCE_CONTENT = """# Nautex MCP Integration
+NAUTEX_RULES_REFERENCE_CONTENT = f"""# Nautex MCP Integration
 
 This project uses Nautex Model-Context-Protocol (MCP). Nautex manages requirements and task-driven LLM assisted development.
  
 Whenever user requests to operate with nautex, the following applies: 
 
-- read full Nautex workflow guidelines from `.nautex/CLAUDE.md`
+- read full Nautex workflow guidelines from `{DIR_NAUTEX}/CLAUDE.md`
 - note that all paths managed by nautex are relative to the project root
-- note primary workflow commands: `next_scope`, `tasks_update` 
-- NEVER edit files in `.nautex` directory
+- note primary workflow commands: `{CMD_NEXT_SCOPE}`, `{CMD_TASKS_UPDATE}` 
+- NEVER edit files in `{DIR_NAUTEX}` directory
 
 """
 
@@ -33,10 +42,10 @@ This project uses Nautex Model-Context-Protocol (MCP). Nautex manages requiremen
  
 Whenever user requests to operate with nautex, the following applies: 
 
-- read full Nautex workflow guidelines from `.nautex/{rules_filename}`
+- read full Nautex workflow guidelines from `{DIR_NAUTEX}/{rules_filename}`
 - note that all paths managed by nautex are relative to the project root
-- note primary workflow commands: `next_scope`, `tasks_update` 
-- NEVER edit files in `.nautex` directory
+- note primary workflow commands: `{CMD_NEXT_SCOPE}`, `{CMD_TASKS_UPDATE}` 
+- NEVER edit files in `{DIR_NAUTEX}` directory
 
 """
 

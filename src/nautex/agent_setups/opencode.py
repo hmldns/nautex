@@ -20,6 +20,7 @@ from ..prompts.consts import (
     NAUTEX_SECTION_END,
     rules_reference_content_for,
     default_agents_rules_template_for,
+    DIR_NAUTEX,
 )
 from ..services.section_managed_file_service import SectionManagedFileService
 from ..utils import path2display
@@ -77,7 +78,7 @@ class OpenCodeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
 
     # ---------- Rules management ----------
     def get_rules_path(self) -> Path:
-        return self.cwd / ".nautex" / "AGENTS.md"
+        return self.cwd / DIR_NAUTEX / "AGENTS.md"
 
     def get_root_rules_path(self) -> Path:
         return self.cwd / "AGENTS.md"

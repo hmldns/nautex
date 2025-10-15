@@ -15,6 +15,7 @@ from ..agent_setups.cursor import CursorAgentSetup
 from ..agent_setups.claude import ClaudeAgentSetup
 from ..agent_setups.codex import CodexAgentSetup
 from ..agent_setups.opencode import OpenCodeAgentSetup
+from ..prompts.consts import DIR_NAUTEX, DIR_NAUTEX_DOCS
 
 
 class ConfigurationError(Exception):
@@ -55,14 +56,14 @@ class ConfigurationService:
 
     @property
     def nautex_dir(self):
-        return Path(".nautex")
+        return Path(DIR_NAUTEX)
 
     @property
     def documents_path(self) -> Path :
         if self.config.documents_path:
             return Path(self.config.documents_path)
         else:
-            return self.nautex_dir / "docs"
+            return Path(DIR_NAUTEX_DOCS)
 
     @property
     def agent_setup(self) -> Optional[AgentSetupBase]:

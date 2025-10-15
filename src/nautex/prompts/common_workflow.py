@@ -1,23 +1,33 @@
 from ..api.scope_context_model import TaskStatus, TaskType
+from .consts import (
+    CMD_STATUS,
+    CMD_NEXT_SCOPE,
+    CMD_TASKS_UPDATE,
+    DIR_NAUTEX,
+    DIR_NAUTEX_DOCS,
+)
+from ..terminology import Terminology as Terms
+
+
 
 COMMON_WORKFLOW_PROMPT = f"""
 # General background and workflow
 
-This document outlines the workflow for an AI Coding Agent interacting with the Nautex AI platform via the Model-Context-Protocol (MCP).
-The primary goal is to systematically pull tasks from Nautex, execute them according to the provided scope and requirements, and report progress back to the platform.
+This document outlines the workflow for an AI {Terms.AGENT} interacting with the {Terms.PRODUCT} AI platform via the {Terms.PROTOCOL}.
+The primary goal is to systematically pull tasks from {Terms.PRODUCT}, execute them according to the provided scope and requirements, and report progress back to the platform.
 
-Nautex acts as a project management system, breaking down development into specific, actionable tasks. The agent's role is to act as the software developer, implementing these tasks.
+{Terms.PRODUCT} acts as a project management system, breaking down development into specific, actionable tasks. The agent's role is to act as the software developer, implementing these tasks.
 The agent must strictly adhere to the scope defined in each task, including operating only on the specified files in task and fulfilling the given requirements.
 
 ## Workflow Goal
 
-The agent's goal is to implement a plan provided by Nautex. This is achieved through a cyclical process of fetching tasks, implementing them, and updating their status.
+The agent's goal is to implement a plan provided by {Terms.PRODUCT}. This is achieved through a cyclical process of fetching tasks, implementing them, and updating their status.
 
 The core workflow is as follows:
-1.  **Fetch Scope:** Use the `next_scope` command to retrieve the current set of active tasks from Nautex.
-2.  **Acknowledge Tasks:** After receiving tasks, update their status to `{TaskStatus.IN_PROGRESS.value}` using the `tasks_update` for those tasks that are marked as "in_focus" AND are going to be actionable withing one coherent chunk of Coding Agent work.
+1.  **Fetch Scope:** Use the `{CMD_NEXT_SCOPE}` command to retrieve the current set of active tasks from {Terms.PRODUCT}.
+2.  **Acknowledge Tasks:** After receiving tasks, update their status to `{TaskStatus.IN_PROGRESS.value}` using the `{CMD_TASKS_UPDATE}` for those tasks that are marked as "in_focus" AND are going to be actionable withing one coherent chunk of {Terms.AGENT} work.
     This signals to the platform that you have started working on them and it is helpful for you for tasks handover between chat sessions.
-3.  **Compose relevant context:** The Coding Agent must compose the context from the documents referenced in the tasks and understand their context and goals. 
+3.  **Compose relevant context:** The {Terms.AGENT} must compose the context from the documents referenced in the tasks and understand their context and goals. 
     - Reading full requirements document is always preferable. 
     - Alternatively search by full designators would work, make sure you pull the full records content from adjacent lines. 
     - Always resolve other requirements references by other requirements.
@@ -25,35 +35,33 @@ The core workflow is as follows:
     - Navigate by hierarchy: Major sections start with ## [TRD-X], subsections with ### [TRD-XXX], use document outline or search these patterns to jump between topics, always absorb whole relevant sections.
 
 4.  **Implement Tasks:** Analyze the task details (description, type, requirements, associated files) and perform the necessary actions, such as writing or modifying code.
-5.  **Complete Tasks:** Once a task is fully implemented, update its status to `{TaskStatus.DONE.value}` using the `tasks_update` command.
-6.  **Repeat:** Continue this cycle until `next_scope` returns no new tasks.
+5.  **Complete Tasks:** Once a task is fully implemented, update its status to `{TaskStatus.DONE.value}` using the `{CMD_TASKS_UPDATE}` command.
+6.  **Repeat:** Continue this cycle until `{CMD_NEXT_SCOPE}` returns no new tasks.
 
 # WARNING!
 
-NEVER EDIT FILES IN `.nautex` directory
+NEVER EDIT FILES IN `{DIR_NAUTEX}` directory
 
 # Commands
 
-## `status`
+## `{CMD_STATUS}`
 
-Whenever you asked to get nautex status, you should call this command, it is ok to call it before other commands to check that integration works correctly.
+Whenever you asked to get {Terms.PRODUCT.lower()} status, you should call this command; it is ok to call it before other commands to check that integration works correctly.
 
-## `next_scope`
+## `{CMD_NEXT_SCOPE}`
 
-This is the primary command to fetch the next set of tasks from the Nautex platform. When called, it returns an object containing the tasks that the agent should work on.
+This is the primary command to fetch the next set of tasks from the {Terms.PRODUCT} platform. When called, it returns an object containing the tasks that the agent should work on.
 
 - **Usage:** Call this command at the beginning of your workflow and after you have completed all in focus tasks from the previous scope.
 - **Response:** The response includes general instructions, paths to relevant documents, and a list of tasks objects.
 
-### Example of the `next_scope` response data structure:
+### Example of the `{CMD_NEXT_SCOPE}` response data structure:
 
 JSON fields are just examples "//" escaped lines are explanations.
 
 ```
 {{
-
   "progress_context": "...", // A high-level explanation of what is going on
-
   "instructions": "...", // General, high-level instructions for the agent that apply to the entire scope of tasks.
 
   // A dictionary mapping document designators to path relative to the project root .
@@ -61,9 +69,9 @@ JSON fields are just examples "//" escaped lines are explanations.
   // the detailed specifications referenced in the tasks. The agent must read these files to
   // fully understand the requirements. Search by full designators would work.
   "documents_paths": {{
-    "PRD": ".nautex/docs/PRD.md",
-    "TRD": ".nautex/docs/TRD.md",
-    "FILE": ".nautex/docs/FILE.md"  // refer to this document for managing expected file structure
+    "PRD": "{DIR_NAUTEX_DOCS}/PRD.md",
+    "TRD": "{DIR_NAUTEX_DOCS}/TRD.md",
+    "FILE": "{DIR_NAUTEX_DOCS}/FILE.md"  // refer to this document for managing expected file structure
   }},
 
   // Designators are composed via 2 parts: DOC_DESIGNATOR-ITEM_DESIGNATOR  DOC_DESIGNATOR - is string, ITEM_DESIGNATOR - is number of statement inside the document.
@@ -133,22 +141,22 @@ JSON fields are just examples "//" escaped lines are explanations.
 
 ```
 
-Response object `next_scope` has inline instructions for scope and tasks. For tasks "context_note" - if present, explaining what task object is about in overall scope.
+Response object `{CMD_NEXT_SCOPE}` has inline instructions for scope and tasks. For tasks "context_note" - if present, explaining what task object is about in overall scope.
 "instructions" - field has instruction relevant to managing the task in the scope, depending on task type and either task is in focus. Those are information of how to think and execute task in description.
 
 Focus tasks are those, which have "in_focus" flag set true. They are must be executed in the scope provided. Status change is allowed only for tasks that are "in_focus": true.
 Tasks that are not in focus are given for context for progress handing over and parent scope understanding (e.g. some chunk of work within the scope)
 
 
-## `tasks_update`
+## `{CMD_TASKS_UPDATE}`
 
-This command is used to report changes in task status back to the Nautex platform. You should call this command whenever a task's status changes (e.g., from `{TaskStatus.NOT_STARTED.value}` to `{TaskStatus.IN_PROGRESS.value}`, or from `{TaskStatus.IN_PROGRESS.value}` to `{TaskStatus.DONE.value}`).
+This command is used to report changes in task status back to the {Terms.PRODUCT} platform. You should call this command whenever a task's status changes (e.g., from `{TaskStatus.NOT_STARTED.value}` to `{TaskStatus.IN_PROGRESS.value}`, or from `{TaskStatus.IN_PROGRESS.value}` to `{TaskStatus.DONE.value}`).
 
 -   **Usage:** Send a list of one or more `MCPScopeTask` objects with their `status` field updated. Only include the tasks whose statuses have changed.
 -   **Important:** Timely updates are crucial for the platform to track progress accurately.
 
 
-### Example `tasks_update` Payload:
+### Example `{CMD_TASKS_UPDATE}` Payload:
 ```
 {{
   "operations": [
@@ -196,18 +204,18 @@ Each task object has a `type` that informs the agent about the nature of the wor
 
 # Interaction Goals and Guiding Principles
 
--   **Consult Documents:** Tasks often reference requirements (e.g., `PRD-101`, `TRD-42`). These references point to items within documents provided in the `documents_paths` field of `next_scope` response.
+-   **Consult Documents:** Tasks often reference requirements (e.g., `PRD-101`, `TRD-42`). These references point to items within documents provided in the `documents_paths` field of `{CMD_NEXT_SCOPE}` response.
      You **must** open these local markdown files to read the requirements and fully understand the task's context and goals. Documents are downloaded and stored locally in a directories provided.
--   **Obey the Scope:** The agent's primary directive is to work within the confines of the tasks provided by Nautex. Do not modify files or implement functionality not explicitly mentioned in the current task's scope.
+-   **Obey the Scope:** The agent's primary directive is to work within the confines of the tasks provided by {Terms.PRODUCT}. Do not modify files or implement functionality not explicitly mentioned in the current task's scope.
 -   **Follow Instructions:** The `instructions` field of a task provides general guidance according to the task type and status.
 -   **Be Methodical:** Address reasonable number of tasks at a time. Complete the full workflow for a task (`{TaskStatus.IN_PROGRESS.value}` -> Implement -> `{TaskStatus.DONE.value}`) before moving to the next.
--   **Communicate Clearly:** Use the `tasks_update` command to provide clear and immediate feedback on your progress. This is essential for the health of the project on the Nautex platform.
+-   **Communicate Clearly:** Use the `{CMD_TASKS_UPDATE}` command to provide clear and immediate feedback on your progress. This is essential for the health of the project on the {Terms.PRODUCT} platform.
 -   **Manage referenced files consistently:** Operate with files referenced by tasks, be aware that all paths are relative to the project root.
 
 # Dealing with Errors
 
-If any command, such as `next_scope` or `tasks_update`, returns an error, you must **stop the workflow immediately**.
-Do not proceed with any further tasks or commands.
+If `{CMD_NEXT_SCOPE}` returns an error, you must **stop the workflow immediately**. Do not proceed with any further tasks or commands.
+For `{CMD_TASKS_UPDATE}` command, follow error message and adjust argument if relevant. If error is not arguments related, stop the workflow immediately as well.
 
 Report the error to the user, providing any details from the error message.
 This ensures that problems are addressed promptly and prevents the workflow from continuing in an inconsistent or unpredictable state. After reporting the error, wait for further instructions.

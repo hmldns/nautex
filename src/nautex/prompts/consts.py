@@ -61,7 +61,7 @@ def default_agents_rules_template_for(rules_filename: str, tool_name: str) -> st
 
     Args:
         rules_filename: The root-facing filename such as 'AGENTS.md'.
-        tool_name: Human-friendly tool name, e.g. 'OpenCode', 'Codex'.
+        tool_name: Human-friendly tool name, e.g. 'OpenCode', 'Codex', 'Gemini'.
 
     Returns:
         A short Markdown template used when creating the root rules file.

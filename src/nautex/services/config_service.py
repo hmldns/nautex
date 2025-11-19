@@ -15,6 +15,7 @@ from ..agent_setups.cursor import CursorAgentSetup
 from ..agent_setups.claude import ClaudeAgentSetup
 from ..agent_setups.codex import CodexAgentSetup
 from ..agent_setups.opencode import OpenCodeAgentSetup
+from ..agent_setups.gemini import GeminiAgentSetup
 from ..prompts.consts import DIR_NAUTEX, DIR_NAUTEX_DOCS
 
 
@@ -83,6 +84,8 @@ class ConfigurationService:
             return CodexAgentSetup(self)
         elif self.config.agent_type == AgentType.OPENCODE:
             return OpenCodeAgentSetup(self)
+        elif self.config.agent_type == AgentType.GEMINI:
+            return GeminiAgentSetup(self)
         else:
             return AgentSetupNotSelected(self, AgentType.NOT_SELECTED.value)
 

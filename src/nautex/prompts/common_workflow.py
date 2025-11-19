@@ -6,7 +6,7 @@ from .consts import (
     DIR_NAUTEX,
     DIR_NAUTEX_DOCS,
 )
-from src.nautex.prompts.terminology import Terminology as Terms
+from .terminology import Terminology as Terms
 
 
 

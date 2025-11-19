@@ -35,5 +35,7 @@ dist
 .cursor
 .claude
 .nautex
+.gemini
 uv.lock
 CLAUDE.md
+GEMINI.md

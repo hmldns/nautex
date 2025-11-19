@@ -2,5 +2,7 @@ aiohttp~=3.12.13
 textual~=4.0.0
 pydantic~=2.11.7
 pydantic-settings~=2.9.1
-fastmcp~=2.8.1
+fastmcp~=2.13.0
 aiofiles~=23.2.1
+tomli==2.3.0
+tomlkit==0.13.3

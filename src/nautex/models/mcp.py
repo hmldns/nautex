@@ -68,10 +68,10 @@ def get_mode_instructions(mode: ScopeContextMode) -> str:
         A string containing instructions for the current mode
     """
     if mode == ScopeContextMode.ExecuteSubtasks:
-        return f"Follow instructions on tasks, execute needed. On starting set relevant tasks state in \"{TaskStatus.IN_PROGRESS}\" state and \"{TaskStatus.DONE}\" when finished and tested."
+        return f"Follow instructions on tasks, execute needed. On starting set relevant tasks state in \"{TaskStatus.IN_PROGRESS.value}\" state and \"{TaskStatus.DONE.value}\" when finished and tested."
 
     elif mode == ScopeContextMode.FinalizeMasterTask:
-        return f"All subtasks are completed. Review and finalize results of the implementation and move master task to \"{TaskStatus.DONE}\" state."
+        return f"All subtasks are completed. Review and finalize results of the implementation and move master task to \"{TaskStatus.DONE.value}\" state."
 
     return ""
 
@@ -112,7 +112,7 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
     INST_START_CODING = "Implement the required files changes for this task. "
     INST_CONTINUE_CODING = "Continue the implementation of this coding task. "
     INST_START_REVIEW = "Guide user through results review for the scope tasks. "
-    INST_CONTINUE_REVIEW = f"Continue reviewing process with user, gaining feedback from them. Don't put status to \"{TaskStatus.DONE}\" until direct confirmation is provided."
+    INST_CONTINUE_REVIEW = f"Continue reviewing process with user, gaining feedback from them. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation is provided."
     INST_START_TESTING = "Test the implementation of the tasks in the scope according to the requirements and tasks. "
     INST_CONTINUE_TESTING = "Continue testing of the tasks in the scope according to the requirements and tasks. "
     INST_PROVIDE_INPUT = "Provide the required input data and info from user for this task. "
@@ -124,7 +124,7 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
     INST_TASK_DONE = "Completed task."
     INST_TASK_BLOCKED = "This task is blocked. Address the blocking issues before proceeding. "
 
-    INST_PUT_STATUS_TO_IN_PROGRESS = f"Put task status to \"{TaskStatus.IN_PROGRESS}\". "
+    INST_PUT_STATUS_TO_IN_PROGRESS = f"Put task status to \"{TaskStatus.IN_PROGRESS.value}\". "
 
     # --- Lookup Table for Task Instructions ---
     # The table is structured as: (status, type, mode) -> (context_note, instruction)

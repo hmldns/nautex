@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nautex"
-version = "0.2.24"
+version = "0.2.25"
 description = "Nautex AI MCP server that works as Product and Project manager for coding agents"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"

@@ -1,13 +1,21 @@
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 
 from fastmcp import FastMCP
+from mcp.types import TextContent
 
 from . import ConfigurationService, IntegrationStatusService
+from .. import __version__
 from ..models.config import NautexConfig
 from .nautex_api_service import NautexAPIService
 from ..api.client import NautexAPIError
-from ..models.mcp import convert_scope_context_to_mcp_response, MCPTaskOperation, MCPTaskUpdateResponse
+from ..models.mcp import (
+    convert_scope_context_to_mcp_response,
+    MCPTaskOperation,
+    MCPTaskUpdateResponse,
+    format_response_as_markdown,
+)
+from ..models.config import MCPOutputFormat
 
 from .document_service import DocumentService
 from ..api.api_models import TaskOperation
@@ -155,6 +163,11 @@ class MCPService:
     def config(self) -> NautexConfig:
         return self.config_service.config
 
+    @property
+    def response_format(self) -> MCPOutputFormat:
+        """Get MCP response format from config."""
+        return self.config.response_format
+
     async def ensure_dependency_documents_on_disk(self) -> Dict[str, str]:
         # Ensure dependency documents are loaded once per session
 
@@ -230,9 +243,17 @@ async def mcp_handle_status() -> Dict[str, Any]:
         }
 
 @mcp.tool
-async def status() -> Dict[str, Any]:
+async def status() -> List[TextContent]:
     """Get comprehensive status and context information for Nautex CLI."""
-    return await mcp_handle_status()
+    result = await mcp_handle_status()
+    if mcp_service().response_format == MCPOutputFormat.MD_YAML:
+        if result.get("success"):
+            text = format_response_as_markdown("Status", result["data"])
+        else:
+            text = format_response_as_markdown("Status Error", result)
+        return [TextContent(type="text", text=text)]
+
+    return result
 
 
 async def mcp_handle_list_projects() -> Dict[str, Any]:
@@ -399,23 +420,26 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
 
 
 @mcp.tool
-async def next_scope() -> Dict[str, Any]:
+async def next_scope() -> Union[List[TextContent], Dict[str, Any]]:
     """Get the next scope for the current project and plan."""
-    return await mcp_handle_next_scope()
+    result = await mcp_handle_next_scope()
+    if mcp_service().response_format == MCPOutputFormat.MD_YAML:
+        if result.get("success"):
+            text = format_response_as_markdown("Next Scope", result["data"])
+        else:
+            text = format_response_as_markdown("Next Scope Error", result)
+        return [TextContent(type="text", text=text)]
+    return result
 
 
 async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUpdateResponse:
-    """Implementation of the update tasks functionality.
+    """Update tasks status
 
     Args:
         operations: List of operations, each containing:
             - task_designator: The designator of the task to update
             - updated_status: Optional new status for the task
-            - updated_type: Optional new type for the task
             - new_note: Optional new note to add to the task
-
-    Returns:
-        MCPTaskUpdateResponse with the result of the operation
     """
     try:
         logger.debug(f"Executing update tasks tool with {len(operations)} operations")
@@ -497,7 +521,7 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
 
 
 @mcp.tool
-async def update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def update_tasks(operations: List[Dict[str, Any]]) -> Union[List[TextContent], Dict[str, Any]]:
     """Update multiple tasks in a batch operation.
 
     Args:
@@ -515,4 +539,6 @@ async def update_tasks(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
         - error: Error message if not successful
     """
     response = await mcp_handle_update_tasks(operations)
+    if mcp_service().response_format == MCPOutputFormat.MD_YAML:
+        return [TextContent(type="text", text=response.render_as_markdown_yaml())]
     return response.model_dump(exclude_none=True)

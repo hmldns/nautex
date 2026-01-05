@@ -9,16 +9,16 @@ Requirements for the consumer class:
 - must implement:
     - get_rules_path() -> Path
     - get_root_rules_path() -> Path
-    - workflow_rules_content -> str (property)
     - get_reference_section_content() -> str
     - get_default_rules_template() -> str
-- must inherit from AgentSetupBase (for _validate_rules_file and cwd)
+- must inherit from AgentSetupBase (for _validate_rules_file, cwd, workflow_rules_content)
 """
 from pathlib import Path
 from typing import Tuple, Optional
 
 from .base import AgentSetupBase, AgentRulesStatus
 from ..prompts.consts import NAUTEX_SECTION_START, NAUTEX_SECTION_END
+from ..prompts.common_workflow import get_common_workflow_prompt
 
 
 class SectionManagedRulesMixin:
@@ -89,3 +89,15 @@ class SectionManagedRulesMixin:
         except Exception:
             return False
 
+
+class ConfigAwareSectionManagedRulesMixin(SectionManagedRulesMixin):
+    """Mixin that provides workflow_rules_content from config_service.
+
+    Use this instead of SectionManagedRulesMixin when the class has access to
+    config_service (from AgentSetupBase inheritance).
+    """
+
+    @property
+    def workflow_rules_content(self) -> str:
+        """Get workflow rules content based on config response format."""
+        return get_common_workflow_prompt(self.config_service.config.response_format)

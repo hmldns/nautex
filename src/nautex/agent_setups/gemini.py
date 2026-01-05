@@ -4,9 +4,8 @@ from typing import Tuple, Optional
 
 from .base import AgentRulesStatus, AgentSetupBase
 from .files_based_mcp import FilesBasedMCPAgentSetup
-from .section_managed_rules_mixin import SectionManagedRulesMixin
+from .section_managed_rules_mixin import ConfigAwareSectionManagedRulesMixin
 from ..models.config import AgentType
-from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..prompts.consts import (
     NAUTEX_SECTION_START,
     NAUTEX_SECTION_END,
@@ -18,7 +17,7 @@ from ..services.section_managed_file_service import SectionManagedFileService
 from ..utils import path2display
 
 
-class GeminiAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
+class GeminiAgentSetup(ConfigAwareSectionManagedRulesMixin, FilesBasedMCPAgentSetup):
     """Gemini agent setup and configuration.
 
     This class provides Gemini-specific implementation of the agent setup interface.
@@ -48,10 +47,6 @@ class GeminiAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
 
     def get_root_rules_path(self) -> Path:
         return self.root_gemini_path
-
-    @property
-    def workflow_rules_content(self) -> str:
-        return COMMON_WORKFLOW_PROMPT
 
     def get_rules_info(self) -> str:
         return f"Rules Path: {path2display(self.get_rules_path())}"

@@ -4,10 +4,9 @@ from typing import Tuple, Optional
 import subprocess
 
 from .files_based_mcp import FilesBasedMCPAgentSetup
-from .section_managed_rules_mixin import SectionManagedRulesMixin
+from .section_managed_rules_mixin import ConfigAwareSectionManagedRulesMixin
 from .base import AgentRulesStatus
 from ..models.config import AgentType
-from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..services.section_managed_file_service import SectionManagedFileService
 from ..prompts.consts import (
     NAUTEX_SECTION_START,
@@ -25,7 +24,7 @@ import asyncio
 # Default template will be provided via function at call time
 
 
-class CodexAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
+class CodexAgentSetup(ConfigAwareSectionManagedRulesMixin, FilesBasedMCPAgentSetup):
     """Codex agent setup and configuration.
 
     - Uses the user-home TOML MCP config at `~/.codex/config.toml`.
@@ -95,11 +94,6 @@ class CodexAgentSetup(SectionManagedRulesMixin, FilesBasedMCPAgentSetup):
     # ---------- Rules validation / ensure ----------
     def get_root_rules_path(self) -> Path:
         return self.root_agent_path
-
-    # ---------- Rules content ----------
-    @property
-    def workflow_rules_content(self) -> str:
-        return COMMON_WORKFLOW_PROMPT
 
     def get_rules_info(self) -> str:
         return f"Rules Path: {path2display(self.get_rules_path())}"

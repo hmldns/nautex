@@ -12,9 +12,8 @@ from typing import Tuple, Optional
 import asyncio
 
 from .base import AgentSetupBase
-from .section_managed_rules_mixin import SectionManagedRulesMixin
+from .section_managed_rules_mixin import ConfigAwareSectionManagedRulesMixin
 from ..models.config import AgentType
-from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..prompts.consts import (
     NAUTEX_SECTION_START,
     NAUTEX_SECTION_END,
@@ -31,7 +30,7 @@ from ..utils.opencode_config_utils import (
 from ..utils.mcp_utils import MCPConfigStatus
 
 
-class OpenCodeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
+class OpenCodeAgentSetup(ConfigAwareSectionManagedRulesMixin, AgentSetupBase):
     """OpenCode agent setup and configuration."""
 
     def __init__(self, config_service):
@@ -82,10 +81,6 @@ class OpenCodeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
 
     def get_root_rules_path(self) -> Path:
         return self.cwd / "AGENTS.md"
-
-    @property
-    def workflow_rules_content(self) -> str:
-        return COMMON_WORKFLOW_PROMPT
 
     def get_rules_info(self) -> str:
         return f"Rules Path: {path2display(self.get_rules_path())}"

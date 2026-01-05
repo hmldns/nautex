@@ -3,7 +3,55 @@
 from typing import List, Optional, Dict, Any, Union, Tuple
 from enum import Enum
 from pydantic import BaseModel, Field
+import yaml
+
 from ..api.scope_context_model import ScopeContext, ScopeTask, ScopeContextMode, TaskStatus, TaskType
+
+
+class _LiteralBlockDumper(yaml.SafeDumper):
+    """YAML Dumper that uses literal block style (|) for multiline strings."""
+
+    def choose_scalar_style(self):
+        if self.event.value and '\n' in self.event.value:
+            return '|'
+        return super().choose_scalar_style()
+
+
+def _str_representer(dumper, data):
+    """Representer for strings that uses literal block style for multiline."""
+    if '\n' in data:
+        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
+
+def _enum_representer(dumper, data):
+    """Representer for enums that uses the enum value."""
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data.value)
+
+
+_LiteralBlockDumper.add_representer(str, _str_representer)
+_LiteralBlockDumper.add_multi_representer(Enum, _enum_representer)
+
+
+def format_response_as_markdown(title: str, data: Dict[str, Any]) -> str:
+    """Format a response dict as Markdown with a YAML code block.
+
+    Args:
+        title: The section title (e.g., "Status Response")
+        data: The data dict to format as YAML
+
+    Returns:
+        Markdown string with ### heading and yaml code block
+    """
+    yaml_content = yaml.dump(
+        data,
+        Dumper=_LiteralBlockDumper,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+        width=10000
+    )
+    return f"### {title}\n\n```yaml\n{yaml_content}```"
 
 
 class MCPScopeTask(BaseModel):
@@ -54,6 +102,14 @@ class MCPScopeResponse(BaseModel):
 
         raw = self.model_dump()
         return _prune(raw)
+
+    def render_as_markdown_yaml(self) -> str:
+        """Render response as Markdown with a YAML code block.
+
+        Returns:
+            Markdown string with ### heading and yaml code block
+        """
+        return format_response_as_markdown("Next Scope", self.render_response())
 
 MCPScopeTask.model_rebuild()
 
@@ -273,3 +329,11 @@ class MCPTaskUpdateResponse(BaseModel):
     data: Optional[Dict[str, Any]] = Field(None, description="Response data payload")
     message: Optional[str] = Field(None, description="Human-readable message")
     error: Optional[str] = Field(None, description="Error message if success is False")
+
+    def render_as_markdown_yaml(self) -> str:
+        """Render response as Markdown with a YAML code block.
+
+        Returns:
+            Markdown string with ### heading and yaml code block
+        """
+        return format_response_as_markdown("Tasks Update", self.model_dump(exclude_none=True))

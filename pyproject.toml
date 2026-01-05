@@ -32,7 +32,8 @@ dependencies = [
     "python-dotenv>=1.0.0,<2.0.0",
     "aiofiles>=20.0.0",
     "tomlkit>=0.13.0",
-    "tomli>=2.0.1"
+    "tomli>=2.0.1",
+    "PyYAML>=6.0.0"
 ]
 
 [project.optional-dependencies]

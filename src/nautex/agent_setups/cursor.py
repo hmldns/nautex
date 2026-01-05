@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 from .base import AgentRulesStatus
 from .files_based_mcp import FilesBasedMCPAgentSetup
 from ..models.config import AgentType
-from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
+from ..prompts.common_workflow import get_common_workflow_prompt
 from ..utils import path2display
 
 
@@ -63,13 +63,14 @@ class CursorAgentSetup(FilesBasedMCPAgentSetup):
 
     @property
     def workflow_rules_content(self) -> str:
+        prompt = get_common_workflow_prompt(self.config_service.config.response_format)
         return f"""---
 description: Workflow reference for Nautex MCP usage for project implementation guidance
 globs: **/*
 alwaysApply: true
 ---
 
-{COMMON_WORKFLOW_PROMPT}
+{prompt}
 """
 
     def get_rules_info(self) -> str:

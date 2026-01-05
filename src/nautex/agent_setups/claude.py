@@ -6,9 +6,8 @@ from pathlib import Path
 from typing import Tuple, Optional, List, Dict
 
 from .base import AgentSetupBase, AgentRulesStatus
-from .section_managed_rules_mixin import SectionManagedRulesMixin
+from .section_managed_rules_mixin import ConfigAwareSectionManagedRulesMixin
 from ..models.config import AgentType
-from ..prompts.common_workflow import COMMON_WORKFLOW_PROMPT
 from ..prompts.consts import (
     NAUTEX_SECTION_START,
     NAUTEX_SECTION_END,
@@ -25,7 +24,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ClaudeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
+class ClaudeAgentSetup(ConfigAwareSectionManagedRulesMixin, AgentSetupBase):
     """Claude agent setup and configuration.
 
     This class provides Claude-specific implementation of the agent setup interface.
@@ -150,10 +149,6 @@ class ClaudeAgentSetup(SectionManagedRulesMixin, AgentSetupBase):
 
     def get_root_rules_path(self) -> Path:
         return self.root_claude_path
-
-    @property
-    def workflow_rules_content(self) -> str:
-        return COMMON_WORKFLOW_PROMPT
 
     def get_rules_info(self) -> str:
         return f"Rules Path: {path2display(self.get_rules_path())}"

@@ -6,6 +6,15 @@ from pydantic import SecretStr, Field
 from pydantic_settings import BaseSettings
 
 
+class MCPOutputFormat(str, Enum):
+    """Output format for MCP tool responses.
+
+    Controls how MCP responses are serialized.
+    """
+    JSON = "json"
+    MD_YAML = "md_yaml"  # Markdown with YAML code blocks
+
+
 class AgentType(str, Enum):
     """Supported agent types.
 
@@ -59,6 +68,7 @@ class NautexConfig(BaseSettings):
     documents_path: Optional[str] = Field(None, description="Path to store downloaded documents")
 
     agent_type: Optional[AgentType] = Field(AgentType.NOT_SELECTED, description="AI agent to guide")
+    response_format: MCPOutputFormat = Field(MCPOutputFormat.MD_YAML, description="MCP response format")
 
     class Config:
         """Pydantic configuration for environment variables and JSON files."""

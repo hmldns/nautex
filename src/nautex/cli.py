@@ -21,36 +21,38 @@ from .services.mcp_service import MCPService, mcp_server_set_service_instance, m
 from .services.mcp_config_service import MCPConfigService
 from .services.agent_rules_service import AgentRulesService
 from .api import create_api_client
+from .models.config import MCPOutputFormat
+from .models.mcp import format_response_as_markdown
+from . import __version__
 import json
 
 
-def handle_test_commands(args):
+def handle_test_commands(args, config_service):
     """Handle test commands for MCP functionality.
 
     Args:
         args: Command line arguments
+        config_service: Configuration service instance
     """
-    if args.test_command == "next_scope":
-        # Run the next_scope test command
-        # Call the next_scope function and get the result
-        result = asyncio.run(mcp_handle_next_scope())
+    use_yaml = config_service.config.response_format == MCPOutputFormat.MD_YAML
 
-        # Print the result with proper indentation
-        if result["success"] and "data" in result:
-            print(json.dumps(result["data"], indent=4))
+    if args.test_command == "next_scope":
+        result = asyncio.run(mcp_handle_next_scope())
+        data = result.get("data", result) if result.get("success") else result
+
+        if use_yaml:
+            print(format_response_as_markdown("Next Scope", data))
         else:
-            print(json.dumps(result, indent=4))
+            print(json.dumps(data, indent=4))
 
     elif args.test_command == "status":
-        # Run the next_scope test command
-        # Call the next_scope function and get the result
         result = asyncio.run(mcp_handle_status())
+        data = result.get("data", result) if result.get("success") else result
 
-        # Print the result with proper indentation
-        if result["success"] and "data" in result:
-            print(json.dumps(result["data"], indent=4))
+        if use_yaml:
+            print(format_response_as_markdown("Status", data))
         else:
-            print(json.dumps(result, indent=4))
+            print(json.dumps(data, indent=4))
     else:
         print("Please specify a test command. Available commands: next_scope, status.")
 
@@ -60,6 +62,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="nautex",
         description="nautex - Nautex AI platform MCP integration tool and server"
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -152,7 +159,7 @@ def main() -> None:
 
             # Check for MCP subcommands
             if args.mcp_command == "test":
-                handle_test_commands(args)
+                handle_test_commands(args, config_service)
             else:
                 # Run the MCP server in the main thread
                 mcp_server_run()

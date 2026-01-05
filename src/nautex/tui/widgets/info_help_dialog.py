@@ -2,12 +2,16 @@
 
 from textual.widgets import Button, Markdown
 from textual.containers import Horizontal, Vertical, Center, Middle
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual import events
 
+from ... import __version__
+
 # Dialog content as markdown
-HELP_CONTENT = """
+HELP_CONTENT = f"""
 # 🚀 Nautex - AI-Powered Development
+
+**Version: {__version__}**
 
 ## 📋 About
 Nautex is a requirements-first development platform that helps Coding Agents to execute better by detailed and complete system design and detailed plan.
@@ -23,7 +27,7 @@ Get help, share ideas, and connect with other developers
 
 ## ⌨️ Keyboard Shortcuts
 - **Ctrl+C / ESC**: Quit
-- **Tab / Enter**: Navigate fields  
+- **Tab / Enter**: Navigate fields
 - **Ctrl+T**: MCP Config
 - **Ctrl+R**: Agent Rules
 - **Ctrl+Y**: Select Agent Type
@@ -31,7 +35,7 @@ Get help, share ideas, and connect with other developers
 """
 
 
-class InfoHelpDialog(Screen):
+class InfoHelpDialog(ModalScreen):
     """A modal screen displaying info, help, and community links."""
 
     DEFAULT_CSS = """
@@ -49,7 +53,8 @@ class InfoHelpDialog(Screen):
     }
 
     #content {
-        height: 1fr;
+        height: auto;
+        max-height: 40;
         overflow-y: auto;
         margin-bottom: 1;
     }
@@ -75,7 +80,6 @@ class InfoHelpDialog(Screen):
             with Middle():
                 with Vertical(id="dialog"):
                     yield Markdown(HELP_CONTENT, id="content")
-                    
                     with Horizontal(id="buttons"):
                         yield Button("Close", id="close", variant="primary")
 

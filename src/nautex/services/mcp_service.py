@@ -226,6 +226,7 @@ async def mcp_handle_status() -> Dict[str, Any]:
         
         # Prepare response data
         response_data = {
+            "version": __version__,
             "status_message": status.get_status_message(from_mcp=True),
             "cwd": str(service.config_service.cwd)
         }

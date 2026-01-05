@@ -425,24 +425,23 @@ class SetupScreen(Screen):
         # Focus the next widget
         self.focusable_widgets[self.current_focus_index].focus()
 
-    async def show_dialog(self, dialog):
+    def show_dialog(self, dialog):
+        self._run_dialog_worker(dialog)
 
-        async def sd():
-            result = await self.app.push_screen_wait(dialog)
-
-            await self._update_system_info()
-            await self.update_integration_status()
-
-        self.run_worker(sd())
+    @work
+    async def _run_dialog_worker(self, dialog):
+        await self.app.push_screen_wait(dialog)
+        await self._update_system_info()
+        await self.update_integration_status()
 
     async def action_show_mcp_dialog(self) -> None:
         dialog = MCPConfigWriteDialog(mcp_service=self.mcp_config_service)
-        await self.show_dialog(dialog)
+        self.show_dialog(dialog)
 
 
     async def action_show_agent_rules_dialog(self) -> None:
         dialog = AgentRulesWriteDialog(rules_service=self.agent_rules_service)
-        await self.show_dialog(dialog)
+        self.show_dialog(dialog)
 
     async def action_show_agent_selection_dialog(self) -> None:
         dialog = AgentSelectionDialog(
@@ -450,12 +449,12 @@ class SetupScreen(Screen):
             integration_status_service=self.integration_status_service
         )
 
-        await self.show_dialog(dialog)
+        self.show_dialog(dialog)
 
     async def action_show_info_help(self) -> None:
         """Show the info and help dialog."""
         dialog = InfoHelpDialog()
-        await self.show_dialog(dialog)
+        self.show_dialog(dialog)
 
 
     async def _update_system_info(self) -> None:

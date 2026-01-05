@@ -81,29 +81,29 @@ This command is used to report changes in task status back to the {Terms.PRODUCT
 
 ### Example `{CMD_TASKS_UPDATE}` Payload:
 ```json
-{{{{
+{{
   "operations": [
-    {{{{
+    {{
       "task_designator": "T-1",
       "updated_status": "{TaskStatus.IN_PROGRESS.value}",
       "new_note": "Starting work on the main authentication task. Subtasks will be addressed sequentially."
-    }}}},
-    {{{{
+    }},
+    {{
       "task_designator": "T-2",
       "updated_status": "{TaskStatus.DONE.value}",
       "new_note": "The 'AuthService' class has been implemented in 'src/services/auth_service.py' as per the requirements. Password hashing and JWT generation are complete."
-    }}}},
-    {{{{
+    }},
+    {{
       "task_designator": "T-3",
       "updated_status": "{TaskStatus.BLOCKED.value}",
       "new_note": "Blocked: Waiting for clarification on the expected JSON response format for the '/login' endpoint. I will proceed with other tasks until this is resolved."
-    }}}},
-    {{{{
+    }},
+    {{
       "task_designator": "T-4",
       "new_note": "User review is the next step after the login endpoint is fully implemented and unblocked."
-    }}}}
+    }}
   ]
-}}}}
+}}
 
 ```
 

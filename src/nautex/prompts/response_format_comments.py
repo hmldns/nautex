@@ -40,7 +40,12 @@ class FieldComments:
     SUBTASK_3 = "Third subtask: writing and executing tests for the authentication service and endpoints."
     SUBTASK_4 = "A standalone task for user review after the coding and testing tasks are complete."
 
-    # Task fields
-    CONTEXT_INSTRUCTIONS = "each task has these fields for guiding the Coding Agent, follow specific instructions (omitted further within this example)"
-    IN_FOCUS = "this field is used to signal that this task is in focus and should be executed in the current scope, when other tasks are for general context and scope understanding."
+    # Task workflow_info fields
+    WORKFLOW_INFO = (
+        "Workflow orchestration metadata - determines how the agent should handle this task. "
+        "in_focus signals whether to execute this task now or treat as context only."
+    )
+    WORKFLOW_INFO_IN_FOCUS = "true = execute this task; false = provided for context awareness only"
+    WORKFLOW_INFO_CONTEXT_NOTE = "explains task's role in the current workflow state"
+    WORKFLOW_INFO_INSTRUCTIONS = "actionable directives for the agent based on task type and status"
     OMITTED = "other fields omitted for clarity"

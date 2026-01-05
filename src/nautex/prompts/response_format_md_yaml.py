@@ -34,6 +34,8 @@ tasks:
   # {FC.MASTER_TASK}
   - designator: T-1
     name: Implement User Authentication
+    workflow_info:  # {FC.WORKFLOW_INFO}
+      in_focus: true  # {FC.WORKFLOW_INFO_IN_FOCUS}
     description: Create the backend infrastructure for user registration and login.
     status: {TaskStatus.NOT_STARTED.value}
     type: {TaskType.CODE.value}
@@ -42,13 +44,16 @@ tasks:
     files:  # {FC.FILES}
       - src/services/auth_service.py
       - src/api/auth_routes.py
-    in_focus: true
 
     # {FC.SUBTASKS_LIST}
     subtasks:
       # {FC.SUBTASK_1}
       - designator: T-2
         name: Create Authentication Service
+        workflow_info:
+          in_focus: true
+          context_note: ...  # {FC.WORKFLOW_INFO_CONTEXT_NOTE}
+          instructions: ...  # {FC.WORKFLOW_INFO_INSTRUCTIONS}
         description: |
           Implement the business logic for user authentication,
           including password hashing and token generation.
@@ -59,15 +64,12 @@ tasks:
           - TRD-56
         files:
           - src/services/auth_service.py
-        # {FC.CONTEXT_INSTRUCTIONS}
-        context_note: ...
-        instructions: ...
-        # {FC.IN_FOCUS}
-        in_focus: true
 
       # {FC.SUBTASK_2}
       - designator: T-3
         name: Create Authentication API Endpoint
+        workflow_info:
+          in_focus: false
         description: Create a public API endpoint for user login.
         status: {TaskStatus.NOT_STARTED.value}
         type: {TaskType.CODE.value}
@@ -76,6 +78,8 @@ tasks:
       # {FC.SUBTASK_3}
       - designator: T-4
         name: Test Authentication Implementation
+        workflow_info:
+          in_focus: false
         description: |
           Write and execute tests to verify the implemented authentication
           service and endpoints work correctly.
@@ -86,6 +90,8 @@ tasks:
       # {FC.SUBTASK_4}
       - designator: T-5
         name: "{TaskType.REVIEW.value} Authentication Flow"
+        workflow_info:
+          in_focus: false
         description: |
           Ask the user to review the implemented authentication endpoints
           to ensure they meet expectations.

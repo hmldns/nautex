@@ -61,11 +61,14 @@ This is the primary command to fetch the next set of tasks from the {Terms.PRODU
 """
 
 _NEXT_SCOPE_NOTES = f"""
-Response object `{CMD_NEXT_SCOPE}` has inline instructions for scope and tasks. For tasks "context_note" - if present, explaining what task object is about in overall scope.
-"instructions" - field has instruction relevant to managing the task in the scope, depending on task type and either task is in focus. Those are information of how to think and execute task in description.
+Response object `{CMD_NEXT_SCOPE}` has inline instructions for scope and tasks.
+Each task has a `workflow_info` object containing:
+- `in_focus`: true means execute this task; false means it's provided for context only
+- `context_note`: explains the task's role in current workflow state (if present)
+- `instructions`: actionable directives based on task type and status
 
-Focus tasks are those, which have "in_focus" flag set true. They are must be executed in the scope provided. Status change is allowed only for tasks that are "in_focus": true.
-Tasks that are not in focus are given for context for progress handing over and parent scope understanding (e.g. some chunk of work within the scope)
+Focus tasks are those with `workflow_info.in_focus` set to true. Status changes are only allowed for in-focus tasks.
+Tasks not in focus are given for context for progress handover and parent scope understanding (e.g. some chunk of work within the scope).
 
 
 ## `{CMD_TASKS_UPDATE}`
@@ -130,7 +133,7 @@ Each task object has a `type` that informs the agent about the nature of the wor
 -   **Consult Documents:** Tasks often reference requirements (e.g., `PRD-101`, `TRD-42`). These references point to items within documents provided in the `documents_paths` field of `{CMD_NEXT_SCOPE}` response.
      You **must** open these local markdown files to read the requirements and fully understand the task's context and goals. Documents are downloaded and stored locally in the directories provided.
 -   **Obey the Scope:** The agent's primary directive is to work within the confines of the tasks provided by {Terms.PRODUCT}. Do not modify files or implement functionality not explicitly mentioned in the current task's scope.
--   **Follow Instructions:** The `instructions` field of a task provides general guidance according to the task type and status.
+-   **Follow Instructions:** The `workflow_info.instructions` field provides guidance according to the task type and status.
 -   **Be Methodical:** Address reasonable number of tasks at a time. Complete the full workflow for a task (`{TaskStatus.IN_PROGRESS.value}` -> Implement -> `{TaskStatus.DONE.value}`) before moving to the next.
 -   **Communicate Clearly:** Use the `{CMD_TASKS_UPDATE}` command to provide clear and immediate feedback on your progress. This is essential for the health of the project on the {Terms.PRODUCT} platform.
 -   **Manage referenced files consistently:** Operate with files referenced by tasks, be aware that all paths are relative to the project root.

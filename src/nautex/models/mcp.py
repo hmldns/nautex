@@ -54,17 +54,22 @@ def format_response_as_markdown(title: str, data: Dict[str, Any]) -> str:
     return f"### {title}\n\n```yaml\n{yaml_content}```"
 
 
+class MCPWorkflowInfo(BaseModel):
+    """Workflow orchestration metadata for a task."""
+    in_focus: bool = Field(False, description="Whether this task is in focus for current execution")
+    context_note: Optional[str] = Field(None, description="Additional context for this task state")
+    instructions: Optional[str] = Field(None, description="Instructions for handling this task")
+
+
 class MCPScopeTask(BaseModel):
     designator: str = Field(..., description="Unique task identifier like PRD-123")
     name: str = Field(..., description="Human-readable task name")
+    workflow_info: MCPWorkflowInfo = Field(default_factory=MCPWorkflowInfo, description="Workflow orchestration metadata")
     description: Optional[str] = Field(None, description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
     type: TaskType = Field(..., description="Task type (Code, Review, Test, Input)")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
-    context_note: Optional[str] = Field(None, description="Additional context for this task state")
-    instructions: Optional[str] = Field(None, description="Instructions for this task")
-    in_focus: bool = Field(False, description="Whether this task is in focus")
     subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
 
 
@@ -146,13 +151,13 @@ def create_mcp_task_from_scope_task(task: ScopeTask, is_in_focus: bool = False) 
     task_state = MCPScopeTask(
         designator=task.task_designator,
         name=task.name,
+        workflow_info=MCPWorkflowInfo(in_focus=is_in_focus),
         description=task.description,
         status=task.status,
         type=task.type,
         requirements=[req.requirement_designator for req in task.requirements if req.requirement_designator],
         files=[file.file_path for file in task.files],
         subtasks=[],  # Will be filled later
-        in_focus=is_in_focus
     )
 
     return task_state
@@ -246,10 +251,12 @@ def set_context_info_and_notes(mcp_task: MCPScopeTask, scope_context: ScopeConte
     tasks_execution = scope_context.mode == ScopeContextMode.ExecuteSubtasks
 
     def _set_context_info(_mcp_task: MCPScopeTask) -> None:
-        _mcp_task.context_note, _mcp_task.instructions = get_task_instruction(_mcp_task.status, _mcp_task.type,
-                                                                              scope_context.mode,
-                                                                              _mcp_task.in_focus,
-                                                                              bool(_mcp_task.subtasks))
+        context_note, instructions = get_task_instruction(
+            _mcp_task.status, _mcp_task.type, scope_context.mode,
+            _mcp_task.workflow_info.in_focus, bool(_mcp_task.subtasks)
+        )
+        _mcp_task.workflow_info.context_note = context_note
+        _mcp_task.workflow_info.instructions = instructions
 
     def traverse_tasks(_mcp_task: MCPScopeTask) -> None:
         _set_context_info(_mcp_task)

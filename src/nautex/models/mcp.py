@@ -172,12 +172,14 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
 
     INST_START_CODING = "Implement the required files changes for this task. "
     INST_CONTINUE_CODING = "Continue the implementation of this coding task. "
-    INST_START_REVIEW = "Guide user through results review for the scope tasks. "
-    INST_CONTINUE_REVIEW = f"Continue reviewing process with user, gaining feedback from them. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation is provided."
+    INST_START_REVIEW = ("Conduct a collaborative review with the user. Present the implemented code or logic against the specific requirements. "
+                        "Ask targeted verification questions to confirm alignment and safety. Do not mark as 'Done' until the user explicitly approves the findings. ")
+
+    INST_CONTINUE_REVIEW = f"Continue collaborative reviewing process with user, gaining feedback from them to check how requirements are adressed by recent work. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation from user is provided."
     INST_START_TESTING = "Test the implementation of the tasks in the scope according to the requirements and tasks. "
     INST_CONTINUE_TESTING = "Continue testing of the tasks in the scope according to the requirements and tasks. "
-    INST_PROVIDE_INPUT = "Provide the required input data and info from user for this task. "
-    INST_CONTINUE_FOR_INPUT = "Request and process required input data and info from user. "
+    INST_PROVIDE_INPUT = "Prompt user for the required input data or info from for this task. Validate collected data against the requested by this task description. "
+    INST_CONTINUE_FOR_INPUT = "Prompt user and process required input data and info from user. Validate collected data against the requested by this task description. "
 
     INST_FINALIZE_MASTER_TASK = "All subtasks are complete. Finalize the master task by integrating the work, reviewing and testing subtasks in scope. "
     INST_CONTINUE_FINALIZE_MASTER_TASK = "Continue finalizing the master task via assessing subtasks. "

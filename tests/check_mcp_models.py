@@ -225,11 +225,19 @@ def generate_task_type_scope_context() -> ScopeContext:
         type=TaskType.INPUT
     )
 
+    explore_task = ScopeTask(
+        task_designator="TASK-5",
+        name="Explore Task",
+        description="An exploration task",
+        status=TaskStatus.NOT_STARTED,
+        type=TaskType.EXPLORE
+    )
+
     return ScopeContext(
-        tasks=[code_task, review_task, test_task, input_task],
+        tasks=[code_task, review_task, test_task, input_task, explore_task],
         project_id="PROJECT-1",
         mode=ScopeContextMode.ExecuteSubtasks,
-        focus_tasks=["TASK-1", "TASK-2", "TASK-3", "TASK-4"]
+        focus_tasks=["TASK-1", "TASK-2", "TASK-3", "TASK-4", "TASK-5"]
     )
 
 

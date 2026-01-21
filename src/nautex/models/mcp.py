@@ -67,7 +67,7 @@ class MCPScopeTask(BaseModel):
     workflow_info: MCPWorkflowInfo = Field(default_factory=MCPWorkflowInfo, description="Workflow orchestration metadata")
     description: Optional[str] = Field(None, description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
-    type: TaskType = Field(..., description="Task type (Code, Review, Test, Input)")
+    type: TaskType = Field(..., description="Task type (Code, Review, Test, Input, Explore)")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
     subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
@@ -180,6 +180,10 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
     INST_CONTINUE_TESTING = "Continue testing of the tasks in the scope according to the requirements and tasks. "
     INST_PROVIDE_INPUT = "Prompt user for the required input data or info from for this task. Validate collected data against the requested by this task description. "
     INST_CONTINUE_FOR_INPUT = "Prompt user and process required input data and info from user. Validate collected data against the requested by this task description. "
+    INST_START_EXPLORE = ("Explore the codebase area described in this task. Examine existing patterns, identify relevant files, and present findings to the user. "
+                          "Compare plan vision vs actual codebase state, highlighting gaps, contradictions, and integration points. "
+                          "Propose solutions for gaps and make decisions with user before proceeding. Do not mark as 'Done' until the user explicitly confirms the exploration findings and decisions. ")
+    INST_CONTINUE_EXPLORE = f"Continue exploring and presenting findings to user. Address gaps with proposed solutions, make decisions with user. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation from user is provided."
 
     INST_FINALIZE_MASTER_TASK = "All subtasks are complete. Finalize the master task by integrating the work, reviewing and testing subtasks in scope. "
     INST_CONTINUE_FINALIZE_MASTER_TASK = "Continue finalizing the master task via assessing subtasks. "
@@ -210,6 +214,10 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
                                                                                      INST_PROVIDE_INPUT + INST_PUT_STATUS_TO_IN_PROGRESS),
         (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.ExecuteSubtasks): ("",
                                                                                      INST_CONTINUE_FOR_INPUT),
+        (TaskStatus.NOT_STARTED, TaskType.EXPLORE, ScopeContextMode.ExecuteSubtasks): ("",
+                                                                                       INST_START_EXPLORE + INST_PUT_STATUS_TO_IN_PROGRESS),
+        (TaskStatus.IN_PROGRESS, TaskType.EXPLORE, ScopeContextMode.ExecuteSubtasks): ("",
+                                                                                       INST_CONTINUE_EXPLORE),
 
         # --- Mode: FinalizeMasterTask ---
         (TaskStatus.NOT_STARTED, TaskType.CODE, ScopeContextMode.FinalizeMasterTask): ("", INST_FINALIZE_MASTER_TASK),
@@ -223,6 +231,8 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
                                                                                        INST_CONTINUE_FINALIZE_MASTER_TASK),
         (TaskStatus.NOT_STARTED, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", INST_PROVIDE_INPUT),
         (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FOR_INPUT),
+        (TaskStatus.NOT_STARTED, TaskType.EXPLORE, ScopeContextMode.FinalizeMasterTask): ("", INST_FINALIZE_MASTER_TASK),
+        (TaskStatus.IN_PROGRESS, TaskType.EXPLORE, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FINALIZE_MASTER_TASK),
     }
 
     if status == TaskStatus.BLOCKED:

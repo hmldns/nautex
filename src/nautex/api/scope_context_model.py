@@ -16,6 +16,7 @@ class TaskType(str, Enum):
     REVIEW = "Review"
     TEST = "Test"
     INPUT = "Input"
+    EXPLORE = "Explore"
 
 
 class ScopeContextMode(str, Enum):
@@ -52,7 +53,7 @@ class ScopeTask(BaseModel):
     name: str = Field(..., description="Human-readable task name")
     description: str = Field(None, description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
-    type: TaskType = Field(..., description="Type of the task (Code, Review, Test, Input)")
+    type: TaskType = Field(..., description="Type of the task (Code, Review, Test, Input, Explore)")
     subtasks: List["ScopeTask"] = Field(default_factory=list, description="List of subtasks")
 
     # parent_task: Optional[TaskReference] = Field(None, description="Reference to parent task")

@@ -6,7 +6,7 @@ Supported agents:
 - Codex
 - Cursor
 - OpenCode
-- Gemini CLI (coming soon)
+- Gemini CLI
 
 # Motivation
 

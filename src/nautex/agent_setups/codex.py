@@ -27,7 +27,7 @@ import asyncio
 class CodexAgentSetup(ConfigAwareSectionManagedRulesMixin, FilesBasedMCPAgentSetup):
     """Codex agent setup and configuration.
 
-    - Uses the user-home TOML MCP config at `~/.codex/config.toml`.
+    - Uses the project-local TOML MCP config at `.codex/config.toml`.
       Before first write, creates a backup `config.toml.bak` alongside if absent.
     - Manages `.nautex/AGENT.md` with full rules and a root `AGENT.md` including a managed reference section.
     """
@@ -40,8 +40,8 @@ class CodexAgentSetup(ConfigAwareSectionManagedRulesMixin, FilesBasedMCPAgentSet
 
     # ---------- MCP configuration (file-based, mergable) ----------
     def get_agent_mcp_config_path(self) -> Path:
-        """Absolute path to the MCP configuration file for Codex agent (TOML)."""
-        return Path.home() / ".codex" / "config.toml"
+        """Absolute path to the project-local MCP configuration file for Codex agent (TOML)."""
+        return self.cwd / ".codex" / "config.toml"
 
     def get_agent_mcp_backup_path(self) -> Path:
         """Backup path for the Codex MCP configuration file.
@@ -55,8 +55,8 @@ class CodexAgentSetup(ConfigAwareSectionManagedRulesMixin, FilesBasedMCPAgentSet
         cfg = self.get_agent_mcp_config_path()
         bak = self.get_agent_mcp_backup_path()
         return (
-            f"Codex MCP config (home): {cfg}\n"
-            f"Backup: creates once as {bak} before first write"
+            f"Codex MCP config (project): {path2display(cfg)}\n"
+            f"Backup: creates once as {path2display(bak)} before first write"
         )
 
     async def check_mcp_configuration(self) -> Tuple[MCPConfigStatus, Optional[Path]]:

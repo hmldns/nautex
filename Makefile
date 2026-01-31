@@ -112,7 +112,7 @@ check:
 # Build and publish targets
 build:
 	@echo "Building package..."
-	python3 -m build
+	.venv/bin/python -m build
 
 publish: clean build
 	@echo "Publishing to PyPI..."

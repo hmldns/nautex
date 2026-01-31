@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp
+.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive
 
 # Default target
 help:
@@ -18,6 +18,10 @@ help:
 	@echo "  run-status   Run status command without installation"
 	@echo "  run-mcp      Run MCP server without installation"
 	@echo "  run-mcp-inspector  Run MCP inspector without authentication"
+	@echo "  test-scope              Run scope test with mock data (non-interactive)"
+	@echo "  test-scope-interactive  Run scope test with mock data (interactive)"
+	@echo "  test-scope-api          Run scope test with real API (uses config)"
+	@echo "  test-scope-api-interactive  Run scope test with real API interactive (uses config)"
 	@echo "  lint         Run linters (flake8, mypy)"
 	@echo "  format       Format code with black and isort"
 	@echo "  check        Run format check without modifying files"
@@ -116,16 +120,16 @@ publish: clean build
 
 # Run without installation targets
 run-cli:
-	PYTHONPATH=src python3 -m nautex.cli --help
+	PYTHONPATH=src .venv/bin/python -m nautex.cli --help
 
 run-setup:
-	PYTHONPATH=src python3 -m nautex.cli setup
+	PYTHONPATH=src .venv/bin/python -m nautex.cli setup
 
 run-status:
-	PYTHONPATH=src python3 -m nautex.cli status
+	PYTHONPATH=src .venv/bin/python -m nautex.cli status
 
 run-mcp:
-	PYTHONPATH=src python3 -m nautex.cli mcp
+	PYTHONPATH=src .venv/bin/python -m nautex.cli mcp
 
 run-mcp-inspector:
 	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector
@@ -136,6 +140,24 @@ dev-claude-mcp-setup:
 
 dev-nautex-setup:
 	uv run python -m nautex.cli setup
+
+# Scope testing harness (mock mode - hardcoded sample plan)
+test-scope:
+	@echo "Running scope rendering test (non-interactive, mock data)..."
+	PYTHONPATH=src .venv/bin/python -m tools.scope_harness.cli --mode mock --no-tui
+
+test-scope-interactive:
+	@echo "Running scope rendering test interactive (mock data)..."
+	PYTHONPATH=src .venv/bin/python -m tools.scope_harness.cli --mode mock
+
+# Scope testing harness (API mode - real backend, uses config if PROJECT_ID/PLAN_ID not provided)
+test-scope-api:
+	@echo "Running scope rendering test (non-interactive, real API)..."
+	PYTHONPATH=src .venv/bin/python -m tools.scope_harness.cli --mode api --no-tui
+
+test-scope-api-interactive:
+	@echo "Running scope rendering test interactive (real API)..."
+	PYTHONPATH=src .venv/bin/python -m tools.scope_harness.cli --mode api
 
 # Cleanup
 clean:

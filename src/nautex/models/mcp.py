@@ -1,11 +1,18 @@
 """Pydantic models for MCP (Model-Controller-Presenter) response structures."""
 
-from typing import List, Optional, Dict, Any, Union, Tuple
+from typing import List, Optional, Dict, Any, Union, Tuple, Set
 from enum import Enum
 from pydantic import BaseModel, Field
 import yaml
 
 from ..api.scope_context_model import ScopeContext, ScopeTask, ScopeContextMode, TaskStatus, TaskType
+from ..api.api_models import ErrorMessage
+
+
+class ScopeRenderMode(str, Enum):
+    """Rendering mode for scope responses."""
+    FULL = "full"
+    COMPACT = "compact"
 
 
 class _LiteralBlockDumper(yaml.SafeDumper):
@@ -77,44 +84,71 @@ class MCPScopeResponse(BaseModel):
     """Root model for MCP scope response."""
     progress_context: str = Field("", description="Overall instructions of what is going on")
     instructions: str = Field("", description="Instructions based on the current context scope mode")
-    documents_paths: Dict[str, str] = Field(default_factory=dict, description="Map of document designators to paths") 
+    documents_paths: Dict[str, str] = Field(default_factory=dict, description="Map of document designators to paths")
     tasks: List[MCPScopeTask] = Field(default_factory=list, description="List of tasks in a tree structure")
 
-    def render_response(self) -> Dict[str, Any]:
+    def render_response(self, mode: ScopeRenderMode = ScopeRenderMode.FULL) -> Dict[str, Any]:
         """Render response dict excluding empty strings and empty arrays.
+
+        Args:
+            mode: Rendering mode. FULL returns everything, COMPACT returns only focus tasks.
 
         - Excludes keys whose values are empty strings ""
         - Excludes keys whose values are empty lists []
         - Processes nested structures recursively (e.g., tasks and subtasks)
         """
-        def _prune(value: Any) -> Any:
-            # Recurse dictionaries
-            if isinstance(value, dict):
-                out = {}
-                for k, v in value.items():
-                    pruned = _prune(v)
-                    # Exclude empty strings and empty lists only
-                    if pruned == "":
-                        continue
-                    if isinstance(pruned, list) and len(pruned) == 0:
-                        continue
-                    out[k] = pruned
-                return out
-            # Recurse lists
-            if isinstance(value, list):
-                return [ _prune(v) for v in value ]
-            return value
+        if mode == ScopeRenderMode.COMPACT:
+            # Compact: just focus tasks with full details, no context overhead
+            focus_tasks = self._collect_focus_tasks()
+            return self._prune({"tasks": [t.model_dump() for t in focus_tasks]})
 
-        raw = self.model_dump()
-        return _prune(raw)
+        return self._prune(self.model_dump())
 
-    def render_as_markdown_yaml(self) -> str:
+    def _prune(self, value: Any) -> Any:
+        """Recursively prune empty strings and empty lists from a value."""
+        if isinstance(value, dict):
+            out = {}
+            for k, v in value.items():
+                pruned = self._prune(v)
+                if pruned == "":
+                    continue
+                if isinstance(pruned, list) and len(pruned) == 0:
+                    continue
+                out[k] = pruned
+            return out
+        if isinstance(value, list):
+            return [self._prune(v) for v in value]
+        return value
+
+    def _collect_focus_tasks(self) -> List[MCPScopeTask]:
+        """Collect all focus tasks from the tree (flat list).
+
+        Returns:
+            List of focus tasks with full details.
+        """
+        focus_tasks = []
+
+        def _collect(task: MCPScopeTask) -> None:
+            if task.workflow_info.in_focus:
+                focus_tasks.append(task)
+            for subtask in task.subtasks:
+                _collect(subtask)
+
+        for task in self.tasks:
+            _collect(task)
+
+        return focus_tasks
+
+    def render_as_markdown_yaml(self, mode: ScopeRenderMode = ScopeRenderMode.FULL) -> str:
         """Render response as Markdown with a YAML code block.
+
+        Args:
+            mode: Rendering mode
 
         Returns:
             Markdown string with ### heading and yaml code block
         """
-        return format_response_as_markdown("Next Scope", self.render_response())
+        return format_response_as_markdown("Next Scope", self.render_response(mode))
 
 MCPScopeTask.model_rebuild()
 
@@ -172,10 +206,13 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
 
     INST_START_CODING = "Implement the required files changes for this task. "
     INST_CONTINUE_CODING = "Continue the implementation of this coding task. "
-    INST_START_REVIEW = ("Conduct a collaborative review with the user. Present the implemented code or logic against the specific requirements. "
-                        "Ask targeted verification questions to confirm alignment and safety. Do not mark as 'Done' until the user explicitly approves the findings. ")
 
-    INST_CONTINUE_REVIEW = f"Continue collaborative reviewing process with user, gaining feedback from them to check how requirements are adressed by recent work. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation from user is provided."
+    INST_START_REVIEW = ("Conduct a collaborative review of the prior work results with the user. Present the implemented code or logic implemented with the requirements from prior phase work. "
+                        "Ask targeted verification and validation questions to confirm alignment and safety. ")
+
+    INST_CONTINUE_REVIEW = (f"Continue collaborative reviewing process with user, gaining feedback from them to check how requirements are addressed by recent work. "
+                            f"Do not mark as \"{TaskStatus.DONE.value}\" until the user explicitly approves the implementation results and achieved progress. ")
+
     INST_START_TESTING = "Test the implementation of the tasks in the scope according to the requirements and tasks. "
     INST_CONTINUE_TESTING = "Continue testing of the tasks in the scope according to the requirements and tasks. "
     INST_PROVIDE_INPUT = "Prompt user for the required input data or info from for this task. Validate collected data against the requested by this task description. "
@@ -345,14 +382,24 @@ class MCPTaskUpdateRequest(BaseModel):
 class MCPTaskUpdateResponse(BaseModel):
     """Response model for batch task operations in MCP."""
     success: bool = Field(..., description="Whether the operation was successful")
-    data: Optional[Dict[str, Any]] = Field(None, description="Response data payload")
+    updated: Optional[Dict[str, Any]] = Field(None, description="Response data payload")
     message: Optional[str] = Field(None, description="Human-readable message")
     error: Optional[str] = Field(None, description="Error message if success is False")
+    errors: Optional[List[ErrorMessage]] = Field(None, description="List of errors from API")
+    next_scope: Optional[Dict[str, Any]] = Field(None, description="Current scope after update (compact mode)")
 
     def render_as_markdown_yaml(self) -> str:
-        """Render response as Markdown with a YAML code block.
+        """Render response as Markdown with YAML code blocks.
 
         Returns:
-            Markdown string with ### heading and yaml code block
+            Markdown string with update result and scope (if present)
         """
-        return format_response_as_markdown("Tasks Update", self.model_dump(exclude_none=True))
+        # Render update result
+        update_data = self.model_dump(exclude_none=True, exclude={"scope"})
+        result = format_response_as_markdown("Tasks Update", update_data)
+
+        # Append scope if present
+        if self.next_scope:
+            result += "\n\n" + format_response_as_markdown("Next Scope", self.next_scope)
+
+        return result

@@ -16,8 +16,8 @@ from .services.config_service import ConfigurationService
 from .services.nautex_api_service import NautexAPIService
 from .services.integration_status_service import IntegrationStatusService
 from .services.document_service import DocumentService
-from .services.mcp_service import MCPService, mcp_server_set_service_instance, mcp_server_run, \
-    mcp_handle_next_scope, mcp_handle_status
+from .services.mcp_service import mcp_server_run, mcp_handle_next_scope, mcp_handle_status
+from .services.init import init_mcp_services
 from .services.mcp_config_service import MCPConfigService
 from .services.agent_rules_service import AgentRulesService
 from .api import create_api_client
@@ -145,17 +145,14 @@ def main() -> None:
         asyncio.run(ui_service.handle_status_command(noui=args.noui))
 
     elif args.command == "mcp":
-        # Initialize MCP service
+        # Initialize MCP service using shared init function (reuse existing services)
         try:
-            mcp_service = MCPService(
+            init_mcp_services(
                 config_service=config_service,
-                nautex_api_service=nautex_api_service,  # This can be None
                 integration_status_service=integration_status_service,
-                document_service=document_service
+                nautex_api_service=nautex_api_service,
+                document_service=document_service,
             )
-
-            # Set the global MCP service instance
-            mcp_server_set_service_instance(mcp_service)
 
             # Check for MCP subcommands
             if args.mcp_command == "test":

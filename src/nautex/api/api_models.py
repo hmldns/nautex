@@ -410,15 +410,16 @@ class APIResponse(BaseModel):
 
     All Nautex.ai API endpoints return responses in this format.
     """
-    status: str = Field(..., description="Response status: success or error")
+    status: str = Field(..., description="Response status: success, partial, or error")
     data: Optional[Any] = Field(None, description="Response data payload")
     message: Optional[str] = Field(None, description="Human-readable message")
+    errors: Optional[List[ErrorMessage]] = Field(None, description="List of errors if any occurred")
 
     @validator('status')
     def validate_status(cls, v):
-        """Ensure status is either 'success' or 'error'."""
-        if v not in ['success', 'error']:
-            raise ValueError('status must be either "success" or "error"')
+        """Ensure status is either 'success', 'partial', or 'error'."""
+        if v not in ['success', 'partial', 'error']:
+            raise ValueError('status must be "success", "partial", or "error"')
         return v
 
     class Config:

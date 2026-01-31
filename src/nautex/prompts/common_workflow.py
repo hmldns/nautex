@@ -41,9 +41,7 @@ The core workflow is as follows:
 5.  **Complete Tasks:** Once a task is fully implemented, update its status to `{TaskStatus.DONE.value}` using the `{CMD_TASKS_UPDATE}` command.
 6.  **Repeat:** Continue this cycle until `{CMD_NEXT_SCOPE}` returns no new tasks.
 
-# WARNING!
-
-NEVER EDIT FILES IN `{DIR_NAUTEX}` directory
+CRITICAL: NEVER EDIT FILES IN `{DIR_NAUTEX}` directory
 
 # Commands
 
@@ -70,13 +68,30 @@ Each task has a `workflow_info` object containing:
 Focus tasks are those with `workflow_info.in_focus` set to true. Status changes are only allowed for in-focus tasks.
 Tasks not in focus are given for context for progress handover and parent scope understanding (e.g. some chunk of work within the scope).
 
+### The `full` Parameter
+
+The `{CMD_NEXT_SCOPE}` command accepts an optional `full` boolean parameter (defaults to `true`):
+
+**When to use `full=true` (default):**
+- Starting a new session and need to orient yourself in the project
+- After completing a major milestone and need to see what's next across the whole plan
+- When stuck or confused about overall progress and relationships between tasks
+- When the user asks about overall project status or remaining work
+- When tasks structure was re-arranged and you detect change in the scope, user may tell that too.
+
+**When to use `full=false`:**
+- During normal task execution workflow, after pauses in the execution cycle
+- For quick info refreshing and in project navigation on minor in phase / milestone tasks status change
+
+CRITICAL: `{CMD_TASKS_UPDATE}` command also shows next scope with `full=false`, compact version of `{CMD_NEXT_SCOPE}` for saving turns, so, no need to bundle `{CMD_TASKS_UPDATE}` and `{CMD_NEXT_SCOPE}` commands together. 
 
 ## `{CMD_TASKS_UPDATE}`
 
-This command is used to report changes in task status back to the {Terms.PRODUCT} platform. You should call this command whenever a task's status changes (e.g., from `{TaskStatus.NOT_STARTED.value}` to `{TaskStatus.IN_PROGRESS.value}`, or from `{TaskStatus.IN_PROGRESS.value}` to `{TaskStatus.DONE.value}`).
+This command updates task status. Call it whenever a task's status changes (e.g., from `{TaskStatus.NOT_STARTED.value}` to `{TaskStatus.IN_PROGRESS.value}`, or from `{TaskStatus.IN_PROGRESS.value}` to `{TaskStatus.DONE.value}`).
 
--   **Usage:** Send a list of one or more `MCPScopeTask` objects with their `status` field updated. Only include the tasks whose statuses have changed.
--   **Important:** Timely updates are crucial for the platform to track progress accurately.
+-   **Usage:** Send a list of operations with task designators and new statuses.
+-   **Response:** When marking tasks as `{TaskStatus.DONE.value}`, automatically includes the next focus tasks (compact next scope) so you can see what's next without a separate `{CMD_NEXT_SCOPE}` call.
+-   **Important:** Timely updates are crucial for the workflow to track progress accurately.
 
 
 ### Example `{CMD_TASKS_UPDATE}` Payload:

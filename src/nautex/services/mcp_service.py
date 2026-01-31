@@ -7,14 +7,16 @@ from mcp.types import TextContent
 from . import ConfigurationService, IntegrationStatusService
 from .. import __version__
 from ..models.config import NautexConfig
-from .nautex_api_service import NautexAPIService
+from .nautex_api_protocol import NautexAPIProtocol
 from ..api.client import NautexAPIError
 from ..models.mcp import (
     convert_scope_context_to_mcp_response,
     MCPTaskOperation,
     MCPTaskUpdateResponse,
     format_response_as_markdown,
+    ScopeRenderMode,
 )
+from ..models.scope_rules import get_effective_render_mode
 from ..models.config import MCPOutputFormat
 
 from .document_service import DocumentService
@@ -139,7 +141,7 @@ class MCPService:
     def __init__(
         self,
         config_service: ConfigurationService,
-        nautex_api_service: NautexAPIService,
+        nautex_api_service: NautexAPIProtocol,
         integration_status_service: IntegrationStatusService,
         document_service: Optional['DocumentService'] = None
     ):
@@ -367,10 +369,17 @@ async def mcp_handle_list_plans(project_id: str) -> Dict[str, Any]:
 #     return await mcp_handle_list_plans(project_id)
 
 
-async def mcp_handle_next_scope() -> Dict[str, Any]:
-    """Implementation of the next scope functionality."""
+async def mcp_handle_next_scope(full: bool = True) -> Dict[str, Any]:
+    """Implementation of the next scope functionality.
+
+    Args:
+        full: If True, return full scope tree. If False, return only focus tasks.
+
+    Returns:
+        Dict with success status and scope data
+    """
     try:
-        logger.debug("Executing next scope tool")
+        logger.debug(f"Executing next scope tool (full={full})")
         service = _instance
 
         configured, error_response = _check_configured()
@@ -390,14 +399,12 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
         )
 
         if next_scope:
-            # Convert the scope to a dictionary representation
-
             docs_lut = await service.ensure_dependency_documents_on_disk()
-
             response_scope = convert_scope_context_to_mcp_response(next_scope, docs_lut)
+
             return {
                 "success": True,
-                "data": response_scope.render_response(),
+                "data": response_scope.render_response(get_effective_render_mode(response_scope, full)),
             }
         else:
             return {
@@ -421,9 +428,14 @@ async def mcp_handle_next_scope() -> Dict[str, Any]:
 
 
 @mcp.tool
-async def next_scope() -> Union[List[TextContent], Dict[str, Any]]:
-    """Get the next scope for the current project and plan."""
-    result = await mcp_handle_next_scope()
+async def next_scope(full: bool = True) -> Union[List[TextContent], Dict[str, Any]]:
+    """Get the next scope for the current project and plan.
+
+    Args:
+        full: If True (default), returns full scope tree. If False, returns only
+              focus tasks for reduced context.
+    """
+    result = await mcp_handle_next_scope(full=full)
     if mcp_service().response_format == MCPOutputFormat.MD_YAML:
         if result.get("success"):
             text = format_response_as_markdown("Next Scope", result["data"])
@@ -459,7 +471,6 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
                 error="Project ID and implementation plan ID must be configured"
             )
 
-
         # Convert the operations to MCPTaskOperation objects
         mcp_task_operations = []
         for op in operations:
@@ -475,7 +486,6 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
                     success=False,
                     error=sanitize_pydantic_error_message(e)
                 )
-
             mcp_task_operations.append(mcp_task_operation)
 
         # Convert MCPTaskOperation objects to TaskOperation objects for the API
@@ -501,10 +511,34 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
             from_mcp=True
         )
 
+        success = response.status == "success"
+
+        # Fetch compact scope only when a task was marked done (to show what's next)
+        scope_data = None
+        # has_done = any(op.updated_status == TaskStatus.DONE for op in mcp_task_operations)
+        # if has_done:
+        if success:
+            try:
+                next_scope = await service.nautex_api_service.next_scope(
+                    project_id=service.config.project_id,
+                    plan_id=service.config.plan_id,
+                    from_mcp=True
+                )
+                if next_scope:
+                    docs_lut = await service.ensure_dependency_documents_on_disk()
+                    response_scope = convert_scope_context_to_mcp_response(next_scope, docs_lut)
+                    scope_data = response_scope.render_response(get_effective_render_mode(response_scope, full=False))
+            except Exception as e:
+                logger.warning(f"Failed to fetch scope after update: {e}")
+
+        # Determine success based on API response status
+
         return MCPTaskUpdateResponse(
-            success=True,
-            data=response.data,
-            message=response.message
+            success=success,
+            updated=response.data,
+            message=response.message,
+            errors=response.errors,
+            next_scope=scope_data
         )
 
     except NautexAPIError as e:

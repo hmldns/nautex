@@ -8,6 +8,7 @@ from pydantic import SecretStr
 import time
 
 from . import ConfigurationService
+from .nautex_api_protocol import NautexAPIProtocol
 from ..api.client import NautexAPIClient, NautexAPIError
 from ..api.api_models import (
     AccountInfo,
@@ -21,7 +22,7 @@ from ..api.api_models import (
 logger = logging.getLogger(__name__)
 
 
-class NautexAPIService:
+class NautexAPIService(NautexAPIProtocol):
     """Business logic layer for interacting with the Nautex.ai API."""
 
     def __init__(self, api_client: NautexAPIClient, config_service: ConfigurationService):

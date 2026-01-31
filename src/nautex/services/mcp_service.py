@@ -513,7 +513,9 @@ async def mcp_handle_update_tasks(operations: List[Dict[str, Any]]) -> MCPTaskUp
 
         success = response.status == "success"
 
-        # Fetch compact scope only when a task was marked done (to show what's next)
+        # Fetch compact scope to show what's next after update
+        # NOTE: Originally was only for DONE transitions, now returns on any successful update.
+        # Consider revisiting if this causes context overhead for agents.
         scope_data = None
         # has_done = any(op.updated_status == TaskStatus.DONE for op in mcp_task_operations)
         # if has_done:

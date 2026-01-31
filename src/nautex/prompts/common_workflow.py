@@ -90,7 +90,8 @@ CRITICAL: `{CMD_TASKS_UPDATE}` command also shows next scope with `full=false`, 
 This command updates task status. Call it whenever a task's status changes (e.g., from `{TaskStatus.NOT_STARTED.value}` to `{TaskStatus.IN_PROGRESS.value}`, or from `{TaskStatus.IN_PROGRESS.value}` to `{TaskStatus.DONE.value}`).
 
 -   **Usage:** Send a list of operations with task designators and new statuses.
--   **Response:** When marking tasks as `{TaskStatus.DONE.value}`, automatically includes the next focus tasks (compact next scope) so you can see what's next without a separate `{CMD_NEXT_SCOPE}` call.
+-   **Response:** Automatically includes the next focus tasks (compact next scope) after any successful update, so you can see what's next without a separate `{CMD_NEXT_SCOPE}` call.
+-   **Compact scope format:** Contains only focus tasks (those with `workflow_info.in_focus: true`) as a flat list, without `progress_context`, `instructions`, or `documents_paths` fields. Use `{CMD_NEXT_SCOPE}` with `full=true` when you need full context.
 -   **Important:** Timely updates are crucial for the workflow to track progress accurately.
 
 

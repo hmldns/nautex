@@ -3,38 +3,35 @@ This is an MCP server that integrates PRD and TRD building tool [Nautex AI](http
 
 Supported agents:
 - Claude Code
-- Codex
 - Cursor
+- Codex
 - OpenCode
 - Gemini CLI
 
 # Motivation
 
-Since LLM Coding Agents do not attend team meetings, there is the challenge of conveying complete and detailed product and technical requirements to them. 
+Since LLM Coding Agents do not attend team meetings, there is the challenge of conveying complete and detailed product and technical requirements to them.
 
-Nautex AI tool-chain manages step by step guiding of Coding Agents so they implement specification using small, relevant and testable steps. 
+Nautex AI tool-chain manages step by step guiding of Coding Agents so they implement specification using small, relevant and testable steps.
 
-Core principles are: 
-1) start from foundational parts, de-risk them, then build up; 
+Core principles are:
+1) start from foundational parts, de-risk them, then build up;
 2) do not overwhelm Coding Agents by large problem at once;
 3) plan project files map and link them to requirements and to tasks: Coding Agents don't get lost, you know how to navigate brand new code base;
 4) manage developer attention for verification and validation in right moment for review.
 
-# How It Works 
+# How It Works
 
-Nautex AI acts as an Architect, Technical Product Manager, and Project Manager for coding agents, 
-speeding up AI-assisted development by communicating requirements effectively. 
-This MCP server pulls guidance instructions from Nautex AI; tasks contain to-do items, 
+Nautex AI acts as an Architect, Technical Product Manager, and Project Manager for coding agents,
+speeding up AI-assisted development by communicating requirements effectively.
+This MCP server pulls guidance instructions from Nautex AI; tasks contain to-do items,
 references to the affected files, and requirements that are automatically synced for the Coding Agent's availability.
 
 By [Ivan Makarov](https://x.com/ivan_mkrv)
 
 
-⬇️⬇️⬇️ 📚 **Check Presentation** ⬇️⬇️⬇️
-
-
 <details>
-<summary>💡 Usage Flow Presentation (unfold me)</summary>
+<summary>Usage Flow Presentation (unfold me)</summary>
 
 ## Requirements Specifications
 
@@ -74,13 +71,7 @@ The plan is structured in small, self-contained layers, building your project in
 
 ## Integration
 
-Next, configure the MCP server for Cursor integration: connect to the Nautex cloud platform for tasks, select the project, and choose the plan.
-
-Set the MCP server parameters and provide usage rules for Cursor. Use mouse clicks for automation—the terminal UI functions like a web page.
-
-This utility is available on GitHub.
-
-Once all indicators are green, initiate plan execution.
+Configure the MCP server for your coding agent: connect to the Nautex cloud platform, select the project, and choose the implementation plan. The setup command writes all configuration to your project root.
 
 ![howitworks_integration](doc/howitworks_integration.png)
 
@@ -98,121 +89,123 @@ That's it. You then review and accept substantial code segments that fully align
 
 # Setup
 
-## Via Terminal UI
+## Quick Setup (one command)
 
-1. Go to the new project folder and run in the terminal:
+The fastest way to set up is via the web app onboarding flow, which generates a single command you copy and run in your project root:
+
+```bash
+uvx nautex setup --token <TOKEN> --project <PROJECT_ID> --plan <PLAN_ID> --agent <AGENT>
+```
+
+**Parameters:**
+| Flag | Description |
+|------|-------------|
+| `--token`, `-t` | API token (create at [nautex.ai](https://app.nautex.ai/settings/nautex-api)) |
+| `--project`, `-p` | Project ID |
+| `--plan`, `-l` | Implementation plan ID |
+| `--agent`, `-a` | Agent type: `claude`, `cursor`, `codex`, `opencode`, `gemini` |
+| `--yes`, `-y` | Skip confirmation prompts |
+
+This validates your token, project, and plan, then writes all configuration to your project root:
+- `.nautex/config.json` — project config
+- `.nautex/.env` — API token (git-ignored)
+- MCP config — agent-specific (see below)
+- Agent rules — merged into existing rule files without overriding your content
+
+## Interactive Setup (Terminal UI)
+
+Alternatively, run the interactive terminal UI:
+
 ```bash
 uvx nautex setup
 ```
 
-<details>
-<summary>How to Install uv</summary>
+![Setup Screenshot](doc/setup_screen.png)
 
-On macOS and linux:
+Follow the on-screen prompts to select your project, plan, and agent.
+
+<details>
+<summary>How to Install UV</summary>
+
+On macOS and Linux:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-On Windows
+On Windows:
 ```bash
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Check the latest instruction from [UV repo](https://github.com/astral-sh/uv) for details and updates
+Check the latest instructions from the [UV repo](https://github.com/astral-sh/uv) for details and updates.
 </details>
 
-You should see the terminal user interface
+## What Gets Written Per Agent
 
-![Setup Screenshot](doc/setup_screen.png)
+All configuration is scoped per-project in your project root.
 
-2. Follow the guidelines via UI 
- - go [Nautex.ai](https://app.nautex.ai/settings/nautex-api) to sign up and create API token
- - In the web app, create PRD and TRD documents:
-   - Chat with the bot for capturing requirements. 
-   - After initial documents generation Create files map of the project inside the map.
-   - Then, after reviewing resulted map create implementation plan.
-   - You can follow `Connect Coding Agent` onboarding flow or setup via TUI. Button will disappear on first MCP request
-   - Go back to the CLI UI
-- Select project
-- Select implementation plan
-- Select agent type
-- Ensure you've got right MCP config: manually or via TUI (it will merge with any existing config)
 <details>
-<summary>For cursor</summary>
+<summary>Claude Code</summary>
 
-- in `.cursor/mcp.json`, 
-
-```json
-{
-  "mcpServers": {
-    "nautex": {
-      "command": "uvx",
-      "args": [
-        "nautex",
-        "mcp"
-      ]
-    }
-  }
-}
-```
-
-**Note:** At config update Cursor asks via popup either you want to enable new MCP, answer yes. In any case in 
-`File -> Preferences -> Cursor Preferences -> Tools & Integrations` nautex MCP should be enabled and green. 
-
-- Rules are in `.cursor/rules/` folder via TUI command.
+- MCP: registered via `claude mcp add nautex -s local -- uvx nautex mcp`
+- Rules: managed section added to `CLAUDE.md`
+- Verify: run `claude mcp list` and check for `nautex: uvx nautex mcp`
 </details>
 
 <details>
-<summary>For Claude Code</summary>
+<summary>Cursor</summary>
 
-TUI setup launches this command to add Nautex MCP:
-```
-claude mcp add nautex -s local -- uvx nautex mcp
-```
+- MCP config: `.cursor/mcp.json`
+- Rules: `.cursor/rules/nautex_workflow.mdc`
 
-- Rules are in `./CLAUDE.md` after set via TUI.
-- Verify integration: run `claude mcp list` and ensure an entry like `nautex: uvx nautex mcp - ✓ Connected` is present.
+**Note:** After setup, Cursor may ask via popup whether to enable the new MCP — answer yes. In any case, go to `File -> Preferences -> Cursor Settings -> Tools & Integrations` and make sure the Nautex MCP toggle is enabled (green).
 </details>
 
 <details>
-<summary>For Codex</summary>
+<summary>Codex</summary>
 
-Codex uses a file-based MCP config at `~/.codex/config.toml`. Nautex will merge/update this file and create a backup `config.toml.bak` before the first overwrite if needed.
-
-- Rules live under `.nautex/AGENTS.md`, with a managed reference section in the root `AGENTS.md`.
-- Verify integration in Codex: open the MCP command UI (e.g., use the `/mcp` command) and confirm `nautex` is listed/enabled. Alternatively, inspect `~/.codex/config.toml` for a `nautex` entry pointing to `uvx nautex mcp`.
+- MCP config: `.codex/config.toml` (project-local, backup created as `config.toml.bak` before first write)
+- Rules: managed section added to `AGENTS.md`
+- Verify: use the `/mcp` command inside Codex to confirm `nautex` is listed
 </details>
 
 <details>
-<summary>For OpenCode</summary>
+<summary>OpenCode</summary>
 
-OpenCode uses a per-project config `opencode.json` in the repository root. Nautex writes/updates this file, preserving unrelated fields and backing up unparsable files once to `opencode.json.bak`.
-
-Minimal required structure written by Nautex:
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "nautex": {
-      "type": "local",
-      "command": ["uvx", "nautex", "mcp"],
-      "enabled": true
-    }
-  }
-}
-```
-
-- Rules live under `.nautex/AGENTS.md`, with a managed reference section in the root `AGENTS.md`.
-- Verify integration: from OpenCode, invoke the Nautex MCP tool and run `status` (e.g., “nautex: status”). You should see the Nautex server respond. Optionally inspect `opencode.json` as shown above.
+- MCP config: `opencode.json` (project root, preserves unrelated fields, backup as `opencode.json.bak` if unparsable)
+- Rules: managed section added to `AGENTS.md`
+- Verify: invoke the Nautex MCP tool from OpenCode and run `status`
 </details>
 
-3. (Optional) Check MCP server response ```uvx nautex mcp test next_scope```
-4. Check MCP configuration works and Coding Agent sees the tools: 
- > Check nautex status
-5. Tell Coding Agent: 
- > Pull nautex rules and proceed to the next scope
+<details>
+<summary>Gemini CLI</summary>
 
-6. Proceed with the plan by reviewing progress and supporting the Agent with validation feedback and inputs.
+- MCP config: `.gemini/settings.json`
+- Rules: managed section added to `GEMINI.md`
+</details>
+
+## Start Coding
+
+Once setup is complete, launch your coding agent and tell it:
+
+> Check nautex status
+
+After confirming the connection works:
+
+> Pull nautex rules and proceed to the next scope
+
+Proceed with the plan by reviewing progress and supporting the Agent with validation feedback and inputs.
+
+# Prerequisites
+
+Before running setup, prepare your project in the [Nautex web app](https://app.nautex.ai):
+
+1. Sign up and create an API token
+2. Create PRD and TRD documents (chat with the bot to capture requirements)
+3. Create a files map of the project
+4. Create an implementation plan
+
+The web app onboarding flow will generate the setup command with all IDs pre-filled.
 
 # Projects built with nautex
 

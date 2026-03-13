@@ -113,8 +113,16 @@ def main() -> None:
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # TUI setup command
-    subparsers.add_parser("setup", help="Interactive setup configuration")
+    # TUI setup command (also supports non-interactive mode via --token etc.)
+    setup_parser = subparsers.add_parser("setup", help="Interactive setup configuration")
+    setup_parser.add_argument("--token", "-t", default=None, help="API token")
+    setup_parser.add_argument("--project", "-p", default=None, help="Project ID")
+    setup_parser.add_argument("--plan", "-l", default=None, help="Implementation plan ID")
+    setup_parser.add_argument("--agent", "-a", default=None,
+                              choices=["claude", "cursor", "codex", "opencode", "gemini"],
+                              help="Agent type")
+    setup_parser.add_argument("--yes", "-y", action="store_true", default=False,
+                              help="Skip all confirmations")
 
     # MCP server command
     subparsers.add_parser("mcp", help="Start MCP server for IDE integration")
@@ -133,25 +141,30 @@ def main() -> None:
     config_service.load_configuration()
 
     if args.command == "setup":
-        # Setup requires the full service stack for TUI
-        mcp_config_service = MCPConfigService(config_service)
-        agent_rules_service = AgentRulesService(config_service)
-        api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
-        nautex_api_service = NautexAPIService(api_client, config_service)
-        integration_status_service = IntegrationStatusService(
-            config_service=config_service,
-            mcp_config_service=mcp_config_service,
-            agent_rules_service=agent_rules_service,
-            nautex_api_service=nautex_api_service,
-        )
-        ui_service = UIService(
-            config_service=config_service,
-            integration_status_service=integration_status_service,
-            api_service=nautex_api_service,
-            mcp_config_service=mcp_config_service,
-            agent_rules_service=agent_rules_service,
-        )
-        asyncio.run(ui_service.handle_setup_command())
+        has_cli_args = any([args.token, args.project, args.plan, args.agent])
+        if has_cli_args:
+            from .setup_noninteractive import run_noninteractive_setup
+            asyncio.run(run_noninteractive_setup(args, config_service))
+        else:
+            # Setup requires the full service stack for TUI
+            mcp_config_service = MCPConfigService(config_service)
+            agent_rules_service = AgentRulesService(config_service)
+            api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
+            nautex_api_service = NautexAPIService(api_client, config_service)
+            integration_status_service = IntegrationStatusService(
+                config_service=config_service,
+                mcp_config_service=mcp_config_service,
+                agent_rules_service=agent_rules_service,
+                nautex_api_service=nautex_api_service,
+            )
+            ui_service = UIService(
+                config_service=config_service,
+                integration_status_service=integration_status_service,
+                api_service=nautex_api_service,
+                mcp_config_service=mcp_config_service,
+                agent_rules_service=agent_rules_service,
+            )
+            asyncio.run(ui_service.handle_setup_command())
 
     elif args.command == "mcp":
         mcp_config_service = MCPConfigService(config_service)

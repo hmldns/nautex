@@ -175,8 +175,11 @@ class NautexAPIService(NautexAPIProtocol):
             # Use the current token
             return await self.api_client.get_account_info()
 
-    async def list_projects(self) -> List[Project]:
+    async def list_projects(self, silent: bool = False) -> List[Project]:
         """List all projects available to the user.
+
+        Args:
+            silent: If True, skip backend touch flags (for validation-only calls)
 
         Returns:
             List of projects
@@ -185,7 +188,7 @@ class NautexAPIService(NautexAPIProtocol):
             NautexAPIError: If API call fails
         """
         try:
-            return await self.api_client.list_projects()
+            return await self.api_client.list_projects(silent=silent)
         except NautexAPIError as e:
             logger.error(f"Failed to list projects: {e}")
             raise
@@ -280,13 +283,14 @@ class NautexAPIService(NautexAPIProtocol):
             logger.error(f"Failed to submit change request: {e}")
             raise
 
-    async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional["ImplementationPlan"]:
+    async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False, silent: bool = False) -> Optional["ImplementationPlan"]:
         """Get a specific implementation plan by plan_id.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
             from_mcp: Whether the request is coming from MCP
+            silent: If True, skip backend touch flags (for validation-only calls)
 
         Returns:
             An ImplementationPlan object containing the plan details, or None if the plan was not found
@@ -296,7 +300,7 @@ class NautexAPIService(NautexAPIProtocol):
         """
 
         try:
-            return await self.api_client.get_implementation_plan(project_id, plan_id, from_mcp=from_mcp)
+            return await self.api_client.get_implementation_plan(project_id, plan_id, from_mcp=from_mcp, silent=silent)
         except NautexAPIError as e:
             logger.error(f"Failed to get implementation plan {plan_id} for project {project_id}: {e}")
             raise

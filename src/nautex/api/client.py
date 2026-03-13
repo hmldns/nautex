@@ -236,7 +236,7 @@ class NautexAPIClient:
         else:
             raise NautexAPIError(f"Request failed after {max_retries} attempts")
 
-    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None, from_mcp: bool = False) -> APIResponse:
+    async def get(self, endpoint_url: str, headers: Dict[str, str], timeout: Optional[float] = None, from_mcp: bool = False, silent: bool = False) -> APIResponse:
         """Make a GET request.
 
         Args:
@@ -244,15 +244,19 @@ class NautexAPIClient:
             headers: Request headers
             timeout: Optional custom timeout in seconds
             from_mcp: Whether the request is coming from MCP
+            silent: Whether to skip backend touch/tracking flags
 
         Returns:
             Parsed JSON response
         """
-        # Add from_mcp query parameter if True
+        # Add query parameters
         if from_mcp:
             separator = "&" if "?" in endpoint_url else "?"
             endpoint_url += f"{separator}from_mcp=true"
-            
+        if silent:
+            separator = "&" if "?" in endpoint_url else "?"
+            endpoint_url += f"{separator}silent=true"
+
         resp = await self._request("GET", endpoint_url, headers, timeout=timeout)
         return APIResponse(**resp)
 
@@ -443,8 +447,11 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in get_account_info: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def list_projects(self) -> List[Project]:
+    async def list_projects(self, silent: bool = False) -> List[Project]:
         """List all projects available to the user.
+
+        Args:
+            silent: If True, skip backend touch flags (for validation-only calls)
 
         Returns:
             List of projects
@@ -456,7 +463,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(self.ENDPOINT_PROJECTS)
 
         try:
-            response = await self.get(url, headers)
+            response = await self.get(url, headers, silent=silent)
 
             # Parse response into list of Project models
             projects_data = response.data.get('projects', [])
@@ -795,13 +802,14 @@ class NautexAPIClient:
             logger.error(f"Unexpected error in get_document_tree: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
-    async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional[ImplementationPlan]:
+    async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False, silent: bool = False) -> Optional[ImplementationPlan]:
         """Get a specific implementation plan by plan_id.
 
         Args:
             project_id: ID of the project
             plan_id: ID of the implementation plan
             from_mcp: Whether the request is coming from MCP
+            silent: If True, skip backend touch flags (for validation-only calls)
 
         Returns:
             An ImplementationPlan object containing the plan details, or None if the plan was not found
@@ -814,7 +822,7 @@ class NautexAPIClient:
         url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/{self.ENDPOINT_PLANS}/{plan_id}")
 
         try:
-            response = await self.get(url, headers, from_mcp=from_mcp)
+            response = await self.get(url, headers, from_mcp=from_mcp, silent=silent)
 
             # Handle APIResponse wrapper
             if response.status == "success" and response.data:

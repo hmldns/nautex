@@ -15,7 +15,8 @@ from ..api.api_models import (
     Project,
     ImplementationPlan,
     Task,
-    APIResponse, TaskOperation
+    APIResponse, TaskOperation,
+    SubmitChangeRequestPayload
 )
 
 # Set up logging
@@ -253,6 +254,30 @@ class NautexAPIService(NautexAPIProtocol):
             return APIResponse.model_validate(response_data)
         except NautexAPIError as e:
             logger.error(f"Failed to execute batch task update: {e}")
+            raise
+
+    async def submit_change_request(
+        self, project_id: str, payload: SubmitChangeRequestPayload,
+        from_mcp: bool = False
+    ) -> APIResponse:
+        """Submit a document change request.
+
+        Args:
+            project_id: ID of the project
+            payload: SubmitChangeRequestPayload model
+            from_mcp: Whether the request is coming from MCP
+
+        Returns:
+            APIResponse with session_id and session_url in data
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        try:
+            response_data = await self.api_client.submit_change_request(project_id, payload, from_mcp=from_mcp)
+            return APIResponse.model_validate(response_data)
+        except NautexAPIError as e:
+            logger.error(f"Failed to submit change request: {e}")
             raise
 
     async def get_implementation_plan(self, project_id: str, plan_id: str, from_mcp: bool = False) -> Optional["ImplementationPlan"]:

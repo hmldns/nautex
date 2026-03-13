@@ -7,6 +7,7 @@ CMD_NAUTEX_SETUP = 'uvx nautex setup'
 CMD_STATUS = 'nautex__status'
 CMD_NEXT_SCOPE = 'nautex__next_scope'
 CMD_TASKS_UPDATE = 'nautex__tasks_update'
+CMD_SUBMIT_CHANGE_REQUEST = 'nautex__submit_change_request'
 
 # Directories
 DIR_NAUTEX = '.nautex'

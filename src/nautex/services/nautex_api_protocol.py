@@ -3,7 +3,7 @@
 from typing import Protocol, Optional, List
 
 from ..api.scope_context_model import ScopeContext
-from ..api.api_models import APIResponse, TaskOperation
+from ..api.api_models import APIResponse, TaskOperation, SubmitChangeRequestPayload
 
 
 class NautexAPIProtocol(Protocol):
@@ -42,5 +42,21 @@ class NautexAPIProtocol(Protocol):
 
         Returns:
             APIResponse with result
+        """
+        ...
+
+    async def submit_change_request(
+        self, project_id: str, payload: SubmitChangeRequestPayload,
+        from_mcp: bool = False
+    ) -> APIResponse:
+        """Submit a document change request.
+
+        Args:
+            project_id: The project ID
+            payload: SubmitChangeRequestPayload model
+            from_mcp: Whether the request is from MCP
+
+        Returns:
+            APIResponse with session_id and session_url in data
         """
         ...

@@ -6,6 +6,7 @@ from .consts import (
     CMD_STATUS,
     CMD_NEXT_SCOPE,
     CMD_TASKS_UPDATE,
+    CMD_SUBMIT_CHANGE_REQUEST,
     DIR_NAUTEX,
     DIR_NAUTEX_DOCS,
 )
@@ -125,6 +126,34 @@ This command updates task status. Call it whenever a task's status changes (e.g.
 
 """
 
+_SUBMIT_CHANGE_REQUEST_SECTION = f"""
+## `{CMD_SUBMIT_CHANGE_REQUEST}`
+
+This command creates a review session in {Terms.PRODUCT} where the user can review your findings, approve changes to specifications, or provide guidance. It is the user's initiative to decide whether and how to update the specs based on your request.
+
+**When to use this command:**
+Use this command ONLY when you are explicitly instructed to do so by the task's `workflow_info.instructions` (for example, during `{TaskType.EXPLORE.value}` tasks to report codebase gaps), OR if you encounter a fundamental, unresolvable architectural blocker that strictly prevents you from completing your current task. 
+
+Do NOT use this command for routine implementation details or minor missing information; as an engineer, you are expected to resolve those autonomously using existing codebase conventions.
+
+**Message structure:** Provide full context so the reviewer understands the situation without needing to ask follow-up questions:
+1. **Your task context** — what task you're working on
+2. **The problem** — the specific issue you found, with specific designator references
+3. **The impact** — how this affects your current work or the project
+4. **Suggested resolution** — what you think should change in the spec (optional but helpful)
+
+### Example Usage:
+```
+request_message: "Working on T-8 (file upload). The spec (TRD-30) outlines the API shape but omits file size limits. I cannot proceed safely without these limits defined. Suggest updating TRD-30 to define maximum file size and allowed MIME types before I implement validation logic."
+designators: ["TRD-30"]
+```
+
+**Response:** Returns a session URL. Share it with the user so they can review your request and respond.
+
+**Note:** This command does not affect task status. Continue working on other tasks while waiting for the user's response. If a task is blocked pending the change request, update its status to `{TaskStatus.BLOCKED.value}` via `{CMD_TASKS_UPDATE}` with a note referencing the change request.
+
+"""
+
 _WORKFLOW_OUTRO = f"""
 # Task Workflow and Statuses
 
@@ -143,7 +172,7 @@ Each task object has a `type` that informs the agent about the nature of the wor
 -   **{TaskType.REVIEW.value}**: This task requires user validation. The `description` will contain a script for the agent to follow, guiding it on what to show the user (e.g., code, application behavior, UI flow) and what specific feedback to ask for. This is a critical step for de-risking the project.
 -   **{TaskType.TEST.value}**: This task involves writing or executing tests to verify that the code works as expected. The `description` will describe the test cases or strategy (e.g., "Write unit tests for the `calculate_total` function, covering positive, negative, and zero values."). Referenced requirements should be taken in account as sell.
 -   **{TaskType.INPUT.value}**: This task requires the agent to gather specific information, often from the user. The `description` will detail what is needed (e.g., API keys, `.env` file settings, configuration data) and provide a script for how to ask the user for it.
--   **{TaskType.EXPLORE.value}**: This task requires the agent to explore existing codebase before implementation. The `description` will instruct the agent on what files/patterns to examine, what questions to answer about existing code, and how to present findings to the user comparing plan vision vs actual codebase state (gaps, contradictions, integration points). Propose solutions for gaps and make decisions with user before proceeding. Do not mark as 'Done' until the user explicitly confirms the exploration findings and decisions. Used when improving existing projects.
+-   **{TaskType.EXPLORE.value}**: This task requires the agent to explore existing codebase before implementation. The `description` will instruct the agent on what files/patterns to examine, what questions to answer about existing code, and how to present findings to the user comparing plan vision vs actual codebase state. During these tasks, actively look for gaps, contradictions, and integration points, and use the `{CMD_SUBMIT_CHANGE_REQUEST}` command to propose solutions and align the specs with reality. Do not mark as 'Done' until the user explicitly confirms the exploration findings and decisions. Used when improving existing projects.
 
 # Interaction Goals and Guiding Principles
 
@@ -178,11 +207,13 @@ def get_common_workflow_prompt(response_format: MCPOutputFormat) -> str:
         from .response_format_md_yaml import (
             NEXT_SCOPE_RESPONSE_DESCRIPTION,
             TASKS_UPDATE_RESPONSE_DESCRIPTION,
+            # CHANGE_REQUEST_RESPONSE_DESCRIPTION,  # TODO: include when follow-up logic is added
         )
     else:
         from .response_format_json import (
             NEXT_SCOPE_RESPONSE_DESCRIPTION,
             TASKS_UPDATE_RESPONSE_DESCRIPTION,
+            # CHANGE_REQUEST_RESPONSE_DESCRIPTION,  # TODO: include when follow-up logic is added
         )
 
     return (
@@ -190,5 +221,7 @@ def get_common_workflow_prompt(response_format: MCPOutputFormat) -> str:
         + NEXT_SCOPE_RESPONSE_DESCRIPTION
         + _NEXT_SCOPE_NOTES
         + TASKS_UPDATE_RESPONSE_DESCRIPTION
+        + _SUBMIT_CHANGE_REQUEST_SECTION
+        # + CHANGE_REQUEST_RESPONSE_DESCRIPTION  # TODO: include when follow-up logic is added
         + _WORKFLOW_OUTRO
     )

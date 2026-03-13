@@ -28,6 +28,7 @@ def init_mcp_services(
     from .nautex_api_service import NautexAPIService
     from .document_service import DocumentService
     from ..api import create_api_client
+    from ..commands import set_service_instance
 
     # Create API service if not provided
     if nautex_api_service is None:
@@ -49,7 +50,8 @@ def init_mcp_services(
         document_service=document_service
     )
 
-    # Register global instance
+    # Register global instance for both MCP tools and command handlers
     mcp_server_set_service_instance(mcp_service)
+    set_service_instance(mcp_service)
 
     return mcp_service

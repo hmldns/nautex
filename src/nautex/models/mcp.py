@@ -7,6 +7,7 @@ import yaml
 
 from ..api.scope_context_model import ScopeContext, ScopeTask, ScopeContextMode, TaskStatus, TaskType
 from ..api.api_models import ErrorMessage
+from ..prompts.consts import CMD_SUBMIT_CHANGE_REQUEST
 
 
 class ScopeRenderMode(str, Enum):
@@ -218,8 +219,9 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
     INST_PROVIDE_INPUT = "Prompt user for the required input data or info from for this task. Validate collected data against the requested by this task description. "
     INST_CONTINUE_FOR_INPUT = "Prompt user and process required input data and info from user. Validate collected data against the requested by this task description. "
     INST_START_EXPLORE = ("Explore the codebase area described in this task. Examine existing patterns, identify relevant files, and present findings to the user. "
-                          "Compare plan vision vs actual codebase state, highlighting gaps, contradictions, and integration points. "
-                          "Propose solutions for gaps and make decisions with user before proceeding. Do not mark as 'Done' until the user explicitly confirms the exploration findings and decisions. ")
+                          "Compare plan vision vs actual codebase state, actively highlighting gaps, contradictions, and integration points. "
+                          f"CRITICAL: Use the `{CMD_SUBMIT_CHANGE_REQUEST}` command to propose solutions for any gaps you find and align the specs with the codebase. "
+                          "Do not mark as 'Done' until the user explicitly confirms the exploration findings and decisions. ")
     INST_CONTINUE_EXPLORE = f"Continue exploring and presenting findings to user. Address gaps with proposed solutions, make decisions with user. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation from user is provided."
 
     INST_FINALIZE_MASTER_TASK = "All subtasks are complete. Finalize the master task by integrating the work, reviewing and testing subtasks in scope. "
@@ -367,6 +369,53 @@ def convert_scope_context_to_mcp_response(scope_context: ScopeContext, documents
     return response
 
 
+class MCPStatusResponse(BaseModel):
+    """Response model for status command."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    version: Optional[str] = Field(None, description="CLI version")
+    status_message: Optional[str] = Field(None, description="Human-readable status summary")
+    cwd: Optional[str] = Field(None, description="Current working directory")
+    error: Optional[str] = Field(None, description="Error message if success is False")
+
+
+class MCPProjectInfo(BaseModel):
+    """Project summary for list responses."""
+    project_id: str
+    name: str
+    description: Optional[str] = None
+
+
+class MCPListProjectsResponse(BaseModel):
+    """Response model for list-projects command."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    projects: Optional[List[MCPProjectInfo]] = Field(None, description="List of projects")
+    error: Optional[str] = Field(None, description="Error message if success is False")
+    configured: Optional[bool] = Field(None, description="Whether the CLI is configured")
+
+
+class MCPPlanInfo(BaseModel):
+    """Plan summary for list responses."""
+    plan_id: str
+    project_id: str
+    name: str
+    description: Optional[str] = None
+
+
+class MCPListPlansResponse(BaseModel):
+    """Response model for list-plans command."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    plans: Optional[List[MCPPlanInfo]] = Field(None, description="List of plans")
+    error: Optional[str] = Field(None, description="Error message if success is False")
+
+
+class MCPNextScopeResponse(BaseModel):
+    """Response model for next-scope command."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    data: Optional[Dict[str, Any]] = Field(None, description="Rendered scope tree")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    error: Optional[str] = Field(None, description="Error message if success is False")
+
+
 class MCPTaskOperation(BaseModel):
     """Model representing a single operation on a task for MCP."""
     task_designator: str = Field(..., description="Unique task identifier like TASK-123")
@@ -377,6 +426,15 @@ class MCPTaskOperation(BaseModel):
 class MCPTaskUpdateRequest(BaseModel):
     """Request model for batch task operations in MCP."""
     operations: List[MCPTaskOperation] = Field(..., description="List of operations to perform")
+
+
+class MCPChangeRequestResponse(BaseModel):
+    """Response model for change request submission in MCP."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    session_id: Optional[str] = Field(None, description="Created session ID")
+    session_url: Optional[str] = Field(None, description="URL to review the change request")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    error: Optional[str] = Field(None, description="Error message if success is False")
 
 
 class MCPTaskUpdateResponse(BaseModel):

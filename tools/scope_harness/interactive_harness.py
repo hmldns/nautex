@@ -6,12 +6,8 @@ from typing import Optional
 from nautex.api.scope_context_model import TaskStatus
 from nautex.models.config import NautexConfig, MCPOutputFormat
 from nautex.models.mcp import format_response_as_markdown
-from nautex.services.mcp_service import (
-    MCPService,
-    mcp_server_set_service_instance,
-    mcp_handle_next_scope,
-    mcp_handle_update_tasks,
-)
+from nautex.services.mcp_service import MCPService, mcp_server_set_service_instance
+from nautex.commands import mcp_handle_next_scope, mcp_handle_update_tasks, set_service_instance
 from .mock_api_service import MockNautexAPIService
 from .task_tree_state import TaskTreeStateService
 
@@ -65,6 +61,7 @@ class InteractiveHarness:
             document_service=None
         )
         mcp_server_set_service_instance(mcp_service)
+        set_service_instance(mcp_service)
 
         # Initialize tree from mock data
         self._sync_tree_from_mock()

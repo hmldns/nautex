@@ -15,6 +15,7 @@ from .api_models import (
     Task,
     APIResponse,
     TaskOperationRequest,
+    SubmitChangeRequestPayload,
     Document
 )
 from .scope_context_model import ScopeContext
@@ -720,6 +721,39 @@ class NautexAPIClient:
             raise
         except Exception as e:
             logger.error(f"Unexpected error in update_tasks_batch: {e}")
+            raise NautexAPIError(f"Unexpected error: {str(e)}")
+
+    async def submit_change_request(
+        self,
+        project_id: str,
+        payload: "SubmitChangeRequestPayload",
+        from_mcp: bool = False
+    ) -> Dict[str, Any]:
+        """Submit a document change request.
+
+        Args:
+            project_id: ID of the project
+            payload: SubmitChangeRequestPayload model
+            from_mcp: Whether the request is coming from MCP
+
+        Returns:
+            API response containing session_id and session_url
+
+        Raises:
+            NautexAPIError: If API call fails
+        """
+        headers = self._get_auth_headers()
+        url = self._get_full_api_url(f"{self.ENDPOINT_PROJECTS}/{project_id}/change_request")
+
+        try:
+            response_data = await self.post(url, headers, payload.model_dump(), from_mcp=from_mcp)
+            logger.debug(f"Successfully submitted change request for project {project_id}")
+            return response_data
+        except NautexAPIError as e:
+            logger.error(f"Failed to submit change request: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in submit_change_request: {e}")
             raise NautexAPIError(f"Unexpected error: {str(e)}")
 
     async def get_document_tree(self, project_id: str, doc_designator: str, from_mcp: bool = False) -> Optional[Document]:

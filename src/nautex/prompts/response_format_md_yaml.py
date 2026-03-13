@@ -1,7 +1,7 @@
 """Markdown/YAML format response descriptions for MCP workflow prompts."""
 
 from ..api.scope_context_model import TaskStatus, TaskType
-from .consts import CMD_NEXT_SCOPE, CMD_TASKS_UPDATE, DIR_NAUTEX_DOCS
+from .consts import CMD_NEXT_SCOPE, CMD_TASKS_UPDATE, CMD_SUBMIT_CHANGE_REQUEST, DIR_NAUTEX_DOCS
 from .response_format_comments import FieldComments as FC
 
 
@@ -104,4 +104,13 @@ TASKS_UPDATE_RESPONSE_DESCRIPTION = f"""### Example `{CMD_TASKS_UPDATE}` Respons
 ```yaml
 success: true
 message: Tasks updated successfully
+```"""
+
+
+CHANGE_REQUEST_RESPONSE_DESCRIPTION = f"""### Example `{CMD_SUBMIT_CHANGE_REQUEST}` Response:
+```yaml
+success: true
+session_id: abc123
+session_url: https://app.nautex.ai/?project=proj1&session=abc123
+message: Change request session created. User can review at the session URL.
 ```"""

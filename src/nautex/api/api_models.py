@@ -130,6 +130,15 @@ class TaskOperation(BaseModel):
     new_note: Optional[str] = Field(None, description="New note content to add to the task")
 
 
+class SubmitChangeRequestPayload(BaseModel):
+    """Payload for submitting a document change request via MCP."""
+    request_message: str = Field(..., description="What needs to change and why")
+    designators: List[str] = Field(..., description="Document or item designators to reference (e.g., ['PRD', 'TRD', 'PRD-123'])")
+    author: Optional[str] = Field("Coding Agent", description="Name of the agent submitting the request")
+    session_id: Optional[str] = Field(None, description="Existing session ID to submit into (creates new if omitted)")
+    name: Optional[str] = Field(None, description="Session title when creating a new session")
+
+
 class ErrorMessage(BaseModel):
     # designator: Optional[str] = Field(..., description="")
     message: str = Field(..., description="Error message")

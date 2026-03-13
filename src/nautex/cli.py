@@ -1,96 +1,126 @@
-# import logging
-#
-# logging.basicConfig(
-#     level=logging.ERROR
-# )
-
 import argparse
 import asyncio
-
+import json
 import sys
 
-from pathlib import Path
-
-from .services.ui_service import UIService
+from .models.config import MCPOutputFormat
+from .models.mcp import format_response_as_markdown
 from .services.config_service import ConfigurationService
-from .services.nautex_api_service import NautexAPIService
-from .services.integration_status_service import IntegrationStatusService
-from .services.document_service import DocumentService
-from .services.mcp_service import mcp_server_run, mcp_handle_next_scope, mcp_handle_status
+from .services.mcp_service import mcp_server_run
 from .services.init import init_mcp_services
 from .services.mcp_config_service import MCPConfigService
 from .services.agent_rules_service import AgentRulesService
+from .services.integration_status_service import IntegrationStatusService
+from .services.nautex_api_service import NautexAPIService
+from .services.document_service import DocumentService
+from .services.ui_service import UIService
 from .api import create_api_client
-from .models.config import MCPOutputFormat
-from .models.mcp import format_response_as_markdown
 from . import __version__
-import json
 
 
-def handle_test_commands(args, config_service):
-    """Handle test commands for MCP functionality.
+# ---------------------------------------------------------------------------
+# CLI command registration and dispatch
+# ---------------------------------------------------------------------------
 
-    Args:
-        args: Command line arguments
-        config_service: Configuration service instance
-    """
-    use_yaml = config_service.config.response_format == MCPOutputFormat.MD_YAML
+# Commands that require init_mcp_services() before dispatch
+CLI_COMMANDS = {"status", "next-scope", "update-tasks", "submit-change-request"}
 
-    if args.test_command == "next_scope":
-        result = asyncio.run(mcp_handle_next_scope())
-        data = result.get("data", result) if result.get("success") else result
 
-        if use_yaml:
-            print(format_response_as_markdown("Next Scope", data))
+def register_cli_commands(subparsers) -> None:
+    """Register all CLI command subparsers."""
+
+    subparsers.add_parser("status", help="Show integration status")
+
+    ns_parser = subparsers.add_parser("next-scope", help="Get the next scope")
+    ns_parser.add_argument(
+        "--full", action="store_true", default=False,
+        help="Force full scope tree (default: auto mode with smart expand)",
+    )
+
+    ut_parser = subparsers.add_parser("update-tasks", help="Update task statuses")
+    ut_parser.add_argument(
+        "operations", help='JSON array of task operations, e.g. \'[{"task_designator":"T-1","updated_status":"Done"}]\'',
+    )
+
+    scr_parser = subparsers.add_parser("submit-change-request", help="Submit a document change request")
+    scr_parser.add_argument("--message", "-m", required=True, help="What needs to change and why")
+    scr_parser.add_argument("--designators", "-d", nargs="+", required=True, help="Document designators")
+    scr_parser.add_argument("--session-id", default=None, help="Existing session ID to submit into")
+    scr_parser.add_argument("--name", default=None, help="Session title when creating a new session")
+    scr_parser.add_argument("--project-id", default=None, help="Override project ID from config")
+
+
+def _render_response(title: str, response, fmt: MCPOutputFormat) -> str:
+    """Render a response model for CLI output."""
+    dumped = response.model_dump(exclude_none=True)
+    if fmt == MCPOutputFormat.MD_YAML:
+        return format_response_as_markdown(title, dumped)
+    return json.dumps(dumped, indent=4)
+
+
+async def run_cli_command(command: str, args, config_service) -> None:
+    """Dispatch a CLI command to its handler and print formatted output."""
+    from .commands import (
+        mcp_handle_status,
+        mcp_handle_next_scope,
+        mcp_handle_update_tasks,
+        mcp_handle_submit_change_request,
+    )
+
+    fmt = config_service.config.response_format
+
+    if command == "status":
+        response = await mcp_handle_status()
+        print(_render_response("Status", response, fmt))
+
+    elif command == "next-scope":
+        response = await mcp_handle_next_scope(full=args.full)
+        if fmt == MCPOutputFormat.MD_YAML and response.success and response.data:
+            print(format_response_as_markdown("Next Scope", response.data))
         else:
-            print(json.dumps(data, indent=4))
+            print(_render_response("Next Scope", response, fmt))
 
-    elif args.test_command == "status":
-        result = asyncio.run(mcp_handle_status())
-        data = result.get("data", result) if result.get("success") else result
-
-        if use_yaml:
-            print(format_response_as_markdown("Status", data))
+    elif command == "update-tasks":
+        operations = json.loads(args.operations)
+        response = await mcp_handle_update_tasks(operations)
+        if fmt == MCPOutputFormat.MD_YAML:
+            print(response.render_as_markdown_yaml())
         else:
-            print(json.dumps(data, indent=4))
-    else:
-        print("Please specify a test command. Available commands: next_scope, status.")
+            print(json.dumps(response.model_dump(exclude_none=True), indent=4))
 
+    elif command == "submit-change-request":
+        response = await mcp_handle_submit_change_request(
+            args.message, args.designators,
+            session_id=args.session_id, name=args.name,
+            project_id=args.project_id,
+        )
+        print(_render_response("Change Request", response, fmt))
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     """Main entry point for the Nautex CLI."""
     parser = argparse.ArgumentParser(
         prog="nautex",
-        description="nautex - Nautex AI platform MCP integration tool and server"
+        description="nautex - Nautex AI platform MCP integration tool and server",
     )
     parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {__version__}"
+        "--version", action="version", version=f"%(prog)s {__version__}"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Setup command
-    setup_parser = subparsers.add_parser("setup", help="Interactive setup configuration")
+    # TUI setup command
+    subparsers.add_parser("setup", help="Interactive setup configuration")
 
-    # Status command  
-    status_parser = subparsers.add_parser("status", help="View integration status")
-    status_parser.add_argument("--noui", action="store_true", help="Print status to console instead of TUI")
+    # MCP server command
+    subparsers.add_parser("mcp", help="Start MCP server for IDE integration")
 
-    # MCP command
-    mcp_parser = subparsers.add_parser("mcp", help="Start MCP server for IDE integration")
-
-    # MCP subcommands
-    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command", help="MCP commands")
-
-    # MCP test command
-    mcp_test_parser = mcp_subparsers.add_parser("test", help="Test MCP functionality")
-    mcp_test_subparsers = mcp_test_parser.add_subparsers(dest="test_command", help="Test commands")
-
-    # MCP test commands
-    mcp_test_next_scope_parser = mcp_test_subparsers.add_parser("next_scope", help="Test next_scope functionality")
-    mcp_test_status_parser = mcp_test_subparsers.add_parser("status", help="Test status functionality")
+    # Register all API commands (status, next-scope, update-tasks, submit-change-request)
+    register_cli_commands(subparsers)
 
     args = parser.parse_args()
 
@@ -98,54 +128,46 @@ def main() -> None:
         parser.print_help()
         return
 
-    # 1. Base services that don't depend on other services
+    # Base services
     config_service = ConfigurationService()
     config_service.load_configuration()
 
-    # 2. Initialize services that depend on config
-    mcp_config_service = MCPConfigService(config_service)
-    agent_rules_service = AgentRulesService(config_service)
-
-    # 3. Initialize API client and service if config is available
-
-    api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
-    nautex_api_service = NautexAPIService(api_client, config_service)
-
-    # 4. Services that depend on other services
-    integration_status_service = IntegrationStatusService(
-        config_service=config_service,
-        mcp_config_service=mcp_config_service,
-        agent_rules_service=agent_rules_service,
-        nautex_api_service=nautex_api_service,
-    )
-
-
-    # Initialize document service
-    document_service = DocumentService(
-        nautex_api_service=nautex_api_service,
-        config_service=config_service
-    )
-
-    # 5. UI service for TUI commands
-    ui_service = UIService(
-        config_service=config_service,
-        integration_status_service=integration_status_service,
-        api_service=nautex_api_service,
-        mcp_config_service=mcp_config_service,
-        agent_rules_service=agent_rules_service,
-    )
-
-    # Command dispatch
     if args.command == "setup":
-        # Run the interactive setup TUI
+        # Setup requires the full service stack for TUI
+        mcp_config_service = MCPConfigService(config_service)
+        agent_rules_service = AgentRulesService(config_service)
+        api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
+        nautex_api_service = NautexAPIService(api_client, config_service)
+        integration_status_service = IntegrationStatusService(
+            config_service=config_service,
+            mcp_config_service=mcp_config_service,
+            agent_rules_service=agent_rules_service,
+            nautex_api_service=nautex_api_service,
+        )
+        ui_service = UIService(
+            config_service=config_service,
+            integration_status_service=integration_status_service,
+            api_service=nautex_api_service,
+            mcp_config_service=mcp_config_service,
+            agent_rules_service=agent_rules_service,
+        )
         asyncio.run(ui_service.handle_setup_command())
 
-    elif args.command == "status":
-        # Run the status command
-        asyncio.run(ui_service.handle_status_command(noui=args.noui))
-
     elif args.command == "mcp":
-        # Initialize MCP service using shared init function (reuse existing services)
+        mcp_config_service = MCPConfigService(config_service)
+        agent_rules_service = AgentRulesService(config_service)
+        api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
+        nautex_api_service = NautexAPIService(api_client, config_service)
+        integration_status_service = IntegrationStatusService(
+            config_service=config_service,
+            mcp_config_service=mcp_config_service,
+            agent_rules_service=agent_rules_service,
+            nautex_api_service=nautex_api_service,
+        )
+        document_service = DocumentService(
+            nautex_api_service=nautex_api_service,
+            config_service=config_service,
+        )
         try:
             init_mcp_services(
                 config_service=config_service,
@@ -153,18 +175,35 @@ def main() -> None:
                 nautex_api_service=nautex_api_service,
                 document_service=document_service,
             )
-
-            # Check for MCP subcommands
-            if args.mcp_command == "test":
-                handle_test_commands(args, config_service)
-            else:
-                # Run the MCP server in the main thread
-                mcp_server_run()
-
+            mcp_server_run()
         except Exception as e:
             print(f"MCP server error: {e}", file=sys.stderr)
             sys.exit(1)
 
+    elif args.command in CLI_COMMANDS:
+        # API commands: initialize MCP services then dispatch
+        mcp_config_service = MCPConfigService(config_service)
+        agent_rules_service = AgentRulesService(config_service)
+        api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
+        nautex_api_service = NautexAPIService(api_client, config_service)
+        integration_status_service = IntegrationStatusService(
+            config_service=config_service,
+            mcp_config_service=mcp_config_service,
+            agent_rules_service=agent_rules_service,
+            nautex_api_service=nautex_api_service,
+        )
+        document_service = DocumentService(
+            nautex_api_service=nautex_api_service,
+            config_service=config_service,
+        )
+        init_mcp_services(
+            config_service=config_service,
+            integration_status_service=integration_status_service,
+            nautex_api_service=nautex_api_service,
+            document_service=document_service,
+        )
+        asyncio.run(run_cli_command(args.command, args, config_service))
+
 
 if __name__ == "__main__":
-    main() 
+    main()

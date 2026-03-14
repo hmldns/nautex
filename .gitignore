@@ -36,6 +36,10 @@ dist
 .claude
 .nautex
 .gemini
+.codex
+
 uv.lock
+opencode.json
 CLAUDE.md
 GEMINI.md
+AGENTS.md

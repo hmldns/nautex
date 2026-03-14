@@ -57,7 +57,12 @@ async def _run_setup(args, config_service: ConfigurationService) -> None:
     # 2. Map agent string to AgentType enum
     agent_type = AGENT_MAP[args.agent]
 
-    # 3. Validate token, project, and plan against API before writing anything
+    # 3. Persist host override if provided, then reload config so api_host reflects it
+    if getattr(args, 'host', None):
+        config_service.save_to_nautex_env('API_HOST', args.host)
+        config_service.load_configuration()
+
+    # 4. Validate token, project, and plan against API before writing anything
     console.print("Validating...")
     api_client = create_api_client(base_url=config_service.config.api_host, test_mode=False)
     api_service = NautexAPIService(api_client, config_service)

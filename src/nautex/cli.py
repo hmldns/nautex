@@ -121,6 +121,8 @@ def main() -> None:
     setup_parser.add_argument("--agent", "-a", default=None,
                               choices=["claude", "cursor", "codex", "opencode", "gemini"],
                               help="Agent type")
+    setup_parser.add_argument("--host", default=None,
+                              help="Override API host URL (saved to .nautex/.env)")
     setup_parser.add_argument("--yes", "-y", action="store_true", default=False,
                               help="Skip all confirmations")
 

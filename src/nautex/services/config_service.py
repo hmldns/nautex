@@ -234,34 +234,31 @@ class ConfigurationService:
                 raise
             raise ConfigurationError(f"Unexpected error saving configuration: {e}")
 
-    # need that to avoid messing with user's env and making json config git commitable
-    def save_token_to_nautex_env(self, token: str):
+    def save_to_nautex_env(self, key: str, value: str):
+        """Upsert a NAUTEX_-prefixed variable in .nautex/.env."""
         self.nautex_env_file.parent.mkdir(exist_ok=True)
-        
-        # Read existing content
+        env_key = NautexConfig.Config.env_prefix + key.upper()
         existing_lines = []
-        token_key = NautexConfig.Config.env_prefix + 'api_token'.upper()
-        token_found = False
-        
+        found = False
         if self.nautex_env_file.exists():
             with open(self.nautex_env_file, 'r') as f:
                 for line in f:
                     line = line.strip()
-                    if line.startswith(f"{token_key}="):
-                        # Replace existing token
-                        existing_lines.append(f"{token_key}={token}")
-                        token_found = True
-                    elif line:  # Keep non-empty lines that aren't the token
+                    if line.startswith(f"{env_key}="):
+                        existing_lines.append(f"{env_key}={value}")
+                        found = True
+                    elif line:
                         existing_lines.append(line)
-        
-        # Add token if it wasn't found
-        if not token_found:
-            existing_lines.append(f"{token_key}={token}")
-        
-        # Write back all lines
+        if not found:
+            existing_lines.append(f"{env_key}={value}")
         with open(self.nautex_env_file, 'w') as f:
             for line in existing_lines:
                 f.write(f"{line}\n")
+        self._ensure_gitignore(self.nautex_env_file.parent)
+
+    # need that to avoid messing with user's env and making json config git commitable
+    def save_token_to_nautex_env(self, token: str):
+        self.save_to_nautex_env('API_TOKEN', token)
 
         self._ensure_gitignore(self.nautex_env_file.parent)
 

@@ -7,6 +7,7 @@ Each agent probe imports this and defines its own flow.
 """
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -15,10 +16,16 @@ import tempfile
 import time
 from pathlib import Path
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 import acp
 from acp import spawn_agent_process, text_block
 from acp.schema import AllowedOutcome, ClientCapabilities, FileSystemCapability
+
+# Import production gateway modules
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from nautex.gateway.models import ConsolidatedSessionUpdate
+from nautex.gateway.adapters.stream_consolidator import StreamConsolidator, ProtocolParseError
 
 # Suppress SDK background noise
 logging.getLogger("root").setLevel(logging.CRITICAL)
@@ -98,16 +105,35 @@ class CallStats:
 
 
 # ---------------------------------------------------------------------------
+# Telemetry colors — cycle through for each snapshot tick
+# ---------------------------------------------------------------------------
+
+TELEMETRY_COLORS = [
+    "\033[38;5;39m",   # blue
+    "\033[38;5;208m",  # orange
+    "\033[38;5;40m",   # green
+    "\033[38;5;201m",  # magenta
+    "\033[38;5;226m",  # yellow
+    "\033[38;5;87m",   # cyan
+    "\033[38;5;196m",  # red
+    "\033[38;5;141m",  # purple
+]
+
+
+# ---------------------------------------------------------------------------
 # ProbeClient
 # ---------------------------------------------------------------------------
 
 class ProbeClient(acp.Client):
     """Full ACP Client for probing. Executes fs/terminal locally, auto-approves."""
 
-    def __init__(self):
+    def __init__(self, consolidate: bool = False):
         self._terminals: dict = {}
         self._tid = 0
         self.stats = CallStats()
+        self._consolidate = consolidate
+        self.consolidator: Optional[StreamConsolidator] = None
+        self._telemetry_tick = 0
 
     # --- Filesystem ---
 
@@ -243,6 +269,20 @@ class ProbeClient(acp.Client):
         if not update:
             return
 
+        # Production consolidation: use StreamConsolidator from gateway module
+        if self._consolidate:
+            if self.consolidator is None:
+                self.consolidator = StreamConsolidator(session_id=session_id, buffer_text=True)
+            try:
+                emitted = self.consolidator.process(update)
+                for csu in emitted:
+                    self._show_csu(csu)
+                # Live telemetry tick — colored snapshot every 5 updates
+                if self.consolidator.update_count % 5 == 0 and self.consolidator.update_count > 0:
+                    self._show_telemetry_tick()
+            except ProtocolParseError as e:
+                log("CSU:ERR", C.RED, str(e))
+
         ut = getattr(update, "session_update", "") or ""
 
         if ut == "agent_message_chunk":
@@ -286,6 +326,37 @@ class ProbeClient(acp.Client):
         # Unknown — log it for the effort log
         self.stats.unknown_updates.append(ut)
         log(ut or "unknown_update", C.YELLOW, "(new update type — document this)")
+
+    def _show_csu(self, csu):
+        """Show a consolidated session update inline — bright white on dark bg."""
+        if csu.kind == "replay_skip":
+            return
+        text = csu.data.get("text", "")
+        if text:
+            preview = text.replace("\n", "\\n")
+            detail = f"[{preview}]"
+        else:
+            parts = [f"{k}={v}" for k, v in csu.data.items() if v]
+            detail = f"[{', '.join(parts)}]" if parts else ""
+        # Bright white + bold — stands out against normal output
+        sys.stdout.write(f"\n\033[1;94m  ◆ consolidated: {csu.kind} {detail}\033[0m\n")
+        sys.stdout.flush()
+
+    def _show_telemetry_tick(self):
+        """Show a telemetry snapshot inline — always yellow."""
+        if not self.consolidator:
+            return
+        t = self.consolidator.get_telemetry()
+        parts = [
+            f"updates={self.consolidator.update_count}",
+            f"words={t.processed_tokens_estimate}",
+        ]
+        if t.active_tool:
+            parts.append(f"tool={t.active_tool}")
+        if t.is_typing:
+            parts.append("typing")
+        tick_str = " ".join(parts)
+        print(f"\n{C.YELLOW}  ▸ telemetry [{tick_str}]{C.RESET}", flush=True)
 
     # --- Extensions ---
 
@@ -436,6 +507,76 @@ def cleanup_workspace(tmpdir: str, should_cleanup: bool):
         print(f"\n{C.DIM}Workspace kept: {tmpdir}{C.RESET}")
 
 
+def show_consolidated(client: ProbeClient):
+    """Print consolidated session updates and telemetry summary.
+
+    Uses the production StreamConsolidator from gateway module.
+    """
+    if not client.consolidator:
+        return
+
+    sc = client.consolidator
+    # Flush any remaining buffered text
+    sc.flush()
+    updates = sc._updates
+
+    print(f"\n{C.BOLD}--- Consolidated Session Updates ({len(updates)}) ---{C.RESET}")
+
+    KIND_COLORS = {
+        "agent_message_chunk": C.BOLD,
+        "tool_call": C.BLUE,
+        "tool_call_update": C.BLUE,
+        "agent_thought_chunk": C.DIM,
+        "available_commands_update": C.YELLOW,
+        "current_mode_update": C.YELLOW,
+        "usage_update": C.CYAN,
+    }
+
+    kind_counts: Dict[str, int] = {}
+    for i, csu in enumerate(updates):
+        kind = csu.kind
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        data_preview = dict(csu.data)
+
+        # Truncate text for display
+        if "text" in data_preview:
+            t = data_preview["text"]
+            if len(t) > 80:
+                data_preview["text"] = t.replace("\n", "\\n")
+
+        color = KIND_COLORS.get(kind, C.YELLOW)
+        data_str = json.dumps(data_preview, default=str) if data_preview else ""
+        print(f"  {C.DIM}{i+1:3d}{C.RESET} {color}{kind:30s}{C.RESET} {data_str}")
+
+    # Final telemetry from production consolidator
+    t = sc.get_telemetry()
+    print(f"\n{C.BOLD}--- Production Telemetry (StreamConsolidator) ---{C.RESET}")
+    print(f"  session_id:     {t.session_id}")
+    print(f"  tokens_est:     {t.processed_tokens_estimate}")
+    print(f"  is_typing:      {t.is_typing}")
+    print(f"  active_tool:    {t.active_tool}")
+    print(f"  total_updates:  {sc.update_count}")
+
+    print(f"\n  Kinds:")
+    for kind, count in sorted(kind_counts.items(), key=lambda x: -x[1]):
+        print(f"    {kind:30s} {count}")
+
+    # SDK accumulator snapshot from production consolidator
+    try:
+        snapshot = sc.accumulator.snapshot()
+        print(f"\n{C.BOLD}--- SDK SessionSnapshot ---{C.RESET}")
+        print(f"  session_id:    {snapshot.session_id}")
+        print(f"  tool_calls:    {len(snapshot.tool_calls)}")
+        print(f"  plan_entries:  {len(snapshot.plan_entries)}")
+        print(f"  agent_msgs:    {len(snapshot.agent_messages)}")
+        print(f"  agent_thoughts:{len(snapshot.agent_thoughts)}")
+        print(f"  user_msgs:     {len(snapshot.user_messages)}")
+        print(f"  mode:          {snapshot.current_mode_id}")
+        print(f"  commands:      {len(snapshot.available_commands)}")
+    except Exception:
+        pass
+
+
 def add_common_args(parser):
     """Add shared CLI args to a probe's argument parser."""
     parser.add_argument("-p", "--prompt", default=DEFAULT_PROMPT)
@@ -443,6 +584,7 @@ def add_common_args(parser):
     parser.add_argument("-t", "--timeout", type=int, default=90)
     parser.add_argument("-w", "--workspace", default=None, help="Workspace directory (default: auto temp dir)")
     parser.add_argument("--keep", action="store_true", help="Keep workspace after probe finishes")
+    parser.add_argument("--consolidate", action="store_true", help="Produce ConsolidatedSessionUpdate objects from stream")
 
 
 async def run_with_timeout(coro, timeout: int, agent_id: str):

@@ -26,7 +26,7 @@ from harness import (
     C, ProbeClient, log,
     phase_initialize, phase_authenticate, phase_session,
     phase_set_model, phase_prompt,
-    show_workspace, show_stats, run_with_timeout,
+    show_workspace, show_stats, show_consolidated, run_with_timeout,
     DEFAULT_PROMPT,
     setup_workspace, cleanup_workspace, add_common_args,
 )
@@ -42,13 +42,13 @@ DEFAULT_MODEL = "auto"  # required — without this Cursor demands plan upgrade
 AGENT_ID = "cursor"
 
 
-async def run(prompt: str, model: str | None, timeout: int, workspace: str | None = None, keep: bool = False):
+async def run(prompt: str, model: str | None, timeout: int, workspace: str | None = None, keep: bool = False, consolidate: bool = False):
     if not shutil.which(CMD):
         print(f"{C.RED}'{CMD}' not found in PATH{C.RESET}")
         sys.exit(1)
 
     tmpdir, should_cleanup = setup_workspace(AGENT_ID, workspace, keep)
-    client = ProbeClient()
+    client = ProbeClient(consolidate=consolidate)
 
     print(f"{C.BOLD}=== Probe: Cursor Agent ==={C.RESET}")
     print(f"  Binary:    {shutil.which(CMD)}")
@@ -88,6 +88,7 @@ async def run(prompt: str, model: str | None, timeout: int, workspace: str | Non
 
             show_workspace(tmpdir)
             show_stats(client)
+            show_consolidated(client)
 
             # Key question: did the agent call our fs/terminal methods?
             print(f"\n{C.BOLD}--- Execution Model ---{C.RESET}")
@@ -106,7 +107,7 @@ def main():
     args = parser.parse_args()
 
     asyncio.run(run_with_timeout(
-        run(args.prompt, args.model, args.timeout, workspace=args.workspace, keep=args.keep),
+        run(args.prompt, args.model, args.timeout, workspace=args.workspace, keep=args.keep, consolidate=args.consolidate),
         timeout=args.timeout,
         agent_id="cursor_agent",
     ))

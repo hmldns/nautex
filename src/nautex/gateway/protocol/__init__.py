@@ -15,6 +15,7 @@ from .envelope import GatewayWsEnvelope
 from .payloads import (
     PAYLOAD_DISCRIMINATOR,
     CancelSessionPayload,
+    ConsolidatedSessionUpdate,
     ExecutePromptPayload,
     GatewayPayload,
     HeartbeatPayload,
@@ -23,9 +24,7 @@ from .payloads import (
     SearchRequestPayload,
     SearchResponsePayload,
     SearchResultItem,
-    SessionUpdatePayload,
     TelemetryPayload,
-    ToolCallDetail,
 )
 from .routes import (
     FRONTEND_CANCEL_SESSION,
@@ -37,7 +36,6 @@ from .routes import (
     UTILITY_SESSION_UPDATE,
     UTILITY_TELEMETRY,
 )
-from .session_updates import ConsolidatedSessionUpdate
 from .telemetry import EphemeralSessionTelemetry, NodeHeartbeatPayload
 
 __all__ = [
@@ -55,16 +53,14 @@ __all__ = [
     "HeartbeatPayload",
     "PermissionRequestPayload",
     "PermissionResponsePayload",
-    "SessionUpdatePayload",
+    "ConsolidatedSessionUpdate",
     "TelemetryPayload",
     "ExecutePromptPayload",
     "CancelSessionPayload",
     "SearchRequestPayload",
     "SearchResponsePayload",
     "SearchResultItem",
-    "ToolCallDetail",
-    # Domain
-    "ConsolidatedSessionUpdate",
+    # Telemetry
     "NodeHeartbeatPayload",
     "EphemeralSessionTelemetry",
     # Routes

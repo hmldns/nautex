@@ -8,7 +8,7 @@ All fields are explicitly typed — no Dict[str, Any] bags.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -42,20 +42,21 @@ class PermissionRequestPayload(BaseModel):
     command: Optional[str] = None
 
 
-class ToolCallDetail(BaseModel):
-    """Structured tool call info embedded in session updates."""
-    tool_call_id: str
-    title: str = ""
-    status: ToolCallStatus = ToolCallStatus.PENDING
-    tool_kind: Optional[ToolKind] = None
+class ConsolidatedSessionUpdate(BaseModel):
+    """Semantic batched update from an agent stream.
 
-
-class SessionUpdatePayload(BaseModel):
+    The strict public boundary type — adapters yield only this.
+    Also serves as the WS payload for session updates (payload_type discriminator).
+    Reference: MDS-35
+    """
     payload_type: Literal["session_update"] = "session_update"
-    session_id: str
     kind: SessionUpdateKind
+    session_id: Optional[str] = None
     text: Optional[str] = None
-    tool_call: Optional[ToolCallDetail] = None
+    tool_call_id: Optional[str] = None
+    tool_title: Optional[str] = None
+    tool_status: Optional[ToolCallStatus] = None
+    tool_kind: Optional[ToolKind] = None
     mode_id: Optional[str] = None
     commands_count: Optional[int] = None
     usage_size: Optional[int] = None
@@ -120,7 +121,7 @@ class SearchResponsePayload(BaseModel):
 GatewayPayload = Union[
     HeartbeatPayload,
     PermissionRequestPayload,
-    SessionUpdatePayload,
+    ConsolidatedSessionUpdate,
     TelemetryPayload,
     PermissionResponsePayload,
     ExecutePromptPayload,

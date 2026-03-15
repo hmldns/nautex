@@ -218,6 +218,5 @@ class PromptResponse(BaseModel):
 
 # Shared protocol types — canonical definitions live in gateway.protocol/
 # Re-exported here for backwards compatibility
-from .protocol.session_updates import ConsolidatedSessionUpdate
-from .protocol.payloads import PermissionRequestPayload, PermissionResponsePayload
+from .protocol.payloads import ConsolidatedSessionUpdate, PermissionRequestPayload, PermissionResponsePayload
 from .protocol.envelope import GatewayWsEnvelope

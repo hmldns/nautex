@@ -247,7 +247,7 @@ async def mcp_handle_next_scope(full: bool = False) -> MCPNextScopeResponse:
         )
 
         if next_scope:
-            docs_lut = await service.ensure_dependency_documents_on_disk()
+            docs_lut = await service.ensure_dependency_documents()
             response_scope = convert_scope_context_to_mcp_response(next_scope, docs_lut)
             return MCPNextScopeResponse(
                 success=True,
@@ -341,7 +341,9 @@ async def mcp_handle_update_tasks(
                     from_mcp=True,
                 )
                 if next_scope:
-                    docs_lut = await service.ensure_dependency_documents_on_disk()
+                    docs_lut = service.dependency_documents_paths
+                    if not docs_lut:
+                        docs_lut = await service.ensure_dependency_documents()
                     response_scope = convert_scope_context_to_mcp_response(
                         next_scope, docs_lut
                     )

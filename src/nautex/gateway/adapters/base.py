@@ -1,27 +1,38 @@
-"""Agent adapter abstract interfaces and class hierarchy.
+"""Agent adapter interface.
 
-Defines the normalization boundary between Nautex and third-party agent
-binaries. Concrete adapters implement these interfaces to manage OS process
-lifecycle and normalize native communication streams into standard domain objects.
+Defines the normalization boundary between Nautex and third-party agent binaries.
 
-Class hierarchy (MDS-61):
-    AgentAdapter (ABC)
-    ├── NativeACPAdapter      — agent speaks ACP directly (stdio transport)
-    ├── ExternalAdapterAgent  — spawns wrapper binary that translates native → ACP
-    └── CustomAdapterAgent    — custom agent-specific API (no ACP on wire)
+Original MDS-61 proposed a hierarchy based on protocol type:
+    NativeACPAdapter / ExternalAdapterAgent / CustomAdapterAgent
 
-Reference: MDS-13, MDS-61
+Probing all 8 agents revealed this distinction is irrelevant — every agent
+uses the same ACP SDK stdio transport. The actual variance is in:
+    - Execution model (delegated vs local vs partial)
+    - Auth flow
+    - Permission gating behavior
+    - Env requirements
+
+These are captured in SupportedAgentRegistration (gateway/models.py), not subclass hierarchy.
+The adapter is now a single concrete class driven by config, not subclasses per agent.
+
+Revised architecture:
+    AgentAdapter (ABC)       — public interface for the gateway service
+    └── ACPAgentAdapter      — concrete implementation using agent-client-protocol SDK
+                               + SupportedAgentRegistration config for per-agent behavior
+
+Reference: MDS-13, MDS-61 (revised)
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List
+from typing import Any, Awaitable, Callable, Dict
 
 from ..models import (
-    AgentConfig,
+    AgentSessionConfig,
     AgentDescriptor,
+    SupportedAgentRegistration,
     ConsolidatedSessionUpdate,
     GatewaySessionConfig,
     PermissionRequestPayload,
@@ -52,67 +63,58 @@ class AgentAdapter(ABC):
 
     @property
     @abstractmethod
-    def manifest(self) -> "AgentDescriptor":
-        """Static descriptor with agent metadata and capabilities."""
+    def descriptor(self) -> AgentDescriptor:
+        """Agent identity and capabilities — populated from ACP runtime."""
         ...
 
     @property
     @abstractmethod
+    def registration(self) -> SupportedAgentRegistration:
+        """Static binary description from the registry."""
+        ...
+
+
+    @property
+    @abstractmethod
     def state(self) -> AgentConnectionState:
-        """Current lifecycle state of the adapter."""
+        """Current lifecycle state."""
         ...
 
     @abstractmethod
     async def connect(
         self,
-        config: "AgentConfig",
-        on_system_event: Callable[["ConsolidatedSessionUpdate"], Awaitable[None]],
+        config: AgentSessionConfig,
+        on_system_event: Callable[[ConsolidatedSessionUpdate], Awaitable[None]],
     ) -> None:
-        """Initialize the agent process and establish the async notification pipe.
+        """Spawn agent process, initialize ACP, authenticate, create session.
 
-        Spawns the OS subprocess, performs port discovery if needed, and starts
-        the stderr drain daemon. The on_system_event callback receives out-of-band
-        events (stderr batches, idle crashes) for the lifetime of the connection.
+        After connect, the adapter is ACTIVE and ready for prompts.
+        The on_system_event callback receives out-of-band events
+        (stderr, idle crashes) for the lifetime of the connection.
         """
         ...
 
     @abstractmethod
-    async def create_session(self, config: "GatewaySessionConfig") -> str:
+    async def create_session(self, config: GatewaySessionConfig) -> str:
         """Create a new agent session. Returns session ID."""
         ...
 
     @abstractmethod
     async def resume_session(self, session_id: str) -> None:
-        """Invoke session/load for state reconciliation.
-
-        The agent replays its history via update notifications.
-        """
+        """Invoke session/load for state reconciliation."""
         ...
 
     @abstractmethod
-    async def submit_prompt_optimistic(
+    async def prompt(
         self,
         session_id: str,
-        content: "PromptContent",
-        on_update: Callable[["ConsolidatedSessionUpdate"], Awaitable[None]],
+        content: PromptContent,
+        on_update: Callable[[ConsolidatedSessionUpdate], Awaitable[None]],
         on_permission_request: Callable[
-            ["PermissionRequestPayload"], Awaitable["PermissionResponsePayload"]
+            [PermissionRequestPayload], Awaitable[PermissionResponsePayload]
         ],
-    ) -> str:
-        """Stream-based prompt execution. Returns prompt ID."""
-        ...
-
-    @abstractmethod
-    async def execute_prompt_strict(
-        self,
-        session_id: str,
-        content: "PromptContent",
-        on_update: Callable[["ConsolidatedSessionUpdate"], Awaitable[None]],
-        on_permission_request: Callable[
-            ["PermissionRequestPayload"], Awaitable["PermissionResponsePayload"]
-        ],
-    ) -> "PromptResponse":
-        """Blocking prompt execution. Returns full response."""
+    ) -> PromptResponse:
+        """Send prompt and stream responses. Returns final result."""
         ...
 
     @abstractmethod
@@ -127,63 +129,5 @@ class AgentAdapter(ABC):
 
     @abstractmethod
     async def disconnect(self) -> None:
-        """Teardown the agent process. Guarantees cleanup via SIGTERM/SIGKILL."""
-        ...
-
-
-# ---------------------------------------------------------------------------
-# Adapter strategy base classes (MDS-61)
-# ---------------------------------------------------------------------------
-
-class NativeACPAdapter(AgentAdapter):
-    """Base for agents that speak ACP directly over stdio.
-
-    Concrete adapters: GeminiAdapter, OpenCodeAdapter, GooseAdapter, KiroAdapter.
-
-    Subclasses must implement _build_launch_command() to produce the CLI
-    invocation for the native binary. The connect/disconnect lifecycle,
-    process management, and stream parsing are handled by shared plumbing.
-    """
-
-    @abstractmethod
-    def _build_launch_command(self, config: "AgentConfig") -> List[str]:
-        """Build the full CLI command list to spawn the native agent."""
-        ...
-
-    def _build_env(self, config: "AgentConfig") -> Dict[str, str]:
-        """Build additional environment variables for the agent process.
-
-        Override in subclasses to inject agent-specific env vars
-        (e.g., GOOSE_MODEL for Goose).
-        """
-        return {}
-
-
-class ExternalAdapterAgent(AgentAdapter):
-    """Base for agents requiring an external wrapper binary (native → ACP).
-
-    Concrete adapters: ClaudeAdapter, CursorAdapter, CodexAdapter.
-
-    The wrapper binary (e.g., claude-agent-acp) is spawned as a subprocess
-    and communicates via stdio ACP transport.
-    """
-
-    @abstractmethod
-    def _build_launch_command(self, config: "AgentConfig") -> List[str]:
-        """Build the full CLI command list to spawn the wrapper binary."""
-        ...
-
-
-class CustomAdapterAgent(AgentAdapter):
-    """Base for agents with custom HTTP APIs (no ACP on wire).
-
-    Concrete adapters: DroidAdapter.
-
-    These adapters spawn the agent as an HTTP daemon and translate
-    its custom API responses into ConsolidatedSessionUpdate objects.
-    """
-
-    @abstractmethod
-    def _build_launch_command(self, config: "AgentConfig") -> List[str]:
-        """Build the full CLI command list to spawn the agent daemon."""
+        """Teardown the agent process. Guarantees cleanup."""
         ...

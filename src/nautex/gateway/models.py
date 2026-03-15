@@ -1,10 +1,17 @@
 """Gateway domain models and shared contracts.
 
-Defines the Pydantic models used across the adapter boundary.
-Domain types referenced by AgentAdapter are defined here so that
-the typing contract is enforceable by mypy.
+Three config layers:
 
-Reference: MDS-7, MDS-9, MDS-11, FILE
+1. SupportedAgentRegistration — static per-agent-type config derived from probe matrix.
+   How to launch, auth, env handling, ACP quirks. One per agent binary.
+
+2. AgentConfig — per-session runtime config from backend (MDS-11).
+   Permissions, model, tools, credentials, directory scope. Agent-agnostic.
+
+3. RuntimeCapabilities — dynamic, populated from ACP session/new response.
+   Available models, modes, actual capabilities. Discovered at runtime.
+
+Reference: MDS-7, MDS-9, MDS-10, MDS-11, FILE
 """
 
 from __future__ import annotations
@@ -16,48 +23,145 @@ from pydantic import BaseModel, Field, SecretStr
 
 
 # ---------------------------------------------------------------------------
-# Agent configuration models (MDS-7, MDS-9, MDS-11)
+# Layer 1: Agent Registration (static, describes the binary itself)
+# Pure binary description — does NOT contain environment or policy config.
 # ---------------------------------------------------------------------------
 
-class PermissionConfig(BaseModel):
-    """Permission settings for agent execution. Reference: MDS-7"""
-    auto_approve_all: bool = False
-    read_only: bool = True
+class CredentialSource(str, Enum):
+    """How the agent binary natively receives credentials."""
+    ACP_AUTH = "acp_auth"       # via ACP authenticate method (Gemini, Cursor, Droid, Codex)
+    ENV_VAR = "env_var"         # reads API key from environment (Claude Code, Goose)
+    INTERNAL = "internal"       # agent manages own credentials (OpenCode, Kiro)
 
+
+class SupportedAgentRegistration(BaseModel):
+    """Describes an agent binary — what it IS, not how we use it.
+
+    These are intrinsic properties of the binary that don't change
+    across environments or sessions.
+    """
+    agent_id: str
+    executable: str
+    launch_args: List[str] = Field(default_factory=list)
+    credential_source: CredentialSource = CredentialSource.ACP_AUTH
+
+
+# ---------------------------------------------------------------------------
+# Agent registrations — intrinsic binary descriptions from probe evidence
+# ---------------------------------------------------------------------------
+
+SUPPORTED_AGENTS: Dict[str, SupportedAgentRegistration] = {
+    "gemini_cli": SupportedAgentRegistration(
+        agent_id="gemini_cli",
+        executable="gemini",
+        launch_args=["--acp"],
+        credential_source=CredentialSource.ACP_AUTH,
+    ),
+    "opencode": SupportedAgentRegistration(
+        agent_id="opencode",
+        executable="opencode",
+        launch_args=["acp"],
+        credential_source=CredentialSource.INTERNAL,
+    ),
+    "cursor_agent": SupportedAgentRegistration(
+        agent_id="cursor_agent",
+        executable="cursor-agent",
+        launch_args=["acp"],
+        credential_source=CredentialSource.ACP_AUTH,
+    ),
+    "claude_code": SupportedAgentRegistration(
+        agent_id="claude_code",
+        executable="claude-agent-acp",
+        launch_args=[],
+        credential_source=CredentialSource.ENV_VAR,
+    ),
+    "droid": SupportedAgentRegistration(
+        agent_id="droid",
+        executable="droid",
+        launch_args=["exec", "--output-format", "acp"],
+        credential_source=CredentialSource.ACP_AUTH,
+    ),
+    "codex": SupportedAgentRegistration(
+        agent_id="codex",
+        executable="codex-acp",
+        launch_args=[],
+        credential_source=CredentialSource.ACP_AUTH,
+    ),
+    "goose": SupportedAgentRegistration(
+        agent_id="goose",
+        executable="goose",
+        launch_args=["acp", "--with-builtin", "developer"],
+        credential_source=CredentialSource.ENV_VAR,
+    ),
+    "kiro_cli": SupportedAgentRegistration(
+        agent_id="kiro_cli",
+        executable="kiro-cli",
+        launch_args=["acp"],
+        credential_source=CredentialSource.INTERNAL,
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# Layer 2: Agent Session Config (per-session, from caller)
+# ---------------------------------------------------------------------------
 
 class MCPServerConfig(BaseModel):
-    """MCP server configuration passed to an agent. Reference: MDS-9"""
+    """MCP server to inject into agent session. Reference: MDS-9"""
     server_id: str
     command: str
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
 
 
-class AgentConfig(BaseModel):
-    """Universal configuration passed to any agent. Reference: MDS-11"""
+class AgentSessionConfig(BaseModel):
+    """Per-session configuration for launching and constraining an agent.
+
+    Generic flags that the adapter interprets based on what it knows
+    about the specific binary. The caller doesn't need to know
+    agent-specific details — the adapter translates.
+
+    Examples:
+    - allow_file_read=True, allow_file_write=False → agent can read but not modify
+    - allow_terminal=False → adapter denies all terminal permission requests
+    - model="fast" → adapter resolves to agent-specific fast model
+    """
+    # What the agent should do
     system_prompt: Optional[str] = None
-    tools_allowed: List[str] = Field(default_factory=list)
-    tools_denied: List[str] = Field(default_factory=list)
-    mcp_servers: List[MCPServerConfig] = Field(default_factory=list)
-    permissions: PermissionConfig = Field(default_factory=PermissionConfig)
     model: Optional[str] = None
     directory_scope: str
+
+    # Granular capability flags — adapter enforces via permission gating
+    allow_file_read: bool = True
+    allow_file_write: bool = False
+    allow_terminal: bool = False
+    allow_mcp_tools: bool = True
+    auto_approve_all: bool = False
+
+    # Tool filtering
+    tools_allowed: List[str] = Field(default_factory=list)
+    tools_denied: List[str] = Field(default_factory=list)
+
+    # MCP servers to inject
+    mcp_servers: List[MCPServerConfig] = Field(default_factory=list)
+
+    # Credentials to inject into subprocess environment
     credentials: Dict[str, SecretStr] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
-# Agent descriptor (static metadata)
+# Layer 3: Runtime Capabilities (dynamic, from ACP session/new)
 # ---------------------------------------------------------------------------
 
 class PromptCapabilities(BaseModel):
-    """What input modalities the agent supports."""
+    """Input modalities the agent supports — discovered at runtime."""
     image: bool = False
     audio: bool = False
     embedded_context: bool = False
 
 
 class AgentCapabilities(BaseModel):
-    """Functional capabilities of an agent."""
+    """Functional capabilities — discovered from ACP initialize response."""
     load_session: bool = False
     prompt_capabilities: PromptCapabilities = Field(
         default_factory=PromptCapabilities
@@ -65,7 +169,7 @@ class AgentCapabilities(BaseModel):
 
 
 class ModelInfo(BaseModel):
-    """A model available through an agent."""
+    """A model available through an agent — discovered from session/new."""
     id: str
     name: str
     provider: str = ""
@@ -73,20 +177,24 @@ class ModelInfo(BaseModel):
 
 
 class AgentDescriptor(BaseModel):
-    """Static metadata describing an agent binary."""
+    """Agent identity and capabilities — populated from ACP responses.
+
+    This is NOT hardcoded per adapter. It is built from:
+    - agentInfo from initialize response (name, version)
+    - agentCapabilities from initialize response
+    - models from session/new response
+    """
     agent_id: str
-    name: str
-    version: str
-    executable: str
-    agent_type: str
-    acp_supported: bool = True
+    name: str = ""
+    version: str = ""
+    executable: str = ""
     capabilities: AgentCapabilities = Field(default_factory=AgentCapabilities)
-    supported_models: List[ModelInfo] = Field(default_factory=list)
+    available_models: List[ModelInfo] = Field(default_factory=list)
+    current_model: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
-# Session and prompt domain types (stubs for typing contract)
-# Full implementations will be expanded as upstream specs are realized.
+# Session and prompt domain types
 # ---------------------------------------------------------------------------
 
 class GatewaySessionConfig(BaseModel):
@@ -111,8 +219,8 @@ class PromptResponse(BaseModel):
 class ConsolidatedSessionUpdate(BaseModel):
     """Semantic batched update from an agent stream.
 
-    This is the strict public boundary type — adapters MUST yield only
-    this type, never raw JSON dicts. Reference: MDS-35
+    Strict public boundary type — adapters yield only this, never raw dicts.
+    Reference: MDS-35
     """
     kind: str
     data: Dict[str, Any] = Field(default_factory=dict)

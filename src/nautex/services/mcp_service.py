@@ -64,7 +64,6 @@ class MCPService:
         self.nautex_api_service = nautex_api_service
         self.document_service = document_service
         self.integration_status_service = integration_status_service
-        self._documents_loaded_for_session = False
         self._designators_paths: Dict[str, str] = {}
         logger.debug("MCPService initialized with FastMCP server")
 
@@ -76,24 +75,28 @@ class MCPService:
     def response_format(self) -> MCPOutputFormat:
         return self.config.response_format
 
-    async def ensure_dependency_documents_on_disk(self) -> Dict[str, str]:
-        if not self._documents_loaded_for_session:
-            logger.info("Loading dependency documents for the current session")
-            try:
-                doc_results = await self.document_service.ensure_plan_dependency_documents(
-                    project_id=self.config.project_id,
-                    plan_id=self.config.plan_id,
-                )
-                successful_loads = sum(
-                    1 for path in doc_results.values()
-                    if not path.startswith("Error") and not path.startswith("Document")
-                )
-                logger.info(f"Loaded {successful_loads} of {len(doc_results)} dependency documents")
-                self._documents_loaded_for_session = True
-                self._designators_paths = doc_results
-            except Exception as e:
-                logger.error(f"Error loading dependency documents: {e}")
-                raise
+    async def ensure_dependency_documents(self) -> Dict[str, str]:
+        """Fetch dependency documents from backend and write to .nautex/docs/."""
+        logger.info("Downloading dependency documents")
+        try:
+            doc_results = await self.document_service.ensure_plan_dependency_documents(
+                project_id=self.config.project_id,
+                plan_id=self.config.plan_id,
+            )
+            successful_loads = sum(
+                1 for path in doc_results.values()
+                if not path.startswith("Error") and not path.startswith("Document")
+            )
+            logger.info(f"Downloaded {successful_loads} of {len(doc_results)} dependency documents")
+            self._designators_paths = doc_results
+        except Exception as e:
+            logger.error(f"Error downloading dependency documents: {e}")
+            raise
+        return self._designators_paths
+
+    @property
+    def dependency_documents_paths(self) -> Dict[str, str]:
+        """Cached document paths from last download."""
         return self._designators_paths
 
     def is_configured(self) -> bool:

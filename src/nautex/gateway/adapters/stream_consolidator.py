@@ -8,14 +8,6 @@ a sentence boundary is detected (sentence-ending punctuation, newline,
 double newline) or a non-text update flushes the buffer. This prevents
 single-word chunk spam on the channel.
 
-Responsibilities:
-- Validate incoming payloads via strict Pydantic validation (MDS-36)
-- Buffer via SDK SessionAccumulator (MDS-86)
-- Semantic batching of text streams at sentence boundaries (MDS-81)
-- Map ACP update types → ConsolidatedSessionUpdate.kind (MDS-81)
-- Extract telemetry counters for 3Hz pulse (MDS-82)
-- Deduplicate replay storms from session/load (MDS-85)
-
 Reference: MDS-36, MDS-81, MDS-82, MDS-85, MDS-86
 """
 
@@ -27,16 +19,23 @@ from typing import Any, Dict, List, Optional
 from acp.contrib.session_state import SessionAccumulator
 from acp.schema import SessionNotification
 
-from ..models import ConsolidatedSessionUpdate
-from ..telemetry import EphemeralSessionTelemetry
+from ..protocol import (
+    ConsolidatedSessionUpdate,
+    EphemeralSessionTelemetry,
+    SessionUpdateKind,
+    ToolCallStatus,
+    ToolKind,
+)
 
 logger = logging.getLogger(__name__)
 
 # Text kinds that get buffered for sentence-boundary batching
-_TEXT_KINDS = frozenset({"agent_message_chunk", "agent_thought_chunk"})
+_TEXT_KINDS = frozenset({
+    SessionUpdateKind.AGENT_MESSAGE,
+    SessionUpdateKind.AGENT_THOUGHT,
+})
 
 # Sentence-ending patterns that trigger a flush
-_SENTENCE_ENDINGS = (".\n", "!\n", "?\n", "\n\n", ".\r\n")
 _SENTENCE_TERMINATORS = frozenset(".!?\n")
 
 
@@ -65,11 +64,11 @@ class StreamConsolidator:
         self._accumulator = SessionAccumulator()
         self._updates: List[ConsolidatedSessionUpdate] = []
 
-        # Text buffering — accumulate chunks until sentence boundary
+        # Text buffering
         self._text_buffer = ""
-        self._text_buffer_kind: Optional[str] = None
+        self._text_buffer_kind: Optional[SessionUpdateKind] = None
 
-        # Telemetry counters — sampled at 3Hz by the gateway service
+        # Telemetry counters
         self._word_count = 0
         self._active_tool: Optional[str] = None
         self._is_typing = False
@@ -83,16 +82,10 @@ class StreamConsolidator:
         return self._session_id
 
     def start_replay(self) -> None:
-        """Mark current position for replay deduplication.
-
-        Call before session/load to record how many updates have been
-        processed. The next N updates (where N = current total) will be
-        suppressed as replayed history.
-        """
+        """Mark current position for replay deduplication."""
         self._replay_skip_remaining = self._total_updates
 
     def stop_replay(self) -> None:
-        """Clear replay deduplication state."""
         self._replay_skip_remaining = 0
 
     def process(self, raw_update: Any) -> List[ConsolidatedSessionUpdate]:
@@ -101,21 +94,12 @@ class StreamConsolidator:
         Returns a list of ConsolidatedSessionUpdate objects. Usually 0 or 1,
         but can be 2 when a non-text update flushes a pending text buffer.
 
-        Text chunks are buffered until a sentence boundary. Non-text updates
-        flush the buffer first, then emit themselves.
-
-        Args:
-            raw_update: The update object from the SDK's session_update callback.
-
-        Returns:
-            List of ConsolidatedSessionUpdate objects ready for emission.
-
         Raises:
             ProtocolParseError: If the update cannot be validated.
         """
         try:
             kind = self._extract_kind(raw_update)
-            data = self._extract_data(raw_update, kind)
+            csu = self._build_csu(raw_update, kind)
         except Exception as e:
             raise ProtocolParseError(
                 f"Failed to parse ACP session update: {e}"
@@ -123,12 +107,11 @@ class StreamConsolidator:
 
         self._total_updates += 1
 
-        # Replay deduplication — suppress replayed updates (MDS-85)
+        # Replay deduplication (MDS-85)
         if self._replay_skip_remaining > 0:
             self._replay_skip_remaining -= 1
             return [ConsolidatedSessionUpdate(
-                kind="replay_skip",
-                data={"original_kind": kind},
+                kind=SessionUpdateKind.SESSION_INFO,
                 session_id=self._session_id,
             )]
 
@@ -141,28 +124,18 @@ class StreamConsolidator:
         except Exception as e:
             logger.debug("SessionAccumulator.apply failed: %s", e)
 
-        # Update telemetry counters
-        self._update_telemetry(kind, data)
+        # Update telemetry
+        self._update_telemetry(csu)
 
-        # Text kinds: buffer and batch at sentence boundaries (if enabled)
+        # Text kinds: buffer at sentence boundaries (if enabled)
         if kind in _TEXT_KINDS:
             if self._buffer_text:
-                return self._buffer_text_chunk(kind, data)
-            # No buffering — emit each chunk immediately
-            csu = ConsolidatedSessionUpdate(
-                kind=kind, data=data, session_id=self._session_id,
-            )
+                return self._buffer_text_chunk(csu)
             self._updates.append(csu)
             return [csu]
 
-        # Non-text: flush any pending text buffer, then emit this update
+        # Non-text: flush pending text, then emit
         result = self._flush_text_buffer()
-
-        csu = ConsolidatedSessionUpdate(
-            kind=kind,
-            data=data,
-            session_id=self._session_id,
-        )
         self._updates.append(csu)
         result.append(csu)
         return result
@@ -172,7 +145,6 @@ class StreamConsolidator:
         return self._flush_text_buffer()
 
     def get_telemetry(self) -> EphemeralSessionTelemetry:
-        """Sample current telemetry state for 3Hz pulse."""
         return EphemeralSessionTelemetry(
             session_id=self._session_id,
             active_tool=self._active_tool,
@@ -182,134 +154,124 @@ class StreamConsolidator:
 
     @property
     def update_count(self) -> int:
-        """Total consolidated updates produced (excluding replay skips)."""
         return len(self._updates)
 
     @property
     def accumulator(self) -> SessionAccumulator:
-        """Access the underlying SDK accumulator for snapshot queries."""
         return self._accumulator
 
     # ------------------------------------------------------------------
     # Text buffering
     # ------------------------------------------------------------------
 
-    def _buffer_text_chunk(self, kind: str, data: Dict[str, Any]) -> List[ConsolidatedSessionUpdate]:
-        """Buffer a text chunk. Emit when sentence boundary is reached."""
-        text = data.get("text", "")
-
-        # If kind changed (thought → message or vice versa), flush first
+    def _buffer_text_chunk(self, csu: ConsolidatedSessionUpdate) -> List[ConsolidatedSessionUpdate]:
         result: List[ConsolidatedSessionUpdate] = []
-        if self._text_buffer_kind and self._text_buffer_kind != kind:
+        if self._text_buffer_kind and self._text_buffer_kind != csu.kind:
             result = self._flush_text_buffer()
 
-        self._text_buffer += text
-        self._text_buffer_kind = kind
+        self._text_buffer += csu.text or ""
+        self._text_buffer_kind = csu.kind
 
-        # Check for sentence boundary
         if self._has_sentence_boundary():
             result.extend(self._flush_text_buffer())
-
         return result
 
     def _has_sentence_boundary(self) -> bool:
-        """Check if buffered text ends at a sentence boundary."""
         buf = self._text_buffer
         if not buf:
             return False
-
-        # Double newline — paragraph break
-        if buf.endswith("\n\n"):
+        if buf.endswith("\n\n") or buf.endswith("\n"):
             return True
-
-        # Single newline at end
-        if buf.endswith("\n"):
-            return True
-
-        # Sentence-ending punctuation followed by space or at end
         stripped = buf.rstrip()
         if stripped and stripped[-1] in _SENTENCE_TERMINATORS:
             return True
-
         return False
 
     def _flush_text_buffer(self) -> List[ConsolidatedSessionUpdate]:
-        """Flush accumulated text buffer into a CSU. Returns list (0 or 1)."""
         if not self._text_buffer:
             return []
-
         csu = ConsolidatedSessionUpdate(
-            kind=self._text_buffer_kind or "agent_message_chunk",
-            data={"text": self._text_buffer},
+            kind=self._text_buffer_kind or SessionUpdateKind.AGENT_MESSAGE,
+            text=self._text_buffer,
             session_id=self._session_id,
         )
         self._updates.append(csu)
-
         self._text_buffer = ""
         self._text_buffer_kind = None
         return [csu]
 
     # ------------------------------------------------------------------
-    # Extraction helpers
+    # Extraction
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_kind(update: Any) -> str:
-        """Get the ACP session_update type string.
-
-        Let it crash on missing attribute — contract violation must be visible.
-        """
-        return str(update.session_update)
+    def _extract_kind(update: Any) -> SessionUpdateKind:
+        return SessionUpdateKind(str(update.session_update))
 
     @staticmethod
-    def _extract_data(update: Any, kind: str) -> Dict[str, Any]:
-        """Extract relevant payload from an ACP update into a dict.
+    def _build_csu(update: Any, kind: SessionUpdateKind) -> ConsolidatedSessionUpdate:
+        """Build a typed ConsolidatedSessionUpdate from a raw ACP update."""
+        if kind in (SessionUpdateKind.AGENT_MESSAGE, SessionUpdateKind.AGENT_THOUGHT):
+            return ConsolidatedSessionUpdate(
+                kind=kind,
+                text=update.content.text,
+            )
 
-        Uses direct attribute access — no getattr fallbacks.
-        Contract violations crash here and propagate as ProtocolParseError.
-        """
-        data: Dict[str, Any] = {}
-
-        if kind == "agent_message_chunk":
-            data["text"] = update.content.text
-
-        elif kind in ("tool_call", "tool_call_update"):
-            data["tool_call_id"] = update.tool_call_id
-            data["title"] = update.title or ""
-            data["status"] = str(update.status) if update.status else ""
+        if kind in (SessionUpdateKind.TOOL_CALL, SessionUpdateKind.TOOL_CALL_UPDATE):
+            tool_kind = None
             if update.kind:
-                data["tool_kind"] = str(update.kind)
+                try:
+                    tool_kind = ToolKind(str(update.kind))
+                except ValueError:
+                    pass
+            status = None
+            if update.status:
+                try:
+                    status = ToolCallStatus(str(update.status))
+                except ValueError:
+                    pass
+            return ConsolidatedSessionUpdate(
+                kind=kind,
+                tool_call_id=update.tool_call_id,
+                tool_title=update.title or "",
+                tool_status=status,
+                tool_kind=tool_kind,
+            )
 
-        elif kind == "agent_thought_chunk":
-            data["text"] = update.content.text
+        if kind == SessionUpdateKind.CURRENT_MODE:
+            return ConsolidatedSessionUpdate(
+                kind=kind,
+                mode_id=update.current_mode_id,
+            )
 
-        elif kind == "current_mode_update":
-            data["mode_id"] = update.current_mode_id
+        if kind == SessionUpdateKind.AVAILABLE_COMMANDS:
+            return ConsolidatedSessionUpdate(
+                kind=kind,
+                commands_count=len(update.available_commands or []),
+            )
 
-        elif kind == "available_commands_update":
-            data["count"] = len(update.available_commands or [])
+        if kind == SessionUpdateKind.USAGE:
+            return ConsolidatedSessionUpdate(
+                kind=kind,
+                usage_size=update.size,
+                usage_used=update.used,
+            )
 
-        elif kind == "usage_update":
-            data["size"] = update.size
-            data["used"] = update.used
-            if update.cost is not None:
-                data["cost"] = update.cost
+        # CONFIG_OPTION, SESSION_INFO, etc.
+        return ConsolidatedSessionUpdate(kind=kind)
 
-        return data
-
-    def _update_telemetry(self, kind: str, data: Dict[str, Any]) -> None:
-        """Update internal telemetry counters from a processed update."""
-        text = data.get("text", "")
-        if text:
-            self._word_count += len(text.split())
+    def _update_telemetry(self, csu: ConsolidatedSessionUpdate) -> None:
+        if csu.text:
+            self._word_count += len(csu.text.split())
             self._is_typing = True
-        elif kind in ("tool_call", "tool_call_update"):
+        elif csu.kind in (SessionUpdateKind.TOOL_CALL, SessionUpdateKind.TOOL_CALL_UPDATE):
             self._is_typing = False
-            status = data.get("status", "")
-            if status in ("pending", "in_progress"):
-                self._active_tool = data.get("title") or data.get("tool_call_id")
-            elif status == "completed":
+            if csu.tool_status in (ToolCallStatus.PENDING, ToolCallStatus.IN_PROGRESS):
+                self._active_tool = csu.tool_title or csu.tool_call_id
+            elif csu.tool_status == ToolCallStatus.COMPLETED:
                 self._active_tool = None
-        elif kind not in ("available_commands_update", "current_mode_update",
-                          "config_option_update", "session_info_update"):
+        elif csu.kind not in (SessionUpdateKind.AVAILABLE_COMMANDS,
+                              SessionUpdateKind.CURRENT_MODE,
+                              SessionUpdateKind.CONFIG_OPTION,
+                              SessionUpdateKind.SESSION_INFO):
             self._is_typing = False

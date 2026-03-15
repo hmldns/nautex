@@ -216,25 +216,8 @@ class PromptResponse(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class ConsolidatedSessionUpdate(BaseModel):
-    """Semantic batched update from an agent stream.
-
-    Strict public boundary type — adapters yield only this, never raw dicts.
-    Reference: MDS-35
-    """
-    kind: str
-    data: Dict[str, Any] = Field(default_factory=dict)
-    session_id: Optional[str] = None
-
-
-class PermissionRequestPayload(BaseModel):
-    """Tool permission gate request from the agent."""
-    tool_name: str
-    arguments: Dict[str, Any] = Field(default_factory=dict)
-    request_id: str = ""
-
-
-class PermissionResponsePayload(BaseModel):
-    """User's approve/deny response to a permission request."""
-    request_id: str
-    approved: bool
+# Shared protocol types — canonical definitions live in gateway.protocol/
+# Re-exported here for backwards compatibility
+from .protocol.session_updates import ConsolidatedSessionUpdate
+from .protocol.payloads import PermissionRequestPayload, PermissionResponsePayload
+from .protocol.envelope import GatewayWsEnvelope

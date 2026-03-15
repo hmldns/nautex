@@ -1,14 +1,12 @@
 """Gateway configuration management.
 
-Handles per-agent config resolution: registry lookup, binary validation,
-environment building, and auth method selection.
+Two config domains:
 
-Bridges the three config layers:
-- SupportedAgentRegistration (static, per-agent-type) → how to launch
-- AgentConfig (per-session, from backend) → what constraints to apply
-- Runtime discovery (ACP responses) → what the agent actually supports
+1. GatewayNodeConfig — daemon-level settings (headless, logging, directory scope,
+   ignored dirs). Reference: MDSNAUTX-10
 
-Reference: MDS-88
+2. Agent config resolution — registry lookup, binary validation, environment
+   building, auth method selection. Reference: MDS-88
 """
 
 from __future__ import annotations
@@ -17,6 +15,8 @@ import os
 import shutil
 import logging
 from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 from .models import (
     AgentCapabilities,
@@ -31,6 +31,33 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Gateway Node Config (MDSNAUTX-10)
+# ---------------------------------------------------------------------------
+
+class GatewayNodeConfig(BaseModel):
+    """Daemon execution parameters.
+
+    Controls headless behavior, privacy gating, directory scoping,
+    and ignored directory defaults for subprocesses and the indexer.
+    Reference: MDSNAUTX-10
+    """
+    headless_mode: bool = False
+    auto_approve_privacy_gate: bool = False
+    log_level: str = "INFO"
+    directory_scope: str = Field(description="Strict CWD for all subprocesses and the Indexer")
+    ignored_directories: List[str] = Field(
+        default_factory=lambda: [".git", "node_modules", ".next", "__pycache__", "venv", ".venv"]
+    )
+    uplink_url: Optional[str] = None
+    auth_token: Optional[str] = None
+    utility_instance_id: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Agent config resolution (MDS-88)
+# ---------------------------------------------------------------------------
 
 class AgentNotFoundError(Exception):
     """Raised when an agent_id is not in the registry."""

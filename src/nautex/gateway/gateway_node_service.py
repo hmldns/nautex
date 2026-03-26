@@ -21,6 +21,7 @@ from typing import Dict, Optional
 from .config import GatewayNodeConfig, list_available_agents
 from .event_bus import GatewayEventBus, LocalEventKind
 from .models import AgentDescriptor, AgentSessionConfig, PromptContent, ConsolidatedSessionUpdate
+from .protocol.enums import SessionUpdateKind
 from .permission_registry import PermissionRegistry
 from .adapters.acp_adapter import ACPAgentAdapter
 from .protocol import (
@@ -242,6 +243,8 @@ class GatewayNodeService:
             prp.session_id = session_id
             return await self._handle_adapter_permission(prp)
 
+        # Signal turn lifecycle
+        await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_STARTED))
         try:
             await adapter.prompt(
                 session_id=session_id,
@@ -251,6 +254,8 @@ class GatewayNodeService:
             )
         except Exception as e:
             logger.error("Prompt execution failed for %s: %s", agent_id, e)
+        finally:
+            await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
 
     async def _declare_session(self, acp_session_id: str, agent_id: str) -> None:
         """Declare an ACP session to backend via SESSION_DECLARED."""

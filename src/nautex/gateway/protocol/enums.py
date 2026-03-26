@@ -23,6 +23,8 @@ class SessionUpdateKind(str, Enum):
     USAGE = "usage_update"
     CONFIG_OPTION = "config_option_update"
     SESSION_INFO = "session_info_update"
+    TURN_STARTED = "turn_started"
+    TURN_COMPLETE = "turn_complete"
 
 
 class ToolCallStatus(str, Enum):

@@ -307,11 +307,18 @@ class ProbeClient(acp.Client):
                     log("thought", C.DIM, text.replace("\n", " ")[:120])
             return
 
-        if ut in ("available_commands_update", "config_option_update", "current_mode_update", "session_info_update"):
-            return  # skip noise
+        if ut == "session_info_update":
+            title = getattr(update, "title", None)
+            log("SESSION_TITLE", C.GREEN, f'"{title}"')
+            return
+
+        if ut in ("available_commands_update", "config_option_update", "current_mode_update"):
+            log(ut, C.DIM, "")
+            return
 
         if ut == "usage_update":
-            return  # skip token counts
+            log("usage", C.DIM, f"size={getattr(update, 'size', '?')} used={getattr(update, 'used', '?')}")
+            return
 
         log(ut or "update", C.YELLOW, "")
 
@@ -332,7 +339,7 @@ class ProbeClient(acp.Client):
 # Probe runner
 # ---------------------------------------------------------------------------
 
-async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None) -> None:
+async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None, turns: int = 1) -> None:
     cmd = agent_def["cmd"]
     client = ProbeClient()
 
@@ -341,11 +348,11 @@ async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None
 
         # Initialize
         print(f"\n{C.BOLD}--- Initialize ---{C.RESET}")
-        from acp.schema import FileSystemCapability
+        from acp.schema import FileSystemCapabilities
         init = await conn.initialize(
             protocol_version=acp.PROTOCOL_VERSION,
             client_capabilities=ClientCapabilities(
-                fs=FileSystemCapability(read_text_file=True, write_text_file=True),
+                fs=FileSystemCapabilities(read_text_file=True, write_text_file=True),
                 terminal=True,
             ),
             client_info={"name": "nautex-probe", "title": "Nautex Probe", "version": "0.2.0"},
@@ -375,8 +382,11 @@ async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None
                         method = am
                         break
             log("auth", C.CYAN, f"{method.id} ({method.name})")
-            await conn.authenticate(method_id=method.id)
-            log("auth", C.GREEN, "OK")
+            try:
+                await conn.authenticate(method_id=method.id)
+                log("auth", C.GREEN, "OK")
+            except Exception as e:
+                log("auth", C.YELLOW, f"skipped ({e})")
 
         # Session
         print(f"\n{C.BOLD}--- Session ---{C.RESET}")
@@ -397,18 +407,33 @@ async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None
             except Exception as e:
                 log("model", C.YELLOW, f"switch failed: {e} (using default)")
 
-        # Prompt
-        print(f"\n{C.BOLD}--- Prompt ---{C.RESET}")
-        log("prompt", C.CYAN, prompt[:100])
-        print(f"\n{C.BOLD}--- Agent Output ---{C.RESET}\n")
+        # Build prompt sequence
+        prompts = [prompt]
+        if turns > 1:
+            follow_ups = [
+                "Now give me more details on the most important aspect.",
+                "Summarize everything we discussed in 2 sentences.",
+                "Name this conversation with a short descriptive title.",
+            ]
+            for i in range(1, turns):
+                if i - 1 < len(follow_ups):
+                    prompts.append(follow_ups[i - 1])
+                else:
+                    prompts.append(f"Continue. Turn {i + 1}.")
 
-        result = await conn.prompt(
-            session_id=session.session_id,
-            prompt=[text_block(prompt)],
-        )
+        # Execute prompt sequence
+        for turn_idx, turn_prompt in enumerate(prompts):
+            print(f"\n{C.BOLD}--- Prompt {turn_idx + 1}/{len(prompts)} ---{C.RESET}")
+            log("prompt", C.CYAN, turn_prompt[:100])
+            print(f"\n{C.BOLD}--- Agent Output ---{C.RESET}\n")
 
-        stop = getattr(result, "stop_reason", "unknown")
-        print(f"\n\n{C.GREEN}{C.BOLD}--- Done (stopReason: {stop}) ---{C.RESET}\n")
+            result = await conn.prompt(
+                session_id=session.session_id,
+                prompt=[text_block(turn_prompt)],
+            )
+
+            stop = getattr(result, "stop_reason", "unknown")
+            print(f"\n\n{C.GREEN}{C.BOLD}--- Done (stopReason: {stop}) ---{C.RESET}")
 
         # Workspace inspection
         print(f"{C.BOLD}--- Workspace ---{C.RESET}")
@@ -427,7 +452,7 @@ async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None
             print(intro.read_text())
 
 
-async def probe(agent_id: str, prompt: str, model: str | None, timeout: int) -> None:
+async def probe(agent_id: str, prompt: str, model: str | None, timeout: int, turns: int = 1) -> None:
     agent = AGENTS.get(agent_id)
     if not agent:
         print(f"{C.RED}Unknown agent: {agent_id}{C.RESET}")
@@ -449,7 +474,7 @@ async def probe(agent_id: str, prompt: str, model: str | None, timeout: int) -> 
         print(f"  Notes:     {agent['notes']}")
 
     try:
-        await asyncio.wait_for(run_probe(agent, tmpdir, prompt, model), timeout=timeout)
+        await asyncio.wait_for(run_probe(agent, tmpdir, prompt, model, turns=turns), timeout=timeout)
     except asyncio.TimeoutError:
         print(f"\n{C.RED}TIMEOUT ({timeout}s). Exiting.{C.RESET}")
         sys.exit(1)
@@ -471,6 +496,7 @@ def main():
     parser.add_argument("-p", "--prompt", default=DEFAULT_PROMPT, help="Prompt text")
     parser.add_argument("-m", "--model", default=None, help="Model override")
     parser.add_argument("-t", "--timeout", type=int, default=90, help="Timeout seconds (default: 90)")
+    parser.add_argument("-n", "--turns", type=int, default=1, help="Number of prompt turns (default: 1)")
     parser.add_argument("-l", "--list", action="store_true", help="List agents")
     args = parser.parse_args()
 
@@ -483,7 +509,7 @@ def main():
             print(f"  {aid:18s} [{status}] cmd={info['cmd']:20s} model={dm}")
         return
 
-    asyncio.run(probe(args.agent_id, args.prompt, args.model, args.timeout))
+    asyncio.run(probe(args.agent_id, args.prompt, args.model, args.timeout, args.turns))
 
 
 if __name__ == "__main__":

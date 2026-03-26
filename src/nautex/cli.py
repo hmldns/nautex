@@ -129,6 +129,17 @@ def main() -> None:
     # MCP server command
     subparsers.add_parser("mcp", help="Start MCP server for IDE integration")
 
+    # Gateway node daemon
+    gw_parser = subparsers.add_parser("gateway", help="Run as gateway node daemon")
+    gw_parser.add_argument("--uplink-url", default="ws://localhost:8000/agw-node/ws",
+                           help="Backend WebSocket URL")
+    gw_parser.add_argument("--auth-token", default="dev-token",
+                           help="Bearer token for WS auth")
+    gw_parser.add_argument("--directory-scope", default=".",
+                           help="Working directory scope for agents")
+    gw_parser.add_argument("--headless", action="store_true", default=True,
+                           help="Run without TUI (default)")
+
     # Register all API commands (status, next-scope, update-tasks, submit-change-request)
     register_cli_commands(subparsers)
 
@@ -142,7 +153,25 @@ def main() -> None:
     config_service = ConfigurationService()
     config_service.load_configuration()
 
-    if args.command == "setup":
+    if args.command == "gateway":
+        import logging as _logging
+        import os
+        import uuid
+        _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+        from .gateway.gateway_node_service import GatewayNodeService
+        from .gateway.config import GatewayNodeConfig
+        directory_scope = os.path.abspath(args.directory_scope)
+        config = GatewayNodeConfig(
+            directory_scope=directory_scope,
+            headless_mode=args.headless,
+            uplink_url=args.uplink_url,
+            auth_token=args.auth_token,
+            utility_instance_id=f"node-{uuid.uuid4().hex[:8]}",
+        )
+        asyncio.run(GatewayNodeService(config).start())
+        return
+
+    elif args.command == "setup":
         has_cli_args = any([args.token, args.project, args.plan, args.agent])
         if has_cli_args:
             from .setup_noninteractive import run_noninteractive_setup

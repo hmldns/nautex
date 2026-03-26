@@ -100,6 +100,7 @@ class StreamConsolidator:
         try:
             kind = self._extract_kind(raw_update)
             csu = self._build_csu(raw_update, kind)
+            csu.acp_session_id = self._session_id
         except Exception as e:
             raise ProtocolParseError(
                 f"Failed to parse ACP session update: {e}"
@@ -112,7 +113,7 @@ class StreamConsolidator:
             self._replay_skip_remaining -= 1
             return [ConsolidatedSessionUpdate(
                 kind=SessionUpdateKind.SESSION_INFO,
-                session_id=self._session_id,
+                acp_session_id=self._session_id,
             )]
 
         # Feed SDK accumulator
@@ -146,7 +147,7 @@ class StreamConsolidator:
 
     def get_telemetry(self) -> EphemeralSessionTelemetry:
         return EphemeralSessionTelemetry(
-            session_id=self._session_id,
+            acp_session_id=self._session_id,
             active_tool=self._active_tool,
             processed_tokens_estimate=self._word_count,
             is_typing=self._is_typing,
@@ -193,7 +194,7 @@ class StreamConsolidator:
         csu = ConsolidatedSessionUpdate(
             kind=self._text_buffer_kind or SessionUpdateKind.AGENT_MESSAGE,
             text=self._text_buffer,
-            session_id=self._session_id,
+            acp_session_id=self._session_id,
         )
         self._updates.append(csu)
         self._text_buffer = ""
@@ -257,7 +258,13 @@ class StreamConsolidator:
                 usage_used=update.used,
             )
 
-        # CONFIG_OPTION, SESSION_INFO, etc.
+        if kind == SessionUpdateKind.SESSION_INFO:
+            return ConsolidatedSessionUpdate(
+                kind=kind,
+                session_title=getattr(update, "title", None),
+            )
+
+        # CONFIG_OPTION, etc.
         return ConsolidatedSessionUpdate(kind=kind)
 
     def _update_telemetry(self, csu: ConsolidatedSessionUpdate) -> None:

@@ -50,6 +50,9 @@ class GatewayUplinkTransport(ABC):
     async def send(self, envelope: GatewayWsEnvelope) -> None: ...
 
     @abstractmethod
+    async def send_raw(self, data: str) -> None: ...
+
+    @abstractmethod
     def on_message(
         self, handler: Callable[[GatewayWsEnvelope], Coroutine[Any, Any, None]]
     ) -> None: ...
@@ -107,6 +110,17 @@ class WebSocketUplink(GatewayUplinkTransport):
                 pass
         self._connected = False
         logger.info("Uplink disconnected")
+
+    async def send_raw(self, data: str) -> None:
+        """Send raw JSON string. Used for payloads outside the envelope union."""
+        if self._connected and self._ws:
+            try:
+                await self._ws.send(data)
+                return
+            except Exception as e:
+                logger.warning("Send failed, buffering: %s", e)
+        if len(self._buffer) < BUFFER_LIMIT:
+            self._buffer.append(data)
 
     async def send(self, envelope: GatewayWsEnvelope) -> None:
         """Send an envelope. Buffers if disconnected."""

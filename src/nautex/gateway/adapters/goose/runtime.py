@@ -1,12 +1,7 @@
-"""Goose — ACP adapter reference.
+"""Per-agent adapter — inherits common ACP base.
 
-Launch: goose acp --with-builtin developer
-Transport: stdio
-Execution model: local
-Auth: goose-provider
-
-Note: needs full host env (pass_full_env=True).
-
-Per-agent config is in AGENT_REGISTRY (gateway/models.py).
-Integration evidence in INTEGRATION_EFFORT_LOG.md.
+Agent-specific quirks can be overridden here.
 """
+
+from ..acp_adapter import ACPAgentAdapter
+class GooseAdapter(ACPAgentAdapter): pass

@@ -1,10 +1,7 @@
-"""Claude Code — ACP adapter reference.
+"""Per-agent adapter — inherits common ACP base.
 
-Launch: claude-agent-acp
-Transport: stdio
-Execution model: local+gating
-Auth: no ACP auth (env var)
-
-Per-agent config is in AGENT_REGISTRY (gateway/models.py).
-Integration evidence in INTEGRATION_EFFORT_LOG.md.
+Agent-specific quirks can be overridden here.
 """
+
+from ..acp_adapter import ACPAgentAdapter
+class ClaudeAdapter(ACPAgentAdapter): pass

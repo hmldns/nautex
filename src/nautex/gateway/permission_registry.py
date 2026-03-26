@@ -92,7 +92,7 @@ class PermissionRegistry:
         if future and not future.done():
             response = PermissionResponsePayload(
                 permission_id=permission_id,
-                session_id=request.session_id if request else "",
+                acp_session_id=request.acp_session_id if request else "",
                 action=action,
             )
             future.set_result(response)

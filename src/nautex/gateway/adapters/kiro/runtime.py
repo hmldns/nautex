@@ -1,10 +1,7 @@
-"""Kiro CLI — ACP adapter reference.
+"""Per-agent adapter — inherits common ACP base.
 
-Launch: kiro-cli acp
-Transport: stdio
-Execution model: local+gating
-Auth: internal auth (auth method fails)
-
-Per-agent config is in AGENT_REGISTRY (gateway/models.py).
-Integration evidence in INTEGRATION_EFFORT_LOG.md.
+Agent-specific quirks can be overridden here.
 """
+
+from ..acp_adapter import ACPAgentAdapter
+class KiroAdapter(ACPAgentAdapter): pass

@@ -35,7 +35,8 @@ class HeartbeatPayload(BaseModel):
 class PermissionRequestPayload(BaseModel):
     payload_type: Literal["permission_request"] = "permission_request"
     permission_id: str
-    session_id: str = ""
+    session_id: Optional[str] = None        # backend's canonical session ID
+    acp_session_id: str = ""
     tool_name: str
     tool_kind: Optional[ToolKind] = None
     path: Optional[str] = None
@@ -51,12 +52,14 @@ class ConsolidatedSessionUpdate(BaseModel):
     """
     payload_type: Literal["session_update"] = "session_update"
     kind: SessionUpdateKind
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None        # backend's canonical session ID (set by gateway for backend-initiated)
+    acp_session_id: Optional[str] = None    # agent's native session ID
     text: Optional[str] = None
     tool_call_id: Optional[str] = None
     tool_title: Optional[str] = None
     tool_status: Optional[ToolCallStatus] = None
     tool_kind: Optional[ToolKind] = None
+    session_title: Optional[str] = None
     mode_id: Optional[str] = None
     commands_count: Optional[int] = None
     usage_size: Optional[int] = None
@@ -65,7 +68,7 @@ class ConsolidatedSessionUpdate(BaseModel):
 
 class TelemetryPayload(BaseModel):
     payload_type: Literal["telemetry"] = "telemetry"
-    session_id: str
+    acp_session_id: str
     active_tool: Optional[str] = None
     processed_tokens_estimate: int = 0
     is_typing: bool = False
@@ -78,7 +81,7 @@ class TelemetryPayload(BaseModel):
 class PermissionResponsePayload(BaseModel):
     payload_type: Literal["permission_response"] = "permission_response"
     permission_id: str
-    session_id: str = ""
+    acp_session_id: str = ""
     action: PermissionAction = PermissionAction.APPROVE
 
 

@@ -4,13 +4,18 @@ All agw.* routes used in GatewayWsEnvelope.route must be defined here.
 Copy this file to the backend to keep routes in sync.
 """
 
-# Utility → Backend (outbound from utility)
-UTILITY_HEARTBEAT = "agw.utility.heartbeat"
-UTILITY_PERMISSION_REQUEST = "agw.utility.permission_request"
-UTILITY_SESSION_UPDATE = "agw.utility.session_update"
-UTILITY_TELEMETRY = "agw.utility.telemetry"
+# Node → Backend (outbound from AGW node)
+NODE_REGISTER = "agw.node.register"
+NODE_SESSION_DECLARED = "agw.node.session_declared"
+NODE_HEARTBEAT = "agw.node.heartbeat"
+NODE_PERMISSION_REQUEST = "agw.node.permission_request"
+NODE_SESSION_UPDATE = "agw.node.session_update"
+NODE_TELEMETRY = "agw.node.telemetry"
 
-# Frontend/Backend → Utility (inbound to utility)
+# Backend → Node (inbound to AGW node)
+BACKEND_SESSION_ACKNOWLEDGED = "agw.backend.session_acknowledged"
+
+# Frontend/Backend → Node (inbound to AGW node)
 FRONTEND_PERMISSION_RESPONSE = "agw.frontend.permission_response"
 FRONTEND_EXECUTE_PROMPT = "agw.frontend.execute_prompt_strict"
 FRONTEND_CANCEL_SESSION = "agw.frontend.cancel_session"

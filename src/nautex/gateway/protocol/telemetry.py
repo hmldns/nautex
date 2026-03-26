@@ -23,7 +23,7 @@ class NodeHeartbeatPayload(BaseModel):
 
 class EphemeralSessionTelemetry(BaseModel):
     """Per-session ephemeral metrics streamed over WebSocket."""
-    session_id: str
+    acp_session_id: str
     active_tool: Optional[str] = None
     processed_tokens_estimate: int
     is_typing: bool

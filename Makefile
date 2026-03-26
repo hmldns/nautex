@@ -131,6 +131,9 @@ run-status:
 run-mcp:
 	PYTHONPATH=src .venv/bin/python -m nautex.cli mcp
 
+run-gateway:
+	PYTHONPATH=src .venv/bin/python -m nautex.cli gateway --headless
+
 run-mcp-inspector:
 	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector
 

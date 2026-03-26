@@ -25,10 +25,14 @@ from .protocol.enums import SessionUpdateKind
 from .permission_registry import PermissionRegistry
 from .adapters.acp_adapter import ACPAgentAdapter
 from .protocol import (
+    AgentDescriptorPayload,
+    EnvironmentDescriptor,
     GatewayWsEnvelope,
     HeartbeatPayload,
+    NodeRegistrationPayload,
     PermissionRequestPayload,
     PermissionResponsePayload,
+    BACKEND_REGISTRATION_ACK,
     FRONTEND_EXECUTE_PROMPT,
     FRONTEND_PERMISSION_RESPONSE,
     BACKEND_SESSION_ACKNOWLEDGED,
@@ -39,6 +43,10 @@ from .protocol import (
     NODE_SESSION_UPDATE,
 )
 from .uplink_transport import GatewayUplinkTransport, WebSocketUplink
+from .environment_anchor import (
+    IdentitySnapshot, acquire_lock, release_lock,
+    reconcile_at_startup, create_anchor, read_anchor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +104,22 @@ class GatewayNodeService:
 
         logger.info("Gateway node starting (headless=%s)", self.config.headless_mode)
 
+        # Lockfile — prevent duplicate gateways per directory
+        acquire_lock(self.config.directory_scope)
+
+        # Environment anchor — reconcile identity before registration
+        current_identity = IdentitySnapshot(
+            hostname=platform.node(),
+            directory_scope=self.config.directory_scope,
+            username=os.getenv("USER", "unknown"),
+        )
+        self._current_identity = current_identity
+        self._anchor_env_id = reconcile_at_startup(
+            self.config.directory_scope,
+            current_identity,
+            headless=self.config.headless_mode,
+        )
+
         try:
             # Connect uplink
             if self._uplink:
@@ -103,7 +127,7 @@ class GatewayNodeService:
                 await self._uplink.connect()
 
                 # Register with backend — first message after connect
-                await self._register(os.getcwd(), platform.node(), os.getenv("USER", "unknown"))
+                await self._register(current_identity)
 
             # Run concurrent tasks — gather instead of TaskGroup for Python 3.10
             await asyncio.gather(
@@ -126,51 +150,37 @@ class GatewayNodeService:
     # Registration — first message after WS connect
     # ------------------------------------------------------------------
 
-    async def _register(self, directory_scope: str, hostname: str, username: str) -> None:
-        """Send POOL_REGISTRATION with detected agents and environment.
-
-        Uses raw JSON because NodeRegistrationPayload is a backend-only model
-        not in the shared protocol union.
-        """
-        import json
+    async def _register(self, identity: IdentitySnapshot) -> None:
+        """Send POOL_REGISTRATION with detected agents and environment."""
         import sys
 
-        # Detect installed agents
         agents_info = list_available_agents()
-        agent_descriptors = []
-        for agent_id, info in agents_info.items():
-            if info["installed"]:
-                reg = info["registration"]
-                agent_descriptors.append({
-                    "agent_id": agent_id,
-                    "executable": reg.executable,
-                    "name": agent_id,
-                })
+        agents = [
+            AgentDescriptorPayload(agent_id=agent_id, executable=info["registration"].executable, name=agent_id)
+            for agent_id, info in agents_info.items() if info["installed"]
+        ]
 
-        if not agent_descriptors:
+        if not agents:
             logger.warning("No agents detected — registering with empty agent list")
 
-        # Build and send as raw JSON — bypasses envelope model validation
-        # because NodeRegistrationPayload is backend-only (not in GatewayPayload union)
-        raw = json.dumps({
-            "route": NODE_REGISTER,
-            "payload": {
-                "payload_type": "node_registration",
-                "utility_instance_id": self.config.utility_instance_id,
-                "environment": {
-                    "hostname": hostname,
-                    "platform": sys.platform,
-                    "directory_scope": self.config.directory_scope,
-                    "username": username,
-                },
-                "agents": agent_descriptors,
-            },
-        })
-        await self._uplink.send_raw(raw)
+        payload = NodeRegistrationPayload(
+            utility_instance_id=self.config.utility_instance_id,
+            environment=EnvironmentDescriptor(
+                hostname=identity.hostname,
+                platform=sys.platform,
+                directory_scope=identity.directory_scope,
+                username=identity.username,
+            ),
+            agents=agents,
+            environment_id=self._anchor_env_id,
+        )
+
+        envelope = GatewayWsEnvelope(route=NODE_REGISTER, payload=payload)
+        await self._uplink.send(envelope)
         logger.info(
             "Registered with %d agent(s): %s",
-            len(agent_descriptors),
-            ", ".join(a["agent_id"] for a in agent_descriptors),
+            len(agents),
+            ", ".join(a.agent_id for a in agents),
         )
 
     # ------------------------------------------------------------------
@@ -190,6 +200,9 @@ class GatewayNodeService:
         elif route == FRONTEND_EXECUTE_PROMPT:
             asyncio.create_task(self._dispatch_prompt(envelope.payload))
 
+        elif route == BACKEND_REGISTRATION_ACK:
+            self._handle_registration_ack(envelope.payload)
+
         elif route == BACKEND_SESSION_ACKNOWLEDGED:
             payload = envelope.payload
             logger.info(
@@ -200,6 +213,17 @@ class GatewayNodeService:
 
         else:
             logger.debug("Unhandled uplink route: %s", route)
+
+    def _handle_registration_ack(self, payload) -> None:
+        """Handle registration ack — write anchor file with environment_id."""
+        env_id = payload.get("environment_id", "") if isinstance(payload, dict) else getattr(payload, "environment_id", "")
+        if not env_id:
+            return
+        if not self._anchor_env_id:
+            # First run — create anchor file
+            create_anchor(self.config.directory_scope, env_id, self._current_identity)
+            self._anchor_env_id = env_id
+        logger.info("Registration ack: environment_id=%s", env_id)
 
     # ------------------------------------------------------------------
     # Prompt dispatch — spawn adapter if needed, forward to agent
@@ -322,7 +346,7 @@ class GatewayNodeService:
         await self._shutdown_event.wait()
 
     async def _teardown(self) -> None:
-        """Clean shutdown: disconnect adapters, reject permissions, disconnect uplink."""
+        """Clean shutdown: disconnect adapters, reject permissions, disconnect uplink, release lock."""
         # Disconnect all active adapters
         for agent_id, adapter in self._adapters.items():
             try:
@@ -339,6 +363,9 @@ class GatewayNodeService:
         # Disconnect uplink
         if self._uplink:
             await self._uplink.disconnect()
+
+        # Release lockfile
+        release_lock(self.config.directory_scope)
 
         logger.info("Gateway node stopped")
 

@@ -13,6 +13,7 @@ NODE_SESSION_UPDATE = "agw.node.session_update"
 NODE_TELEMETRY = "agw.node.telemetry"
 
 # Backend → Node (inbound to AGW node)
+BACKEND_REGISTRATION_ACK = "agw.backend.registration_ack"
 BACKEND_SESSION_ACKNOWLEDGED = "agw.backend.session_acknowledged"
 
 # Frontend/Backend → Node (inbound to AGW node)

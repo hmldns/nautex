@@ -14,19 +14,24 @@ from .enums import (
 from .envelope import GatewayWsEnvelope
 from .payloads import (
     PAYLOAD_DISCRIMINATOR,
+    AgentDescriptorPayload,
     CancelSessionPayload,
     ConsolidatedSessionUpdate,
+    EnvironmentDescriptor,
     ExecutePromptPayload,
     GatewayPayload,
     HeartbeatPayload,
+    NodeRegistrationPayload,
     PermissionRequestPayload,
     PermissionResponsePayload,
+    RegistrationAckPayload,
     SearchRequestPayload,
     SearchResponsePayload,
     SearchResultItem,
     TelemetryPayload,
 )
 from .routes import (
+    BACKEND_REGISTRATION_ACK,
     BACKEND_SESSION_ACKNOWLEDGED,
     FRONTEND_CANCEL_SESSION,
     FRONTEND_EXECUTE_PROMPT,
@@ -53,6 +58,9 @@ __all__ = [
     "GatewayPayload",
     "PAYLOAD_DISCRIMINATOR",
     # Payloads
+    "AgentDescriptorPayload",
+    "EnvironmentDescriptor",
+    "NodeRegistrationPayload",
     "HeartbeatPayload",
     "PermissionRequestPayload",
     "PermissionResponsePayload",
@@ -62,6 +70,7 @@ __all__ = [
     "CancelSessionPayload",
     "SearchRequestPayload",
     "SearchResponsePayload",
+    "RegistrationAckPayload",
     "SearchResultItem",
     # Telemetry
     "NodeHeartbeatPayload",
@@ -73,6 +82,7 @@ __all__ = [
     "NODE_PERMISSION_REQUEST",
     "NODE_SESSION_UPDATE",
     "NODE_TELEMETRY",
+    "BACKEND_REGISTRATION_ACK",
     "BACKEND_SESSION_ACKNOWLEDGED",
     "FRONTEND_PERMISSION_RESPONSE",
     "FRONTEND_EXECUTE_PROMPT",

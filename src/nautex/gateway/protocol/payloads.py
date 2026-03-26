@@ -25,6 +25,30 @@ from .enums import (
 # Utility → Backend payloads
 # ---------------------------------------------------------------------------
 
+class EnvironmentDescriptor(BaseModel):
+    """Inbound descriptor from a connecting gateway node."""
+    hostname: str
+    platform: str
+    directory_scope: str
+    username: str
+
+
+class AgentDescriptorPayload(BaseModel):
+    """Agent descriptor sent in registration payload."""
+    agent_id: str
+    executable: str
+    name: str = ""
+
+
+class NodeRegistrationPayload(BaseModel):
+    """Rich registration sent once on node connect."""
+    payload_type: Literal["node_registration"] = "node_registration"
+    utility_instance_id: str
+    environment: EnvironmentDescriptor
+    agents: List[AgentDescriptorPayload] = []
+    environment_id: Optional[str] = None
+
+
 class HeartbeatPayload(BaseModel):
     payload_type: Literal["heartbeat"] = "heartbeat"
     utility_instance_id: str
@@ -117,11 +141,18 @@ class SearchResponsePayload(BaseModel):
     results: List[SearchResultItem] = Field(default_factory=list)
 
 
+class RegistrationAckPayload(BaseModel):
+    """Backend → node ack after registration with resolved environment_id."""
+    payload_type: Literal["registration_ack"] = "registration_ack"
+    environment_id: str
+
+
 # ---------------------------------------------------------------------------
 # Discriminated union of all payloads
 # ---------------------------------------------------------------------------
 
 GatewayPayload = Union[
+    NodeRegistrationPayload,
     HeartbeatPayload,
     PermissionRequestPayload,
     ConsolidatedSessionUpdate,
@@ -131,6 +162,7 @@ GatewayPayload = Union[
     CancelSessionPayload,
     SearchRequestPayload,
     SearchResponsePayload,
+    RegistrationAckPayload,
 ]
 
 PAYLOAD_DISCRIMINATOR = "payload_type"

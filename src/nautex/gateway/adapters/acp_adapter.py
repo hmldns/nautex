@@ -9,7 +9,7 @@ Reference: MDS-13, MDS-61
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import acp
 from acp import spawn_agent_process, text_block
@@ -57,10 +57,25 @@ class ACPAgentAdapter(AgentAdapter):
         self._acp_session_id: Optional[str] = None
         self._consolidator: Optional[StreamConsolidator] = None
         self._on_system_event: Optional[Callable] = None
+        self._available_models: List[str] = []
+        self._current_model: str = ""
 
     @property
     def descriptor(self) -> AgentDescriptor:
         return self._descriptor
+
+    @property
+    def pid(self) -> int:
+        """PID of the agent subprocess, or 0 if not running."""
+        return self._proc.pid if self._proc else 0
+
+    @property
+    def available_models(self) -> List[str]:
+        return self._available_models
+
+    @property
+    def current_model(self) -> str:
+        return self._current_model
 
     @property
     def registration(self) -> SupportedAgentRegistration:
@@ -131,7 +146,12 @@ class ACPAgentAdapter(AgentAdapter):
         # Create session
         session = await self._conn.new_session(cwd=self._directory_scope, mcp_servers=[])
         self._acp_session_id = session.session_id
-        logger.info("ACP session: %s (agent=%s)", self._acp_session_id, self._agent_id)
+        model_state = session.models
+        if model_state:
+            self._available_models = [m.model_id for m in model_state.available_models] if model_state.available_models else []
+            self._current_model = model_state.current_model_id or ""
+        logger.info("ACP session: %s (agent=%s) models=%d current=%s",
+                     self._acp_session_id, self._agent_id, len(self._available_models), self._current_model)
 
         self._state = AgentConnectionState.ACTIVE
 
@@ -145,6 +165,19 @@ class ACPAgentAdapter(AgentAdapter):
         """Invoke session/load for state reconciliation."""
         # TODO: implement when session persistence is needed
         pass
+
+    async def set_model(self, model_id: str) -> bool:
+        """Switch model mid-session via ACP set_session_model. Returns True on success."""
+        if not self._conn or not self._acp_session_id:
+            logger.warning("Cannot set model — no active connection/session for %s", self._agent_id)
+            return False
+        try:
+            await self._conn.set_session_model(model_id=model_id, session_id=self._acp_session_id)
+            logger.info("Model set to %s for agent %s", model_id, self._agent_id)
+            return True
+        except Exception as e:
+            logger.error("Failed to set model %s for %s: %s", model_id, self._agent_id, e)
+            return False
 
     async def prompt(
         self,

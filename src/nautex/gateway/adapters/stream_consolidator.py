@@ -14,7 +14,9 @@ Reference: MDS-36, MDS-81, MDS-82, MDS-85, MDS-86
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from acp.contrib.session_state import SessionAccumulator
 from acp.schema import SessionNotification
@@ -64,9 +66,12 @@ class StreamConsolidator:
         self._accumulator = SessionAccumulator()
         self._updates: List[ConsolidatedSessionUpdate] = []
 
-        # Text buffering
-        self._text_buffer = ""
+        # Text buffering with time-based throttle
+        self._text_parts: List[str] = []    # list append, not string concat
         self._text_buffer_kind: Optional[SessionUpdateKind] = None
+        self._text_buffer_message_id: Optional[str] = None
+        self._last_flush_time: float = 0.0
+        self._flush_interval: float = 0.5  # minimum seconds between flushes
 
         # Telemetry counters
         self._word_count = 0
@@ -135,8 +140,9 @@ class StreamConsolidator:
             self._updates.append(csu)
             return [csu]
 
-        # Non-text: flush pending text, then emit
+        # Non-text: flush pending text (kind boundary), then emit
         result = self._flush_text_buffer()
+        self._last_flush_time = time.monotonic()
         self._updates.append(csu)
         result.append(csu)
         return result
@@ -167,38 +173,56 @@ class StreamConsolidator:
 
     def _buffer_text_chunk(self, csu: ConsolidatedSessionUpdate) -> List[ConsolidatedSessionUpdate]:
         result: List[ConsolidatedSessionUpdate] = []
-        if self._text_buffer_kind and self._text_buffer_kind != csu.kind:
+        # Flush if kind changed or acp_message_id changed (different logical message)
+        if self._text_buffer_kind and (
+            self._text_buffer_kind != csu.kind
+            or (csu.acp_message_id and self._text_buffer_message_id and csu.acp_message_id != self._text_buffer_message_id)
+        ):
             result = self._flush_text_buffer()
 
-        self._text_buffer += csu.text or ""
+        # Assign message_id only when starting a new logical message
+        if not self._text_buffer_message_id:
+            self._text_buffer_message_id = csu.acp_message_id or str(uuid4())
+
+        if csu.text:
+            self._text_parts.append(csu.text)
         self._text_buffer_kind = csu.kind
 
-        if self._has_sentence_boundary():
+        # Time-throttled flush: only flush on sentence boundary if enough time has passed
+        now = time.monotonic()
+        if self._has_sentence_boundary() and (now - self._last_flush_time) >= self._flush_interval:
             result.extend(self._flush_text_buffer())
+            self._last_flush_time = now
         return result
 
     def _has_sentence_boundary(self) -> bool:
-        buf = self._text_buffer
-        if not buf:
+        if not self._text_parts:
             return False
-        if buf.endswith("\n\n") or buf.endswith("\n"):
+        last = self._text_parts[-1]
+        if not last:
+            return False
+        if last.endswith("\n\n") or last.endswith("\n"):
             return True
-        stripped = buf.rstrip()
+        stripped = last.rstrip()
         if stripped and stripped[-1] in _SENTENCE_TERMINATORS:
             return True
         return False
 
     def _flush_text_buffer(self) -> List[ConsolidatedSessionUpdate]:
-        if not self._text_buffer:
+        if not self._text_parts:
             return []
+        text = "".join(self._text_parts)
         csu = ConsolidatedSessionUpdate(
             kind=self._text_buffer_kind or SessionUpdateKind.AGENT_MESSAGE,
-            text=self._text_buffer,
+            text=text,
             acp_session_id=self._session_id,
+            acp_message_id=self._text_buffer_message_id,
         )
         self._updates.append(csu)
-        self._text_buffer = ""
-        self._text_buffer_kind = None
+        self._text_parts.clear()
+        # Keep message_id and kind — non-text interrupts (session_info, usage)
+        # don't change the logical message. Only a kind switch (thought→message)
+        # resets message_id, handled in _buffer_text_chunk.
         return [csu]
 
     # ------------------------------------------------------------------
@@ -216,6 +240,7 @@ class StreamConsolidator:
             return ConsolidatedSessionUpdate(
                 kind=kind,
                 text=update.content.text,
+                acp_message_id=getattr(update, "message_id", None),
             )
 
         if kind in (SessionUpdateKind.TOOL_CALL, SessionUpdateKind.TOOL_CALL_UPDATE):

@@ -19,13 +19,17 @@ import signal
 from typing import Dict, Optional
 
 from .config import GatewayNodeConfig, list_available_agents
-from .event_bus import GatewayEventBus, LocalEventKind
+from .event_bus import GatewayEventBus
 from .models import AgentDescriptor, AgentSessionConfig, PromptContent, ConsolidatedSessionUpdate
 from .protocol.enums import SessionUpdateKind
 from .permission_registry import PermissionRegistry
 from .adapters.acp_adapter import ACPAgentAdapter
 from .protocol import (
     AgentDescriptorPayload,
+    AgentLifecycleEvent,
+    AgentLifecyclePayload,
+    AgentSettingChangePayload,
+    AgentSettings,
     EnvironmentDescriptor,
     GatewayWsEnvelope,
     HeartbeatPayload,
@@ -33,12 +37,17 @@ from .protocol import (
     PermissionRequestPayload,
     PermissionResponsePayload,
     BACKEND_REGISTRATION_ACK,
+    BACKEND_SESSION_ACKNOWLEDGED,
+    BACKEND_APPLY_SETTINGS,
+    BACKEND_SPAWN_AGENT,
+    BACKEND_STOP_AGENT,
     FRONTEND_EXECUTE_PROMPT,
     FRONTEND_PERMISSION_RESPONSE,
-    BACKEND_SESSION_ACKNOWLEDGED,
     NODE_REGISTER,
     NODE_SESSION_DECLARED,
     NODE_HEARTBEAT,
+    NODE_AGENT_LIFECYCLE,
+    NODE_AGENT_SETTING_CHANGE,
     NODE_PERMISSION_REQUEST,
     NODE_SESSION_UPDATE,
 )
@@ -88,8 +97,8 @@ class GatewayNodeService:
             self._uplink = None
 
         self._shutdown_event = asyncio.Event()
-        self._active_sessions: Dict[str, str] = {}  # session_id → agent_id
-        self._adapters: Dict[str, ACPAgentAdapter] = {}  # agent_id → adapter
+        self._session_agents: Dict[str, str] = {}     # session_id → agent_id
+        self._adapters: Dict[str, ACPAgentAdapter] = {}  # session_id → adapter
 
     async def start(self) -> None:
         """Run the daemon. Blocks until shutdown signal received."""
@@ -211,6 +220,15 @@ class GatewayNodeService:
                 payload.get("acp_session_id", "?") if isinstance(payload, dict) else getattr(payload, "acp_session_id", "?"),
             )
 
+        elif route == BACKEND_SPAWN_AGENT:
+            asyncio.create_task(self._handle_spawn_agent(envelope.payload))
+
+        elif route == BACKEND_STOP_AGENT:
+            asyncio.create_task(self._handle_stop_agent(envelope.payload))
+
+        elif route == BACKEND_APPLY_SETTINGS:
+            asyncio.create_task(self._handle_apply_settings(envelope.payload))
+
         else:
             logger.debug("Unhandled uplink route: %s", route)
 
@@ -241,26 +259,22 @@ class GatewayNodeService:
 
         logger.info("Dispatching prompt to %s (session=%s): %s", agent_id, session_id, prompt_text[:80])
 
-        # Get or create adapter for this agent
-        adapter = self._adapters.get(agent_id)
+        # Get or spawn adapter for this session
+        adapter = self._adapters.get(session_id)
         if not adapter:
-            adapter = ACPAgentAdapter(agent_id, self.config.directory_scope)
-            try:
-                await adapter.connect(
-                    config=AgentSessionConfig(directory_scope=self.config.directory_scope),
-                    on_system_event=self._forward_csu,
-                )
-                self._adapters[agent_id] = adapter
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                logger.error("Failed to connect adapter %s: %s", agent_id, e)
-                return
+            from .protocol import SpawnAgentPayload
+            await self._handle_spawn_agent(SpawnAgentPayload(session_id=session_id, agent_id=agent_id))
+            adapter = self._adapters.get(session_id)
+            if not adapter:
+                return  # spawn failed, lifecycle CRASHED already emitted
 
-        self._active_sessions[session_id] = agent_id
+        # Synthesize turn_id for this prompt dispatch
+        from uuid import uuid4
+        turn_id = str(uuid4())
 
         async def forward_with_session_id(csu: ConsolidatedSessionUpdate) -> None:
             csu.session_id = session_id
+            csu.turn_id = turn_id
             await self._forward_csu(csu)
 
         async def permission_with_session_id(prp: PermissionRequestPayload) -> PermissionResponsePayload:
@@ -280,6 +294,153 @@ class GatewayNodeService:
             logger.error("Prompt execution failed for %s: %s", agent_id, e)
         finally:
             await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
+
+    async def _handle_spawn_agent(self, payload) -> None:
+        """Spawn agent adapter for a session — dedicated command from backend."""
+        agent_id = payload.agent_id if hasattr(payload, "agent_id") else payload.get("agent_id", "")
+        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
+
+        if not agent_id or not session_id:
+            return
+
+        if session_id in self._adapters:
+            logger.info("Session %s already has adapter, skipping", session_id)
+            return
+
+        adapter = ACPAgentAdapter(agent_id, self.config.directory_scope)
+        try:
+            await adapter.connect(
+                config=AgentSessionConfig(directory_scope=self.config.directory_scope),
+                on_system_event=self._forward_csu,
+            )
+            self._adapters[session_id] = adapter
+            self._session_agents[session_id] = agent_id
+
+            agent_pid = adapter.pid
+            await self._emit_lifecycle(
+                session_id=session_id,
+                event=AgentLifecycleEvent.STARTED,
+                agent_id=agent_id,
+                pid=agent_pid,
+                model_id=adapter.current_model,
+                available_models=adapter.available_models,
+            )
+            asyncio.create_task(self._monitor_agent_process(
+                adapter, session_id, agent_id, agent_pid,
+            ))
+        except Exception as e:
+            logger.error("Failed to spawn agent %s: %s", agent_id, e)
+            await self._emit_lifecycle(
+                session_id=session_id,
+                event=AgentLifecycleEvent.CRASHED,
+                agent_id=agent_id,
+            )
+
+    async def _handle_stop_agent(self, payload) -> None:
+        """Stop agent adapter — dedicated command from backend."""
+        agent_id = payload.agent_id if hasattr(payload, "agent_id") else payload.get("agent_id", "")
+        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
+
+        adapter = self._adapters.get(session_id)
+        if not adapter:
+            logger.warning("Session %s has no adapter, nothing to stop", session_id)
+            return
+
+        try:
+            await adapter.disconnect()
+        except Exception as e:
+            logger.warning("Error disconnecting adapter for session %s: %s", session_id, e)
+
+        # Process monitor will detect exit and emit lifecycle event
+        self._adapters.pop(session_id, None)
+        self._session_agents.pop(session_id, None)
+
+    async def _handle_apply_settings(self, payload) -> None:
+        """Apply settings from backend — call ACP set_session_model, confirm back."""
+        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
+        settings = payload.settings if hasattr(payload, "settings") else payload.get("settings", {})
+
+        if isinstance(settings, dict):
+            settings = AgentSettings(**settings)
+
+        adapter = self._adapters.get(session_id)
+        if not adapter:
+            logger.warning("No adapter for settings change: session=%s", session_id)
+            return
+
+        # Apply model change via ACP
+        if settings.model:
+            success = await adapter.set_model(settings.model)
+            if success:
+                # Confirm back to backend — creates the AgentSettingChangeItem
+                confirm = AgentSettingChangePayload(
+                    session_id=session_id,
+                    settings=AgentSettings(model=settings.model),
+                )
+                envelope = GatewayWsEnvelope(route=NODE_AGENT_SETTING_CHANGE, payload=confirm)
+                await self._uplink.send(envelope)
+                logger.info("Settings applied: session=%s model=%s", session_id, settings.model)
+
+    async def _monitor_agent_process(
+        self,
+        adapter: ACPAgentAdapter,
+        session_id: str,
+        agent_id: str,
+        pid: int,
+    ) -> None:
+        """Watch agent process — emit EXITED/CRASHED when it dies."""
+        proc = adapter._proc
+        if not proc:
+            return
+        try:
+            returncode = await proc.wait()
+            # Process ended — determine if clean exit or crash
+            if returncode == 0 or returncode == -15:  # 0 = clean, -15 = SIGTERM
+                event = AgentLifecycleEvent.EXITED
+            else:
+                event = AgentLifecycleEvent.CRASHED
+            await self._emit_lifecycle(
+                session_id=session_id,
+                event=event,
+                agent_id=agent_id,
+                pid=pid,
+                return_code=returncode,
+            )
+            # Clean up adapter
+            self._adapters.pop(session_id, None)
+            self._session_agents.pop(session_id, None)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("Process monitor error for %s: %s", agent_id, e)
+
+    async def _emit_lifecycle(
+        self,
+        session_id: str,
+        event: AgentLifecycleEvent,
+        agent_id: str,
+        pid: int = 0,
+        version: str = "",
+        model_id: str = "",
+        return_code: int = 0,
+        available_models: list = None,
+    ) -> None:
+        """Emit independent lifecycle event to backend."""
+        if not self._uplink:
+            return
+        payload = AgentLifecyclePayload(
+            session_id=session_id,
+            event=event,
+            agent_id=agent_id,
+            pid=pid,
+            version=version,
+            model_id=model_id,
+            return_code=return_code,
+            available_models=available_models or [],
+        )
+        envelope = GatewayWsEnvelope(route=NODE_AGENT_LIFECYCLE, payload=payload)
+        await self._uplink.send(envelope)
+        logger.info("Lifecycle %s: session=%s agent=%s pid=%d", event.value, session_id, agent_id, pid)
 
     async def _declare_session(self, acp_session_id: str, agent_id: str) -> None:
         """Declare an ACP session to backend via SESSION_DECLARED."""
@@ -325,7 +486,7 @@ class GatewayNodeService:
             if self._uplink and self._uplink.is_connected:
                 heartbeat = HeartbeatPayload(
                     utility_instance_id=self.config.utility_instance_id,
-                    active_sessions_count=len(self._active_sessions),
+                    active_sessions_count=len(self._adapters),
                 )
                 envelope = GatewayWsEnvelope(
                     route=NODE_HEARTBEAT,
@@ -348,11 +509,11 @@ class GatewayNodeService:
     async def _teardown(self) -> None:
         """Clean shutdown: disconnect adapters, reject permissions, disconnect uplink, release lock."""
         # Disconnect all active adapters
-        for agent_id, adapter in self._adapters.items():
+        for sid, adapter in self._adapters.items():
             try:
                 await adapter.disconnect()
             except Exception as e:
-                logger.warning("Adapter disconnect error for %s: %s", agent_id, e)
+                logger.warning("Adapter disconnect error for session %s: %s", sid, e)
         self._adapters.clear()
 
         # Reject all pending permissions so adapters don't hang

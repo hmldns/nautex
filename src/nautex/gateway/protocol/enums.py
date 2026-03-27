@@ -49,6 +49,13 @@ class PermissionAction(str, Enum):
     DENY = "deny"
 
 
+class AgentLifecycleEvent(str, Enum):
+    """Agent lifecycle event types."""
+    STARTED = "started"
+    EXITED = "exited"        # clean termination
+    CRASHED = "crashed"      # abnormal termination
+
+
 class NodeStatus(str, Enum):
     """Gateway node health status."""
     HEALTHY = "healthy"

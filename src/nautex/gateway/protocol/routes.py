@@ -11,10 +11,17 @@ NODE_HEARTBEAT = "agw.node.heartbeat"
 NODE_PERMISSION_REQUEST = "agw.node.permission_request"
 NODE_SESSION_UPDATE = "agw.node.session_update"
 NODE_TELEMETRY = "agw.node.telemetry"
+NODE_AGENT_LIFECYCLE = "agw.node.agent_lifecycle"
+NODE_AGENT_SETTING_CHANGE = "agw.node.agent_setting_change"
 
 # Backend → Node (inbound to AGW node)
 BACKEND_REGISTRATION_ACK = "agw.backend.registration_ack"
 BACKEND_SESSION_ACKNOWLEDGED = "agw.backend.session_acknowledged"
+
+# Backend → Node (commands)
+BACKEND_SPAWN_AGENT = "agw.backend.spawn_agent"
+BACKEND_STOP_AGENT = "agw.backend.stop_agent"
+BACKEND_APPLY_SETTINGS = "agw.backend.apply_settings"
 
 # Frontend/Backend → Node (inbound to AGW node)
 FRONTEND_PERMISSION_RESPONSE = "agw.frontend.permission_response"

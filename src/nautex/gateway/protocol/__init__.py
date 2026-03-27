@@ -5,6 +5,7 @@ Only pydantic BaseModel types, enums, and string constants — no business logic
 """
 
 from .enums import (
+    AgentLifecycleEvent,
     NodeStatus,
     PermissionAction,
     SessionUpdateKind,
@@ -24,7 +25,12 @@ from .payloads import (
     NodeRegistrationPayload,
     PermissionRequestPayload,
     PermissionResponsePayload,
+    AgentLifecyclePayload,
+    AgentSettingChangePayload,
+    AgentSettings,
     RegistrationAckPayload,
+    SpawnAgentPayload,
+    StopAgentPayload,
     SearchRequestPayload,
     SearchResponsePayload,
     SearchResultItem,
@@ -33,6 +39,9 @@ from .payloads import (
 from .routes import (
     BACKEND_REGISTRATION_ACK,
     BACKEND_SESSION_ACKNOWLEDGED,
+    BACKEND_APPLY_SETTINGS,
+    BACKEND_SPAWN_AGENT,
+    BACKEND_STOP_AGENT,
     FRONTEND_CANCEL_SESSION,
     FRONTEND_EXECUTE_PROMPT,
     FRONTEND_PERMISSION_RESPONSE,
@@ -43,6 +52,8 @@ from .routes import (
     NODE_PERMISSION_REQUEST,
     NODE_SESSION_UPDATE,
     NODE_TELEMETRY,
+    NODE_AGENT_LIFECYCLE,
+    NODE_AGENT_SETTING_CHANGE,
 )
 from .telemetry import EphemeralSessionTelemetry, NodeHeartbeatPayload
 
@@ -52,6 +63,7 @@ __all__ = [
     "ToolCallStatus",
     "ToolKind",
     "PermissionAction",
+    "AgentLifecycleEvent",
     "NodeStatus",
     # Envelope
     "GatewayWsEnvelope",
@@ -70,7 +82,12 @@ __all__ = [
     "CancelSessionPayload",
     "SearchRequestPayload",
     "SearchResponsePayload",
+    "AgentLifecyclePayload",
+    "AgentSettingChangePayload",
+    "AgentSettings",
     "RegistrationAckPayload",
+    "SpawnAgentPayload",
+    "StopAgentPayload",
     "SearchResultItem",
     # Telemetry
     "NodeHeartbeatPayload",
@@ -82,6 +99,11 @@ __all__ = [
     "NODE_PERMISSION_REQUEST",
     "NODE_SESSION_UPDATE",
     "NODE_TELEMETRY",
+    "NODE_AGENT_LIFECYCLE",
+    "NODE_AGENT_SETTING_CHANGE",
+    "BACKEND_APPLY_SETTINGS",
+    "BACKEND_SPAWN_AGENT",
+    "BACKEND_STOP_AGENT",
     "BACKEND_REGISTRATION_ACK",
     "BACKEND_SESSION_ACKNOWLEDGED",
     "FRONTEND_PERMISSION_RESPONSE",

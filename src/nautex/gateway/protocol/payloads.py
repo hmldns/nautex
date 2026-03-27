@@ -13,6 +13,7 @@ from typing import List, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 from .enums import (
+    AgentLifecycleEvent,
     NodeStatus,
     PermissionAction,
     SessionUpdateKind,
@@ -88,6 +89,8 @@ class ConsolidatedSessionUpdate(BaseModel):
     commands_count: Optional[int] = None
     usage_size: Optional[int] = None
     usage_used: Optional[int] = None
+    turn_id: Optional[str] = None              # synthesized by gateway per prompt dispatch
+    acp_message_id: Optional[str] = None       # preserved from ACP ContentChunk.message_id
 
 
 class TelemetryPayload(BaseModel):
@@ -147,6 +150,45 @@ class RegistrationAckPayload(BaseModel):
     environment_id: str
 
 
+class SpawnAgentPayload(BaseModel):
+    """Backend → node: spawn agent process for a session."""
+    payload_type: Literal["spawn_agent"] = "spawn_agent"
+    session_id: str
+    agent_id: str
+
+
+class StopAgentPayload(BaseModel):
+    """Backend → node: stop agent process for a session."""
+    payload_type: Literal["stop_agent"] = "stop_agent"
+    session_id: str
+    agent_id: str
+
+
+class AgentSettings(BaseModel):
+    """Explicit settings model — optional fields, extensible."""
+    model: Optional[str] = None
+
+
+class AgentLifecyclePayload(BaseModel):
+    """Agent lifecycle event — gateway → backend."""
+    payload_type: Literal["agent_lifecycle"] = "agent_lifecycle"
+    session_id: Optional[str] = None
+    event: AgentLifecycleEvent
+    agent_id: str = ""
+    version: str = ""
+    model_id: str = ""
+    pid: int = 0
+    return_code: int = 0
+    available_models: List[str] = []
+
+
+class AgentSettingChangePayload(BaseModel):
+    """Agent setting change confirmation — gateway → backend."""
+    payload_type: Literal["agent_setting_change"] = "agent_setting_change"
+    session_id: Optional[str] = None
+    settings: AgentSettings
+
+
 # ---------------------------------------------------------------------------
 # Discriminated union of all payloads
 # ---------------------------------------------------------------------------
@@ -163,6 +205,10 @@ GatewayPayload = Union[
     SearchRequestPayload,
     SearchResponsePayload,
     RegistrationAckPayload,
+    AgentLifecyclePayload,
+    AgentSettingChangePayload,
+    SpawnAgentPayload,
+    StopAgentPayload,
 ]
 
 PAYLOAD_DISCRIMINATOR = "payload_type"

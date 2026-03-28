@@ -151,10 +151,15 @@ class RegistrationAckPayload(BaseModel):
 
 
 class SpawnAgentPayload(BaseModel):
-    """Backend → node: spawn agent process for a session."""
+    """Backend → node: spawn agent process for a session.
+
+    When acp_session_id is provided, gateway uses load_session instead of
+    new_session — resuming the agent's persisted conversation.
+    """
     payload_type: Literal["spawn_agent"] = "spawn_agent"
     session_id: str
     agent_id: str
+    acp_session_id: Optional[str] = None  # resume: load existing ACP session
 
 
 class StopAgentPayload(BaseModel):
@@ -173,6 +178,7 @@ class AgentLifecyclePayload(BaseModel):
     """Agent lifecycle event — gateway → backend."""
     payload_type: Literal["agent_lifecycle"] = "agent_lifecycle"
     session_id: Optional[str] = None
+    acp_session_id: str = ""
     event: AgentLifecycleEvent
     agent_id: str = ""
     version: str = ""

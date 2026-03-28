@@ -1,6 +1,8 @@
 import argparse
 import asyncio
+import hashlib
 import json
+import platform
 import sys
 
 from .models.config import MCPOutputFormat
@@ -156,7 +158,6 @@ def main() -> None:
     if args.command == "gateway":
         import logging as _logging
         import os
-        import uuid
         _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(name)s: %(message)s")
         from .gateway.gateway_node_service import GatewayNodeService
         from .gateway.config import GatewayNodeConfig
@@ -166,7 +167,7 @@ def main() -> None:
             headless_mode=args.headless,
             uplink_url=args.uplink_url,
             auth_token=args.auth_token,
-            utility_instance_id=f"node-{uuid.uuid4().hex[:8]}",
+            utility_instance_id="node-" + hashlib.md5(f"{platform.node()}:{directory_scope}:{os.getenv('USER', '')}".encode()).hexdigest()[:8],
         )
         asyncio.run(GatewayNodeService(config).start())
         return

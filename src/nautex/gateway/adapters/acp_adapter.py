@@ -161,10 +161,26 @@ class ACPAgentAdapter(AgentAdapter):
         self._acp_session_id = session.session_id
         return self._acp_session_id
 
+    async def load_session(self, acp_session_id: str) -> None:
+        """Load existing ACP session — agent restores its own persisted history."""
+        if not self._conn:
+            raise RuntimeError("Adapter not connected")
+        response = await self._conn.load_session(
+            cwd=self._directory_scope,
+            session_id=acp_session_id,
+            mcp_servers=[],
+        )
+        self._acp_session_id = acp_session_id
+        model_state = response.models if response else None
+        if model_state:
+            self._available_models = [m.model_id for m in model_state.available_models] if model_state.available_models else []
+            self._current_model = model_state.current_model_id or ""
+        self._state = AgentConnectionState.ACTIVE
+        logger.info("ACP session loaded: %s (agent=%s)", acp_session_id, self._agent_id)
+
     async def resume_session(self, session_id: str) -> None:
-        """Invoke session/load for state reconciliation."""
-        # TODO: implement when session persistence is needed
-        pass
+        """Base class abstract method — delegates to load_session."""
+        await self.load_session(session_id)
 
     async def set_model(self, model_id: str) -> bool:
         """Switch model mid-session via ACP set_session_model. Returns True on success."""

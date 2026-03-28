@@ -259,14 +259,11 @@ class GatewayNodeService:
 
         logger.info("Dispatching prompt to %s (session=%s): %s", agent_id, session_id, prompt_text[:80])
 
-        # Get or spawn adapter for this session
+        # Get adapter — must be started via SpawnAgent before prompting
         adapter = self._adapters.get(session_id)
         if not adapter:
-            from .protocol import SpawnAgentPayload
-            await self._handle_spawn_agent(SpawnAgentPayload(session_id=session_id, agent_id=agent_id))
-            adapter = self._adapters.get(session_id)
-            if not adapter:
-                return  # spawn failed, lifecycle CRASHED already emitted
+            logger.warning("No adapter for session %s — agent not started", session_id)
+            return
 
         # Synthesize turn_id for this prompt dispatch
         from uuid import uuid4
@@ -296,9 +293,14 @@ class GatewayNodeService:
             await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
 
     async def _handle_spawn_agent(self, payload) -> None:
-        """Spawn agent adapter for a session — dedicated command from backend."""
+        """Spawn agent adapter for a session — dedicated command from backend.
+
+        When acp_session_id is provided, loads existing session (resume).
+        Otherwise creates a fresh session.
+        """
         agent_id = payload.agent_id if hasattr(payload, "agent_id") else payload.get("agent_id", "")
         session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
+        acp_session_id = getattr(payload, "acp_session_id", None) or (payload.get("acp_session_id") if isinstance(payload, dict) else None)
 
         if not agent_id or not session_id:
             return
@@ -313,6 +315,11 @@ class GatewayNodeService:
                 config=AgentSessionConfig(directory_scope=self.config.directory_scope),
                 on_system_event=self._forward_csu,
             )
+            # Resume existing ACP session or create fresh
+            if acp_session_id:
+                await adapter.load_session(acp_session_id)
+                logger.info("Session %s resumed with ACP session %s", session_id, acp_session_id)
+
             self._adapters[session_id] = adapter
             self._session_agents[session_id] = agent_id
 
@@ -324,6 +331,7 @@ class GatewayNodeService:
                 pid=agent_pid,
                 model_id=adapter.current_model,
                 available_models=adapter.available_models,
+                acp_session_id=adapter._acp_session_id or "",
             )
             asyncio.create_task(self._monitor_agent_process(
                 adapter, session_id, agent_id, agent_pid,
@@ -424,12 +432,14 @@ class GatewayNodeService:
         model_id: str = "",
         return_code: int = 0,
         available_models: list = None,
+        acp_session_id: str = "",
     ) -> None:
         """Emit independent lifecycle event to backend."""
         if not self._uplink:
             return
         payload = AgentLifecyclePayload(
             session_id=session_id,
+            acp_session_id=acp_session_id,
             event=event,
             agent_id=agent_id,
             pid=pid,

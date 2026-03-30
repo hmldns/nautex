@@ -134,6 +134,10 @@ run-mcp:
 run-gateway:
 	PYTHONPATH=src .venv/bin/python -m nautex.cli gateway --headless
 
+# Run gateway for local dev — editable install, uplink from .nautex/config.json
+run-gateway-local:
+	uv run --with-editable . nautex gateway --headless
+
 run-mcp-inspector:
 	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector
 

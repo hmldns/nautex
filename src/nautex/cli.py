@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import os
 import platform
 import sys
 import uuid
@@ -18,6 +19,19 @@ from .services.document_service import DocumentService
 from .services.ui_service import UIService
 from .api import create_api_client
 from . import __version__
+
+
+GATEWAY_WS_PATH = "/agw-node/ws"
+
+
+def _derive_ws_url(api_host: str) -> str:
+    """Derive WebSocket uplink URL from the HTTP API host."""
+    url = api_host.rstrip("/")
+    if url.startswith("https://"):
+        url = "wss://" + url[len("https://"):]
+    elif url.startswith("http://"):
+        url = "ws://" + url[len("http://"):]
+    return url + GATEWAY_WS_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -132,11 +146,11 @@ def main() -> None:
     subparsers.add_parser("mcp", help="Start MCP server for IDE integration")
 
     # Gateway node daemon
-    gw_parser = subparsers.add_parser("gateway", help="Run as gateway node daemon")
-    gw_parser.add_argument("--uplink-url", default="ws://localhost:8000/agw-node/ws",
-                           help="Backend WebSocket URL")
-    gw_parser.add_argument("--auth-token", default="dev-token",
-                           help="Bearer token for WS auth")
+    gw_parser = subparsers.add_parser("gateway", help="[Experimental] Run local daemon that bridges coding agents to Nautex cloud")
+    gw_parser.add_argument("--uplink-url", default=None,
+                           help="Backend WebSocket URL (derived from config api_host if omitted)")
+    gw_parser.add_argument("--auth-token", default=None,
+                           help="Bearer token for WS auth (read from config api_token if omitted)")
     gw_parser.add_argument("--directory-scope", default=".",
                            help="Working directory scope for agents")
     gw_parser.add_argument("--headless", action="store_true", default=True,
@@ -157,16 +171,25 @@ def main() -> None:
 
     if args.command == "gateway":
         import logging as _logging
-        import os
         _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(name)s: %(message)s")
         from .gateway.gateway_node_service import GatewayNodeService
         from .gateway.config import GatewayNodeConfig
+
+        # Resolve auth token: CLI arg > config api_token
+        auth_token = args.auth_token or config_service.config.get_token()
+        if not auth_token:
+            print("Error: No auth token. Set NAUTEX_API_TOKEN in .nautex/.env or pass --auth-token.", file=sys.stderr)
+            sys.exit(1)
+
+        # Resolve uplink URL: CLI arg > derived from config api_host
+        uplink_url = args.uplink_url or _derive_ws_url(config_service.config.api_host)
+
         directory_scope = os.path.abspath(args.directory_scope)
         config = GatewayNodeConfig(
             directory_scope=directory_scope,
             headless_mode=args.headless,
-            uplink_url=args.uplink_url,
-            auth_token=args.auth_token,
+            uplink_url=uplink_url,
+            auth_token=auth_token,
             utility_instance_id="node-" + uuid.uuid4().hex[:12],
         )
         asyncio.run(GatewayNodeService(config).start())

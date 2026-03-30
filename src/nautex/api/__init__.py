@@ -4,13 +4,13 @@ from .client import NautexAPIClient, NautexAPIError
 from .test_client import NautexTestAPIClient
 
 
-def create_api_client(base_url: str = "https://api.nautex.ai", test_mode: bool = True):
+def create_api_client(base_url: str = "https://api.nautex.ai", test_mode: bool = False):
     """Factory function to create the appropriate API client.
-    
+
     Args:
         base_url: Base URL for the API (ignored in test mode)
-        test_mode: If True, returns test client with dummy responses
-        
+        test_mode: If True, returns test client with dummy responses (default: False)
+
     Returns:
         NautexTestAPIClient if test_mode=True, otherwise NautexAPIClient
     """

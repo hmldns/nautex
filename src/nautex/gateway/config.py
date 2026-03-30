@@ -173,10 +173,11 @@ def list_available_agents() -> Dict[str, Dict[str, Any]]:
     """
     result = {}
     for agent_id, reg in SUPPORTED_AGENTS.items():
-        path = shutil.which(reg.executable)
+        is_builtin = reg.executable == "<built-in>"
+        path = None if is_builtin else shutil.which(reg.executable)
         result[agent_id] = {
             "registration": reg,
-            "installed": path is not None,
+            "installed": is_builtin or path is not None,
             "binary_path": path,
         }
     return result

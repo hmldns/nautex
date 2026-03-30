@@ -59,6 +59,11 @@ class ACPAgentAdapter(AgentAdapter):
         self._on_system_event: Optional[Callable] = None
         self._available_models: List[str] = []
         self._current_model: str = ""
+        self._is_restoring = False
+
+    @property
+    def restoring(self) -> bool:
+        return self._is_restoring
 
     @property
     def descriptor(self) -> AgentDescriptor:
@@ -109,9 +114,10 @@ class ACPAgentAdapter(AgentAdapter):
         )
         client = self._client
 
-        # Spawn using ACP SDK
+        # Spawn using ACP SDK — large limit for agents that return file contents
         self._context_manager = spawn_agent_process(
             client, cmd, *args, cwd=self._directory_scope,
+            transport_kwargs={"limit": 10 * 1024 * 1024},  # 10MB stdio buffer
         )
         self._conn, self._proc = await self._context_manager.__aenter__()
 
@@ -162,9 +168,14 @@ class ACPAgentAdapter(AgentAdapter):
         return self._acp_session_id
 
     async def load_session(self, acp_session_id: str) -> None:
-        """Load existing ACP session — agent restores its own persisted history."""
+        """Load existing ACP session — agent restores its own persisted history.
+
+        Sets _restoring=True to suppress replayed session updates.
+        Cleared when prompt() is called (first real user interaction).
+        """
         if not self._conn:
             raise RuntimeError("Adapter not connected")
+        self._is_restoring = True
         response = await self._conn.load_session(
             cwd=self._directory_scope,
             session_id=acp_session_id,
@@ -176,7 +187,7 @@ class ACPAgentAdapter(AgentAdapter):
             self._available_models = [m.model_id for m in model_state.available_models] if model_state.available_models else []
             self._current_model = model_state.current_model_id or ""
         self._state = AgentConnectionState.ACTIVE
-        logger.info("ACP session loaded: %s (agent=%s)", acp_session_id, self._agent_id)
+        logger.info("ACP session loaded: %s (agent=%s, restoring=suppressed)", acp_session_id, self._agent_id)
 
     async def resume_session(self, session_id: str) -> None:
         """Base class abstract method — delegates to load_session."""
@@ -207,6 +218,7 @@ class ACPAgentAdapter(AgentAdapter):
         """Send prompt to agent and stream CSUs via on_update callback."""
         if self._state != AgentConnectionState.ACTIVE:
             raise RuntimeError(f"Adapter not active (state={self._state})")
+        self._is_restoring = False
 
         acp_sid = self._acp_session_id
         consolidator = StreamConsolidator(acp_sid)

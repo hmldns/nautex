@@ -22,6 +22,7 @@ class LocalEventKind(str, Enum):
     PERMISSION_REQUEST = "permission_request"
     SESSION_UPDATE = "session_update"
     AGENT_STATE_CHANGE = "agent_state_change"
+    CONNECTION_STATE = "connection_state"
 
 
 class GatewayEventBus:

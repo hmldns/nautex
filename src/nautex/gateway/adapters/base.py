@@ -80,6 +80,11 @@ class AgentAdapter(ABC):
         """Current lifecycle state."""
         ...
 
+    @property
+    def restoring(self) -> bool:
+        """True while session is loading history — suppresses replayed updates."""
+        return False
+
     @abstractmethod
     async def connect(
         self,

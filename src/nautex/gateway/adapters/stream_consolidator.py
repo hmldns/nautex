@@ -104,6 +104,7 @@ class StreamConsolidator:
         """
         try:
             kind = self._extract_kind(raw_update)
+            logger.info("RAW ACP: kind=%s type=%s", kind.value, type(raw_update).__name__)
             csu = self._build_csu(raw_update, kind)
             csu.acp_session_id = self._session_id
         except Exception as e:
@@ -140,8 +141,8 @@ class StreamConsolidator:
             self._updates.append(csu)
             return [csu]
 
-        # Non-text: flush pending text (kind boundary), then emit
-        result = self._flush_text_buffer()
+        # Non-text: flush pending text (message boundary), then emit
+        result = self._flush_text_buffer(reset_identity=True)
         self._last_flush_time = time.monotonic()
         self._updates.append(csu)
         result.append(csu)
@@ -149,7 +150,7 @@ class StreamConsolidator:
 
     def flush(self) -> List[ConsolidatedSessionUpdate]:
         """Flush any remaining buffered text. Call at end of stream."""
-        return self._flush_text_buffer()
+        return self._flush_text_buffer(reset_identity=True)
 
     def get_telemetry(self) -> EphemeralSessionTelemetry:
         return EphemeralSessionTelemetry(
@@ -178,7 +179,7 @@ class StreamConsolidator:
             self._text_buffer_kind != csu.kind
             or (csu.acp_message_id and self._text_buffer_message_id and csu.acp_message_id != self._text_buffer_message_id)
         ):
-            result = self._flush_text_buffer()
+            result = self._flush_text_buffer(reset_identity=True)
 
         # Assign message_id only when starting a new logical message
         if not self._text_buffer_message_id:
@@ -208,8 +209,11 @@ class StreamConsolidator:
             return True
         return False
 
-    def _flush_text_buffer(self) -> List[ConsolidatedSessionUpdate]:
+    def _flush_text_buffer(self, reset_identity: bool = False) -> List[ConsolidatedSessionUpdate]:
         if not self._text_parts:
+            if reset_identity:
+                self._text_buffer_message_id = None
+                self._text_buffer_kind = None
             return []
         text = "".join(self._text_parts)
         csu = ConsolidatedSessionUpdate(
@@ -220,9 +224,10 @@ class StreamConsolidator:
         )
         self._updates.append(csu)
         self._text_parts.clear()
-        # Keep message_id and kind — non-text interrupts (session_info, usage)
-        # don't change the logical message. Only a kind switch (thought→message)
-        # resets message_id, handled in _buffer_text_chunk.
+        if reset_identity:
+            # Message boundary — next text chunk is a new logical message.
+            self._text_buffer_message_id = None
+            self._text_buffer_kind = None
         return [csu]
 
     # ------------------------------------------------------------------
@@ -256,6 +261,14 @@ class StreamConsolidator:
                     status = ToolCallStatus(str(update.status))
                 except ValueError:
                     pass
+            raw_output = getattr(update, "raw_output", None)
+            content = getattr(update, "content", None)
+            logger.info(
+                "CSU %s: id=%s status=%s title=%s kind=%s raw_output=%s content_len=%s",
+                kind.value, update.tool_call_id, status, update.title, tool_kind,
+                str(raw_output)[:1000] if raw_output else None,
+                len(content) if content else 0,
+            )
             return ConsolidatedSessionUpdate(
                 kind=kind,
                 tool_call_id=update.tool_call_id,

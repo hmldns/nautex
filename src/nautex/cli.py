@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-import hashlib
 import json
 import platform
 import sys
+import uuid
 
 from .models.config import MCPOutputFormat
 from .models.mcp import format_response_as_markdown
@@ -167,7 +167,7 @@ def main() -> None:
             headless_mode=args.headless,
             uplink_url=args.uplink_url,
             auth_token=args.auth_token,
-            utility_instance_id="node-" + hashlib.md5(f"{platform.node()}:{directory_scope}:{os.getenv('USER', '')}".encode()).hexdigest()[:8],
+            utility_instance_id="node-" + uuid.uuid4().hex[:12],
         )
         asyncio.run(GatewayNodeService(config).start())
         return

@@ -43,6 +43,9 @@ from .protocol import (
     BACKEND_STOP_AGENT,
     FRONTEND_EXECUTE_PROMPT,
     FRONTEND_PERMISSION_RESPONSE,
+    FRONTEND_SEARCH_REQUEST,
+    SearchRequestPayload,
+    SearchResponsePayload,
     NODE_REGISTER,
     NODE_SESSION_DECLARED,
     NODE_HEARTBEAT,
@@ -92,6 +95,7 @@ class GatewayNodeService:
             self._uplink = WebSocketUplink(
                 url=config.uplink_url,
                 auth_token=config.auth_token,
+                event_bus=self.event_bus,
             )
         else:
             self._uplink = None
@@ -99,6 +103,8 @@ class GatewayNodeService:
         self._shutdown_event = asyncio.Event()
         self._session_agents: Dict[str, str] = {}     # session_id → agent_id
         self._adapters: Dict[str, ACPAgentAdapter] = {}  # session_id → adapter
+        self._monitor_tasks: Dict[str, asyncio.Task] = {}  # session_id → process monitor
+        self._indexer = None  # Lazy-init FuzzyIndexer
 
     async def start(self) -> None:
         """Run the daemon. Blocks until shutdown signal received."""
@@ -133,6 +139,7 @@ class GatewayNodeService:
             # Connect uplink
             if self._uplink:
                 self._uplink.on_message(self._handle_uplink_message)
+                self._uplink.on_reconnect(self._handle_reconnect)
                 await self._uplink.connect()
 
                 # Register with backend — first message after connect
@@ -193,8 +200,51 @@ class GatewayNodeService:
         )
 
     # ------------------------------------------------------------------
+    # Reconnection — re-register and re-declare active sessions (MDSNAUTX-62)
+    # ------------------------------------------------------------------
+
+    async def _handle_reconnect(self) -> None:
+        """Called by uplink after WebSocket reconnects (before buffer flush).
+
+        Re-registers with backend and re-declares all active sessions
+        to trigger UC2 auto-recovery on the backend side.
+        """
+        logger.info("Uplink reconnected — re-registering and re-declaring sessions")
+        await self._register(self._current_identity)
+        await self._redeclare_active_sessions()
+
+    async def _redeclare_active_sessions(self) -> None:
+        """Re-declare all active adapter sessions to backend via SESSION_DECLARED.
+
+        Enables UC2 auto-recovery: backend matches these against
+        AGENT_DISCONNECTED sessions and transitions them back to ACTIVE.
+        """
+        if not self._adapters:
+            return
+
+        for session_id, adapter in self._adapters.items():
+            agent_id = self._session_agents.get(session_id, "")
+            acp_session_id = adapter._acp_session_id or ""
+            if not acp_session_id:
+                continue
+            await self._declare_session(acp_session_id, agent_id)
+            logger.info(
+                "Re-declared active session: session=%s acp=%s agent=%s",
+                session_id, acp_session_id, agent_id,
+            )
+
+    # ------------------------------------------------------------------
     # Command dispatch — incoming WS messages from cloud
     # ------------------------------------------------------------------
+
+    def _safe_task(self, coro, name: str = "") -> asyncio.Task:
+        """Create a task with exception logging."""
+        async def wrapper():
+            try:
+                await coro
+            except Exception as e:
+                logger.error("Task %s failed: %s", name, e, exc_info=True)
+        return asyncio.create_task(wrapper())
 
     async def _handle_uplink_message(self, envelope: GatewayWsEnvelope) -> None:
         """Route incoming WebSocket messages to appropriate handlers."""
@@ -207,7 +257,7 @@ class GatewayNodeService:
             )
 
         elif route == FRONTEND_EXECUTE_PROMPT:
-            asyncio.create_task(self._dispatch_prompt(envelope.payload))
+            self._safe_task(self._dispatch_prompt(envelope.payload), "dispatch_prompt")
 
         elif route == BACKEND_REGISTRATION_ACK:
             self._handle_registration_ack(envelope.payload)
@@ -221,13 +271,16 @@ class GatewayNodeService:
             )
 
         elif route == BACKEND_SPAWN_AGENT:
-            asyncio.create_task(self._handle_spawn_agent(envelope.payload))
+            self._safe_task(self._handle_spawn_agent(envelope.payload), "spawn_agent")
 
         elif route == BACKEND_STOP_AGENT:
-            asyncio.create_task(self._handle_stop_agent(envelope.payload))
+            self._safe_task(self._handle_stop_agent(envelope.payload), "stop_agent")
 
         elif route == BACKEND_APPLY_SETTINGS:
-            asyncio.create_task(self._handle_apply_settings(envelope.payload))
+            self._safe_task(self._handle_apply_settings(envelope.payload), "apply_settings")
+
+        elif route == FRONTEND_SEARCH_REQUEST:
+            self._safe_task(self._handle_search_request(envelope), "search_request")
 
         else:
             logger.debug("Unhandled uplink route: %s", route)
@@ -270,9 +323,12 @@ class GatewayNodeService:
         turn_id = str(uuid4())
 
         async def forward_with_session_id(csu: ConsolidatedSessionUpdate) -> None:
-            csu.session_id = session_id
-            csu.turn_id = turn_id
-            await self._forward_csu(csu)
+            try:
+                csu.session_id = session_id
+                csu.turn_id = turn_id
+                await self._forward_csu(csu)
+            except Exception as e:
+                logger.error("CSU forward failed (session=%s kind=%s): %s", session_id, csu.kind, e, exc_info=True)
 
         async def permission_with_session_id(prp: PermissionRequestPayload) -> PermissionResponsePayload:
             prp.session_id = session_id
@@ -288,7 +344,7 @@ class GatewayNodeService:
                 on_permission_request=permission_with_session_id,
             )
         except Exception as e:
-            logger.error("Prompt execution failed for %s: %s", agent_id, e)
+            logger.error("Prompt execution failed for %s (session=%s): %s", agent_id, session_id, e, exc_info=True)
         finally:
             await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
 
@@ -309,11 +365,24 @@ class GatewayNodeService:
             logger.info("Session %s already has adapter, skipping", session_id)
             return
 
-        adapter = ACPAgentAdapter(agent_id, self.config.directory_scope)
+        from .adapters.mock_adapter import MockTestingAgent, MOCK_AGENT_ID
+        if agent_id == MOCK_AGENT_ID:
+            adapter = MockTestingAgent()
+        else:
+            adapter = ACPAgentAdapter(agent_id, self.config.directory_scope)
         try:
+            async def forward_system_event(csu: ConsolidatedSessionUpdate) -> None:
+                if adapter.restoring:
+                    return
+                try:
+                    csu.session_id = session_id
+                    await self._forward_csu(csu)
+                except Exception as e:
+                    logger.error("System event forward failed (session=%s kind=%s): %s", session_id, csu.kind, e, exc_info=True)
+
             await adapter.connect(
                 config=AgentSessionConfig(directory_scope=self.config.directory_scope),
-                on_system_event=self._forward_csu,
+                on_system_event=forward_system_event,
             )
             # Resume existing ACP session or create fresh
             if acp_session_id:
@@ -333,9 +402,9 @@ class GatewayNodeService:
                 available_models=adapter.available_models,
                 acp_session_id=adapter._acp_session_id or "",
             )
-            asyncio.create_task(self._monitor_agent_process(
-                adapter, session_id, agent_id, agent_pid,
-            ))
+            self._monitor_tasks[session_id] = asyncio.create_task(
+                self._monitor_agent_process(adapter, session_id, agent_id, agent_pid)
+            )
         except Exception as e:
             logger.error("Failed to spawn agent %s: %s", agent_id, e)
             await self._emit_lifecycle(
@@ -354,14 +423,25 @@ class GatewayNodeService:
             logger.warning("Session %s has no adapter, nothing to stop", session_id)
             return
 
+        # Cancel process monitor — we handle lifecycle directly (symmetric with start)
+        monitor = self._monitor_tasks.pop(session_id, None)
+        if monitor and not monitor.done():
+            monitor.cancel()
+
         try:
             await adapter.disconnect()
         except Exception as e:
             logger.warning("Error disconnecting adapter for session %s: %s", session_id, e)
 
-        # Process monitor will detect exit and emit lifecycle event
         self._adapters.pop(session_id, None)
         self._session_agents.pop(session_id, None)
+
+        # Emit EXITED — symmetric with STARTED in _handle_spawn_agent
+        await self._emit_lifecycle(
+            session_id=session_id,
+            event=AgentLifecycleEvent.EXITED,
+            agent_id=agent_id,
+        )
 
     async def _handle_apply_settings(self, payload) -> None:
         """Apply settings from backend — call ACP set_session_model, confirm back."""
@@ -389,6 +469,30 @@ class GatewayNodeService:
                 await self._uplink.send(envelope)
                 logger.info("Settings applied: session=%s model=%s", session_id, settings.model)
 
+    async def _handle_search_request(self, envelope: GatewayWsEnvelope) -> None:
+        """Handle file search request — query FuzzyIndexer, send response back."""
+        from .indexer import FuzzyIndexer
+
+        payload = envelope.payload
+        query = payload.query if hasattr(payload, "query") else payload.get("query", "")
+        limit = payload.limit if hasattr(payload, "limit") else payload.get("limit", 15)
+
+        if not self._indexer:
+            self._indexer = FuzzyIndexer(self.config.directory_scope, self.config.ignored_directories)
+            await self._indexer.build_index()
+            logger.info("FuzzyIndexer built: %d files", len(self._indexer._files))
+
+        results = await self._indexer.search(query, limit=limit)
+        response = SearchResponsePayload(
+            results=[{"filepath": r.filepath, "score": r.overall_score, "snippets": []} for r in results],
+        )
+        resp_envelope = GatewayWsEnvelope(
+            route="agw.node.search_response",
+            payload=response,
+            correlation_id=envelope.correlation_id,
+        )
+        await self._uplink.send(resp_envelope)
+
     async def _monitor_agent_process(
         self,
         adapter: ACPAgentAdapter,
@@ -414,9 +518,10 @@ class GatewayNodeService:
                 pid=pid,
                 return_code=returncode,
             )
-            # Clean up adapter
+            # Clean up adapter + monitor ref
             self._adapters.pop(session_id, None)
             self._session_agents.pop(session_id, None)
+            self._monitor_tasks.pop(session_id, None)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -517,22 +622,40 @@ class GatewayNodeService:
         await self._shutdown_event.wait()
 
     async def _teardown(self) -> None:
-        """Clean shutdown: disconnect adapters, reject permissions, disconnect uplink, release lock."""
-        # Disconnect all active adapters
-        for sid, adapter in self._adapters.items():
+        """Clean shutdown: stop agents (with lifecycle), reject permissions, disconnect uplink, release lock."""
+        # Stop all agents via symmetric flow — emits EXITED lifecycle via uplink
+        for sid in list(self._adapters.keys()):
+            agent_id = self._session_agents.get(sid, "")
+            adapter = self._adapters.get(sid)
+            if not adapter:
+                continue
+
+            monitor = self._monitor_tasks.pop(sid, None)
+            if monitor and not monitor.done():
+                monitor.cancel()
+
             try:
                 await adapter.disconnect()
             except Exception as e:
                 logger.warning("Adapter disconnect error for session %s: %s", sid, e)
+
+            await self._emit_lifecycle(
+                session_id=sid,
+                event=AgentLifecycleEvent.EXITED,
+                agent_id=agent_id,
+            )
         self._adapters.clear()
+        self._session_agents.clear()
+        self._monitor_tasks.clear()
 
         # Reject all pending permissions so adapters don't hang
         rejected = self.permission_registry.reject_all("shutdown")
         if rejected:
             logger.info("Rejected %d pending permissions on shutdown", rejected)
 
-        # Disconnect uplink
+        # Drain pending lifecycle events, then disconnect uplink
         if self._uplink:
+            await self._uplink.drain()
             await self._uplink.disconnect()
 
         # Release lockfile

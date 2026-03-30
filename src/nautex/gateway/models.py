@@ -99,6 +99,12 @@ SUPPORTED_AGENTS: Dict[str, SupportedAgentRegistration] = {
         launch_args=["acp"],
         credential_source=CredentialSource.INTERNAL,
     ),
+    "mock_testing_agent": SupportedAgentRegistration(
+        agent_id="mock_testing_agent",
+        executable="<built-in>",
+        launch_args=[],
+        credential_source=CredentialSource.INTERNAL,
+    ),
 }
 
 

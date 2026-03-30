@@ -408,7 +408,7 @@ class NautexAPIClient:
             await self.get_account_info(timeout=timeout)
             return True
         except NautexAPIError as e:
-            if e.status_code == 401:
+            if e.status_code in (401, 403):
                 logger.warning("Token verification failed: Invalid token")
                 return False
             else:

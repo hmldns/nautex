@@ -44,7 +44,7 @@ class AgentDescriptorPayload(BaseModel):
 class NodeRegistrationPayload(BaseModel):
     """Rich registration sent once on node connect."""
     payload_type: Literal["node_registration"] = "node_registration"
-    utility_instance_id: str
+    node_instance_id: str
     environment: EnvironmentDescriptor
     agents: List[AgentDescriptorPayload] = []
     environment_id: Optional[str] = None
@@ -52,7 +52,7 @@ class NodeRegistrationPayload(BaseModel):
 
 class HeartbeatPayload(BaseModel):
     payload_type: Literal["heartbeat"] = "heartbeat"
-    utility_instance_id: str
+    node_instance_id: str
     active_sessions_count: int
     status: NodeStatus = NodeStatus.HEALTHY
 

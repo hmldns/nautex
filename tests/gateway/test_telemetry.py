@@ -12,17 +12,17 @@ class TestNodeHeartbeatPayload:
 
     def test_serialize_defaults(self):
         payload = NodeHeartbeatPayload(
-            utility_instance_id="inst-001",
+            node_instance_id="inst-001",
             active_sessions_count=0,
         )
         data = payload.model_dump()
-        assert data["utility_instance_id"] == "inst-001"
+        assert data["node_instance_id"] == "inst-001"
         assert data["active_sessions_count"] == 0
         assert data["status"] == "healthy"
 
     def test_serialize_custom_status(self):
         payload = NodeHeartbeatPayload(
-            utility_instance_id="inst-002",
+            node_instance_id="inst-002",
             active_sessions_count=3,
             status="degraded",
         )
@@ -31,7 +31,7 @@ class TestNodeHeartbeatPayload:
 
     def test_json_roundtrip(self):
         original = NodeHeartbeatPayload(
-            utility_instance_id="inst-rt",
+            node_instance_id="inst-rt",
             active_sessions_count=5,
             status="healthy",
         )
@@ -41,11 +41,11 @@ class TestNodeHeartbeatPayload:
 
     def test_from_dict(self):
         data = {
-            "utility_instance_id": "inst-dict",
+            "node_instance_id": "inst-dict",
             "active_sessions_count": 1,
         }
         payload = NodeHeartbeatPayload.model_validate(data)
-        assert payload.utility_instance_id == "inst-dict"
+        assert payload.node_instance_id == "inst-dict"
         assert payload.status == "healthy"
 
     def test_missing_required_fields(self):

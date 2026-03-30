@@ -52,7 +52,7 @@ class GatewayNodeConfig(BaseModel):
     )
     uplink_url: Optional[str] = None
     auth_token: Optional[str] = None
-    utility_instance_id: str = ""
+    node_instance_id: str = ""
 
 
 # ---------------------------------------------------------------------------

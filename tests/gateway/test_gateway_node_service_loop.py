@@ -22,7 +22,7 @@ def config(tmp_path):
     return GatewayNodeConfig(
         directory_scope=str(tmp_path),
         headless_mode=True,
-        utility_instance_id="test-node",
+        node_instance_id="test-node",
     )
 
 
@@ -46,11 +46,11 @@ class TestHeartbeat:
 
             heartbeats = [
                 m for m in server.received
-                if m.get("route") == "agw.utility.heartbeat"
+                if m.get("route") == "agw.node.heartbeat"
             ]
             assert len(heartbeats) >= 1
             payload = heartbeats[0]["payload"]
-            assert payload["utility_instance_id"] == "test-node"
+            assert payload["node_instance_id"] == "test-node"
             assert payload["status"] == "healthy"
 
 
@@ -158,9 +158,9 @@ class TestBuffering:
 
         # Don't connect — just send directly via uplink
         envelope = GatewayWsEnvelope(
-            route="agw.utility.heartbeat",
+            route="agw.node.heartbeat",
             payload=HeartbeatPayload(
-                utility_instance_id="test",
+                node_instance_id="test",
                 active_sessions_count=0,
             ),
         )

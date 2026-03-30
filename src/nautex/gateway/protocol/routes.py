@@ -1,4 +1,4 @@
-"""WebSocket route constants shared between utility and backend.
+"""WebSocket route constants shared between gateway node and backend.
 
 All agw.* routes used in GatewayWsEnvelope.route must be defined here.
 Copy this file to the backend to keep routes in sync.

@@ -1,4 +1,4 @@
-"""WebSocket message envelope shared between utility and backend.
+"""WebSocket message envelope shared between gateway node and backend.
 
 All messages over the uplink are wrapped in this envelope.
 The route field determines the handler. The payload is a discriminated
@@ -15,7 +15,7 @@ from .payloads import PAYLOAD_DISCRIMINATOR, GatewayPayload
 
 
 class GatewayWsEnvelope(BaseModel):
-    """WebSocket message envelope between utility and cloud backend.
+    """WebSocket message envelope between gateway node and cloud backend.
 
     The payload field is a discriminated union — each payload model has
     a payload_type literal that Pydantic uses to pick the correct type.

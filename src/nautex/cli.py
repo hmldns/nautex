@@ -190,7 +190,7 @@ def main() -> None:
             headless_mode=args.headless,
             uplink_url=uplink_url,
             auth_token=auth_token,
-            utility_instance_id="node-" + uuid.uuid4().hex[:12],
+            node_instance_id="node-" + uuid.uuid4().hex[:12],
         )
         asyncio.run(GatewayNodeService(config).start())
         return

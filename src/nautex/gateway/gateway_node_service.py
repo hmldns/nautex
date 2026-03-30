@@ -180,7 +180,7 @@ class GatewayNodeService:
             logger.warning("No agents detected — registering with empty agent list")
 
         payload = NodeRegistrationPayload(
-            utility_instance_id=self.config.utility_instance_id,
+            node_instance_id=self.config.node_instance_id,
             environment=EnvironmentDescriptor(
                 hostname=identity.hostname,
                 platform=sys.platform,
@@ -600,7 +600,7 @@ class GatewayNodeService:
 
             if self._uplink and self._uplink.is_connected:
                 heartbeat = HeartbeatPayload(
-                    utility_instance_id=self.config.utility_instance_id,
+                    node_instance_id=self.config.node_instance_id,
                     active_sessions_count=len(self._adapters),
                 )
                 envelope = GatewayWsEnvelope(

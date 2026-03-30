@@ -1,4 +1,4 @@
-"""Telemetry payloads shared between utility and backend.
+"""Telemetry payloads shared between gateway node and backend.
 
 Two channels:
 1. NodeHeartbeatPayload — 4Hz global daemon health over WS uplink
@@ -16,7 +16,7 @@ from .enums import NodeStatus
 
 class NodeHeartbeatPayload(BaseModel):
     """Global node health payload flushed at 4Hz over WebSocket uplink."""
-    utility_instance_id: str
+    node_instance_id: str
     active_sessions_count: int
     status: NodeStatus = NodeStatus.HEALTHY
 

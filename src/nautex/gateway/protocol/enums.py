@@ -1,4 +1,4 @@
-"""Protocol enumerations shared between utility and backend.
+"""Protocol enumerations shared between gateway node and backend.
 
 All enum values are derived from empirical ACP probe evidence
 and the gateway service design.

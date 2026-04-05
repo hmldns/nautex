@@ -138,6 +138,10 @@ run-gateway:
 run-gateway-local:
 	uv run --with-editable . nautex gateway --headless
 
+# Run gateway from parent directory (project root) using editable install venv
+run-gateway-parent:
+	cd .. && $(CURDIR)/.venv/bin/nautex gateway --headless
+
 run-mcp-inspector:
 	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector
 

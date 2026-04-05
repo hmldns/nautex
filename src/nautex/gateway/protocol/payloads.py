@@ -150,6 +150,28 @@ class RegistrationAckPayload(BaseModel):
     environment_id: str
 
 
+class SessionDeclaredPayload(BaseModel):
+    """Node declares a session it started independently (TUI, auto-start).
+
+    Backend creates the session record, assigns canonical session_id,
+    and acknowledges back with the mapping.
+    """
+    payload_type: Literal["session_declared"] = "session_declared"
+    acp_session_id: str  # agent's internal session ID
+    agent_id: str
+
+
+class SessionAcknowledgedPayload(BaseModel):
+    """Backend acknowledges a declared session — sends canonical session_id back to node.
+
+    Node should use session_id (backend's) in subsequent CSUs.
+    Backend also reconciles via acp_session_id if node keeps using it.
+    """
+    payload_type: Literal["session_acknowledged"] = "session_acknowledged"
+    session_id: str       # backend's canonical ID
+    acp_session_id: str   # echoed back for node's mapping
+
+
 class SpawnAgentPayload(BaseModel):
     """Backend → node: spawn agent process for a session.
 
@@ -211,6 +233,8 @@ GatewayPayload = Union[
     SearchRequestPayload,
     SearchResponsePayload,
     RegistrationAckPayload,
+    SessionDeclaredPayload,
+    SessionAcknowledgedPayload,
     AgentLifecyclePayload,
     AgentSettingChangePayload,
     SpawnAgentPayload,

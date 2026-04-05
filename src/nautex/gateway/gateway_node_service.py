@@ -46,6 +46,7 @@ from .protocol import (
     FRONTEND_SEARCH_REQUEST,
     SearchRequestPayload,
     SearchResponsePayload,
+    SessionDeclaredPayload,
     NODE_REGISTER,
     NODE_SESSION_DECLARED,
     NODE_HEARTBEAT,
@@ -266,8 +267,8 @@ class GatewayNodeService:
             payload = envelope.payload
             logger.info(
                 "Session acknowledged: backend=%s acp=%s",
-                payload.get("session_id", "?") if isinstance(payload, dict) else getattr(payload, "session_id", "?"),
-                payload.get("acp_session_id", "?") if isinstance(payload, dict) else getattr(payload, "acp_session_id", "?"),
+                payload.session_id,
+                payload.acp_session_id,
             )
 
         elif route == BACKEND_SPAWN_AGENT:
@@ -559,16 +560,9 @@ class GatewayNodeService:
 
     async def _declare_session(self, acp_session_id: str, agent_id: str) -> None:
         """Declare an ACP session to backend via SESSION_DECLARED."""
-        import json
-        raw = json.dumps({
-            "route": NODE_SESSION_DECLARED,
-            "payload": {
-                "payload_type": "session_declared",
-                "acp_session_id": acp_session_id,
-                "agent_id": agent_id,
-            },
-        })
-        await self._uplink.send_raw(raw)
+        payload = SessionDeclaredPayload(acp_session_id=acp_session_id, agent_id=agent_id)
+        envelope = GatewayWsEnvelope(route=NODE_SESSION_DECLARED, payload=payload)
+        await self._uplink.send(envelope)
         logger.info("Declared session: acp=%s agent=%s", acp_session_id, agent_id)
 
     async def _forward_csu(self, csu: ConsolidatedSessionUpdate) -> None:

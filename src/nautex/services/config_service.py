@@ -235,22 +235,23 @@ class ConfigurationService:
             raise ConfigurationError(f"Unexpected error saving configuration: {e}")
 
     def save_to_nautex_env(self, key: str, value: str):
-        """Upsert a NAUTEX_-prefixed variable in .nautex/.env."""
+        """Upsert a NAUTEX_-prefixed variable in .nautex/.env.
+
+        Comments out prior value instead of replacing, preserving history.
+        Never touches root .env — only writes to .nautex/.env.
+        """
         self.nautex_env_file.parent.mkdir(exist_ok=True)
         env_key = NautexConfig.Config.env_prefix + key.upper()
         existing_lines = []
-        found = False
         if self.nautex_env_file.exists():
             with open(self.nautex_env_file, 'r') as f:
                 for line in f:
-                    line = line.strip()
-                    if line.startswith(f"{env_key}="):
-                        existing_lines.append(f"{env_key}={value}")
-                        found = True
-                    elif line:
-                        existing_lines.append(line)
-        if not found:
-            existing_lines.append(f"{env_key}={value}")
+                    stripped = line.strip()
+                    if stripped.startswith(f"{env_key}="):
+                        existing_lines.append(f"# {stripped}")
+                    elif stripped:
+                        existing_lines.append(stripped)
+        existing_lines.append(f"{env_key}={value}")
         with open(self.nautex_env_file, 'w') as f:
             for line in existing_lines:
                 f.write(f"{line}\n")

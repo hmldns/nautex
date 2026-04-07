@@ -147,6 +147,14 @@ def main() -> None:
 
     # Gateway node daemon
     gw_parser = subparsers.add_parser("gateway", help="[Experimental] Run local daemon that bridges coding agents to Nautex cloud")
+    gw_subparsers = gw_parser.add_subparsers(dest="gateway_command")
+
+    # gateway setup --token <TOKEN>
+    gw_setup_parser = gw_subparsers.add_parser("setup", help="Save gateway access token to .nautex/.env")
+    gw_setup_parser.add_argument("--token", required=True, help="API token for gateway authentication")
+    gw_setup_parser.add_argument("--host", default=None, help="Override API host URL")
+
+    # gateway [run] (default — start the daemon)
     gw_parser.add_argument("--uplink-url", default=None,
                            help="Backend WebSocket URL (derived from config api_host if omitted)")
     gw_parser.add_argument("--auth-token", default=None,
@@ -170,6 +178,18 @@ def main() -> None:
     config_service.load_configuration()
 
     if args.command == "gateway":
+        gateway_cmd = getattr(args, 'gateway_command', None)
+
+        if gateway_cmd == "setup":
+            config_service.save_token_to_nautex_env(args.token)
+            print(f"Gateway token saved to .nautex/.env")
+            if args.host:
+                config_service.save_to_nautex_env('API_HOST', args.host)
+                print(f"API host saved to .nautex/.env")
+            print("\nNext step: run `nautex gateway` to start the daemon.")
+            return
+
+        # Default: run the gateway daemon
         import logging as _logging
         _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(name)s: %(message)s")
         from .gateway.gateway_node_service import GatewayNodeService
@@ -178,7 +198,7 @@ def main() -> None:
         # Resolve auth token: CLI arg > config api_token
         auth_token = args.auth_token or config_service.config.get_token()
         if not auth_token:
-            print("Error: No auth token. Set NAUTEX_API_TOKEN in .nautex/.env or pass --auth-token.", file=sys.stderr)
+            print("Error: No auth token. Run `nautex gateway setup --token <TOKEN>` first, or pass --auth-token.", file=sys.stderr)
             sys.exit(1)
 
         # Resolve uplink URL: CLI arg > derived from config api_host

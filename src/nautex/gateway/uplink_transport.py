@@ -103,6 +103,7 @@ class WebSocketUplink(GatewayUplinkTransport):
         self._recv_task: Optional[asyncio.Task] = None
         self._send_task: Optional[asyncio.Task] = None
         self._reconnect_task: Optional[asyncio.Task] = None
+        self._reconnecting = False
 
     @property
     def is_connected(self) -> bool:
@@ -170,6 +171,13 @@ class WebSocketUplink(GatewayUplinkTransport):
         if self._event_bus:
             self._event_bus.try_publish(LocalEventKind.CONNECTION_STATE, state)
 
+    def _trigger_reconnect(self) -> None:
+        """Request reconnection. No-op if already reconnecting or shutting down."""
+        if self._shutdown or self._reconnecting:
+            return
+        self._reconnecting = True
+        self._reconnect_task = asyncio.create_task(self._reconnect())
+
     async def _establish(self, start_reconnect_on_fail: bool = True) -> None:
         """Single connection attempt."""
         headers = {}
@@ -204,7 +212,9 @@ class WebSocketUplink(GatewayUplinkTransport):
             # Unblock send loop
             self._connected_event.set()
 
-            # Start receive loop
+            # Cancel stale recv loop before starting a fresh one
+            if self._recv_task and not self._recv_task.done():
+                self._recv_task.cancel()
             self._recv_task = asyncio.create_task(self._recv_loop())
         except Exception as e:
             logger.warning("Connection failed: %s", e)
@@ -216,8 +226,8 @@ class WebSocketUplink(GatewayUplinkTransport):
                 except Exception:
                     pass
                 self._ws = None
-            if start_reconnect_on_fail and not self._shutdown:
-                self._reconnect_task = asyncio.create_task(self._reconnect())
+            if start_reconnect_on_fail:
+                self._trigger_reconnect()
 
     async def _send_loop(self) -> None:
         """Single consumer: drain queue when connected, pause when not."""
@@ -245,8 +255,7 @@ class WebSocketUplink(GatewayUplinkTransport):
                 self._connected = False
                 self._connected_event.clear()
                 self._emit_connection_state(CONNECTION_STATE_DISCONNECTED)
-                if not self._shutdown:
-                    self._reconnect_task = asyncio.create_task(self._reconnect())
+                self._trigger_reconnect()
 
     def _requeue_front(self, data: str) -> None:
         """Put a failed message back at the front of the queue."""
@@ -280,18 +289,23 @@ class WebSocketUplink(GatewayUplinkTransport):
             self._connected_event.clear()
             if not self._shutdown:
                 self._emit_connection_state(CONNECTION_STATE_DISCONNECTED)
-                self._reconnect_task = asyncio.create_task(self._reconnect())
+                self._trigger_reconnect()
 
     async def _reconnect(self) -> None:
         """Exponential backoff reconnection loop."""
-        self._emit_connection_state(CONNECTION_STATE_RECONNECTING)
-        backoff = INITIAL_BACKOFF
-        while not self._shutdown:
-            logger.info("Reconnecting in %.1fs... (queued=%d)", backoff, self._queue.qsize())
-            await asyncio.sleep(backoff)
-            if self._shutdown:
-                break
-            await self._establish(start_reconnect_on_fail=False)
-            if self._connected:
-                return
-            backoff = min(backoff * BACKOFF_FACTOR, MAX_BACKOFF)
+        try:
+            self._emit_connection_state(CONNECTION_STATE_RECONNECTING)
+            backoff = INITIAL_BACKOFF
+            while not self._shutdown:
+                logger.info("Reconnecting in %.1fs... (queued=%d)", backoff, self._queue.qsize())
+                await asyncio.sleep(backoff)
+                if self._shutdown:
+                    break
+                await self._establish(start_reconnect_on_fail=False)
+                if self._connected:
+                    return
+                backoff = min(backoff * BACKOFF_FACTOR, MAX_BACKOFF)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            self._reconnecting = False

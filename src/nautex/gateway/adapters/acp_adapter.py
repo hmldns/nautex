@@ -8,11 +8,14 @@ Reference: MDS-13, MDS-61
 
 from __future__ import annotations
 
+import asyncio.subprocess
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from contextlib import AbstractAsyncContextManager
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import acp
 from acp import spawn_agent_process, text_block
+from acp.client.connection import ClientSideConnection
 
 from ..config import get_registration, build_launch_command, resolve_auth_method
 from ..models import (
@@ -33,6 +36,20 @@ from .stream_consolidator import StreamConsolidator
 logger = logging.getLogger(__name__)
 
 
+class AdapterNotConnectedError(Exception):
+    """Raised when an operation requires an active ACP connection that hasn't been established."""
+
+    def __init__(self, agent_id: str, operation: str):
+        super().__init__(f"Agent '{agent_id}' has no ACP connection — call connect() before {operation}()")
+
+
+class AdapterNoSessionError(Exception):
+    """Raised when an operation requires an ACP session that hasn't been created."""
+
+    def __init__(self, agent_id: str, operation: str):
+        super().__init__(f"Agent '{agent_id}' has no ACP session — call connect() or create_session() before {operation}()")
+
+
 class ACPAgentAdapter(AgentAdapter):
     """Concrete ACP adapter — drives an agent via the ACP SDK.
 
@@ -51,15 +68,19 @@ class ACPAgentAdapter(AgentAdapter):
             executable=self._registration.executable,
         )
         self._state = AgentConnectionState.OFFLINE
-        self._conn: Optional[Any] = None
-        self._proc: Optional[Any] = None
-        self._context_manager: Optional[Any] = None
+        self._conn: Optional[ClientSideConnection] = None
+        self._proc: Optional[asyncio.subprocess.Process] = None
+        self._context_manager: Optional[
+            AbstractAsyncContextManager[Tuple[ClientSideConnection, asyncio.subprocess.Process]]
+        ] = None
         self._acp_session_id: Optional[str] = None
         self._consolidator: Optional[StreamConsolidator] = None
-        self._on_system_event: Optional[Callable] = None
+        self._on_system_event: Optional[Callable[[ConsolidatedSessionUpdate], Awaitable[None]]] = None
         self._available_models: List[str] = []
         self._current_model: str = ""
         self._is_restoring = False
+        self._config: Optional[AgentSessionConfig] = None
+        self._client: Optional[GatewayACPClient] = None
 
     @property
     def restoring(self) -> bool:
@@ -90,12 +111,42 @@ class ACPAgentAdapter(AgentAdapter):
     def state(self) -> AgentConnectionState:
         return self._state
 
+    def _require_conn(self, operation: str) -> ClientSideConnection:
+        """Return the active connection or raise AdapterNotConnectedError."""
+        if self._conn is None:
+            raise AdapterNotConnectedError(self._agent_id, operation)
+        return self._conn
+
+    def _require_session(self, operation: str) -> Tuple[ClientSideConnection, str]:
+        """Return (connection, session_id) or raise if either is missing."""
+        conn = self._require_conn(operation)
+        if self._acp_session_id is None:
+            raise AdapterNoSessionError(self._agent_id, operation)
+        return conn, self._acp_session_id
+
+    @staticmethod
+    def _build_acp_mcp_servers(config: AgentSessionConfig) -> list:
+        """Transform MCPServerConfig list → ACP SDK McpServerStdio list."""
+        if not config.mcp_servers:
+            return []
+        from acp.schema import McpServerStdio, EnvVariable
+        return [
+            McpServerStdio(
+                name=m.server_id,
+                command=m.command,
+                args=m.args,
+                env=[EnvVariable(name=k, value=v) for k, v in m.env.items()],
+            )
+            for m in config.mcp_servers
+        ]
+
     async def connect(
         self,
         config: AgentSessionConfig,
         on_system_event: Callable[[ConsolidatedSessionUpdate], Awaitable[None]],
     ) -> None:
         """Spawn agent, initialize ACP, authenticate (skip on failure), create session."""
+        self._config = config
         self._on_system_event = on_system_event
         self._state = AgentConnectionState.INITIALIZING
 
@@ -149,8 +200,9 @@ class ACPAgentAdapter(AgentAdapter):
                 except Exception as e:
                     logger.info("Auth skipped for %s: %s", self._agent_id, e)
 
-        # Create session
-        session = await self._conn.new_session(cwd=self._directory_scope, mcp_servers=[])
+        # Create session — inject MCP servers from config
+        acp_mcp_servers = self._build_acp_mcp_servers(config)
+        session = await self._conn.new_session(cwd=self._directory_scope, mcp_servers=acp_mcp_servers)
         self._acp_session_id = session.session_id
         model_state = session.models
         if model_state:
@@ -163,7 +215,10 @@ class ACPAgentAdapter(AgentAdapter):
 
     async def create_session(self, config: GatewaySessionConfig) -> str:
         """Create a new ACP session. Returns acp_session_id."""
-        session = await self._conn.new_session(cwd=self._directory_scope, mcp_servers=[])
+        conn = self._require_conn("create_session")
+        if self._config is None:
+            raise AdapterNotConnectedError(self._agent_id, "create_session")
+        session = await conn.new_session(cwd=self._directory_scope, mcp_servers=self._build_acp_mcp_servers(self._config))
         self._acp_session_id = session.session_id
         return self._acp_session_id
 
@@ -173,10 +228,9 @@ class ACPAgentAdapter(AgentAdapter):
         Sets _restoring=True to suppress replayed session updates.
         Cleared when prompt() is called (first real user interaction).
         """
-        if not self._conn:
-            raise RuntimeError("Adapter not connected")
+        conn = self._require_conn("load_session")
         self._is_restoring = True
-        response = await self._conn.load_session(
+        response = await conn.load_session(
             cwd=self._directory_scope,
             session_id=acp_session_id,
             mcp_servers=[],
@@ -195,11 +249,9 @@ class ACPAgentAdapter(AgentAdapter):
 
     async def set_model(self, model_id: str) -> bool:
         """Switch model mid-session via ACP set_session_model. Returns True on success."""
-        if not self._conn or not self._acp_session_id:
-            logger.warning("Cannot set model — no active connection/session for %s", self._agent_id)
-            return False
         try:
-            await self._conn.set_session_model(model_id=model_id, session_id=self._acp_session_id)
+            conn, acp_sid = self._require_session("set_model")
+            await conn.set_session_model(model_id=model_id, session_id=acp_sid)
             logger.info("Model set to %s for agent %s", model_id, self._agent_id)
             return True
         except Exception as e:
@@ -218,9 +270,11 @@ class ACPAgentAdapter(AgentAdapter):
         """Send prompt to agent and stream CSUs via on_update callback."""
         if self._state != AgentConnectionState.ACTIVE:
             raise RuntimeError(f"Adapter not active (state={self._state})")
+        conn, acp_sid = self._require_session("prompt")
+        if self._client is None:
+            raise AdapterNotConnectedError(self._agent_id, "prompt")
         self._is_restoring = False
 
-        acp_sid = self._acp_session_id
         consolidator = StreamConsolidator(acp_sid)
         self._consolidator = consolidator
 
@@ -236,7 +290,7 @@ class ACPAgentAdapter(AgentAdapter):
         logger.info("Prompting agent %s (session=%s): %s", self._agent_id, acp_sid, prompt_text[:80])
 
         try:
-            result = await self._conn.prompt(
+            result = await conn.prompt(
                 session_id=acp_sid,
                 prompt=[text_block(prompt_text)],
             )

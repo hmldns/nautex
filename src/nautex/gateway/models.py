@@ -144,9 +144,11 @@ class AgentSessionConfig(BaseModel):
     allow_mcp_tools: bool = True
     auto_approve_all: bool = False
 
-    # Tool filtering
-    tools_allowed: List[str] = Field(default_factory=list)
-    tools_denied: List[str] = Field(default_factory=list)
+    # Tool filtering — not yet wired; no ACP-level counterpart exists.
+    # Enforcement point: permission request callback in adapter, matching
+    # PermissionRequestPayload.tool_name against these lists.
+    # tools_allowed: List[str] = Field(default_factory=list)
+    # tools_denied: List[str] = Field(default_factory=list)
 
     # MCP servers to inject
     mcp_servers: List[MCPServerConfig] = Field(default_factory=list)

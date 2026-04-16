@@ -172,16 +172,40 @@ class SessionAcknowledgedPayload(BaseModel):
     acp_session_id: str   # echoed back for node's mapping
 
 
+class MCPServerEntry(BaseModel):
+    """MCP server to inject at session start."""
+    server_id: str
+    command: str
+    args: List[str] = Field(default_factory=list)
+    env: dict = Field(default_factory=dict)
+
+
+class SessionConfigPayload(BaseModel):
+    """Session-intent configuration sent from backend to gateway at spawn time.
+
+    Controls what MCP servers are injected, what instructions the agent receives,
+    and what capabilities are allowed. Gateway merges these into AgentSessionConfig.
+    """
+    mcp_servers: List[MCPServerEntry] = Field(default_factory=list)
+    system_prompt: Optional[str] = None
+    allow_file_read: bool = True
+    allow_file_write: bool = False
+    allow_terminal: bool = False
+    auto_approve_all: bool = False
+
+
 class SpawnAgentPayload(BaseModel):
     """Backend → node: spawn agent process for a session.
 
     When acp_session_id is provided, gateway uses load_session instead of
     new_session — resuming the agent's persisted conversation.
+    session_config carries intent-specific MCP servers, prompt, and capability flags.
     """
     payload_type: Literal["spawn_agent"] = "spawn_agent"
     session_id: str
     agent_id: str
     acp_session_id: Optional[str] = None  # resume: load existing ACP session
+    session_config: Optional[SessionConfigPayload] = None
 
 
 class StopAgentPayload(BaseModel):
@@ -210,6 +234,13 @@ class AgentLifecyclePayload(BaseModel):
     available_models: List[str] = []
 
 
+class ApplySettingsPayload(BaseModel):
+    """Backend → node: apply settings (model switch) to an active session."""
+    payload_type: Literal["apply_settings"] = "apply_settings"
+    session_id: str
+    settings: AgentSettings
+
+
 class AgentSettingChangePayload(BaseModel):
     """Agent setting change confirmation — gateway → backend."""
     payload_type: Literal["agent_setting_change"] = "agent_setting_change"
@@ -235,6 +266,7 @@ GatewayPayload = Union[
     RegistrationAckPayload,
     SessionDeclaredPayload,
     SessionAcknowledgedPayload,
+    ApplySettingsPayload,
     AgentLifecyclePayload,
     AgentSettingChangePayload,
     SpawnAgentPayload,

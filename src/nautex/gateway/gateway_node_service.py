@@ -3,7 +3,7 @@
 Central router managing:
 - WebSocket uplink to cloud backend
 - Agent adapter subprocesses
-- 3Hz heartbeat loop
+- 4Hz heartbeat loop
 - Permission registry
 - Event bus for TUI decoupling
 - Signal handling for graceful shutdown
@@ -16,13 +16,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-from typing import Dict, Optional
+from typing import Awaitable, Callable, Dict, List, Optional
+from uuid import uuid4
 
 from .config import GatewayNodeConfig, list_available_agents
 from .event_bus import GatewayEventBus
-from .models import AgentDescriptor, AgentSessionConfig, PromptContent, ConsolidatedSessionUpdate
+from .indexer import FuzzyIndexer
+from .models import AgentSessionConfig, MCPServerConfig, PromptContent, ConsolidatedSessionUpdate
 from .protocol.enums import SessionUpdateKind
 from .permission_registry import PermissionRegistry
+from .adapters.base import AgentAdapter
 from .adapters.acp_adapter import ACPAgentAdapter
 from .protocol import (
     AgentDescriptorPayload,
@@ -30,12 +33,22 @@ from .protocol import (
     AgentLifecyclePayload,
     AgentSettingChangePayload,
     AgentSettings,
+    ApplySettingsPayload,
     EnvironmentDescriptor,
+    ExecutePromptPayload,
     GatewayWsEnvelope,
     HeartbeatPayload,
     NodeRegistrationPayload,
     PermissionRequestPayload,
     PermissionResponsePayload,
+    RegistrationAckPayload,
+    SearchRequestPayload,
+    SearchResponsePayload,
+    SearchResultItem,
+    SessionAcknowledgedPayload,
+    SessionDeclaredPayload,
+    SpawnAgentPayload,
+    StopAgentPayload,
     BACKEND_REGISTRATION_ACK,
     BACKEND_SESSION_ACKNOWLEDGED,
     BACKEND_APPLY_SETTINGS,
@@ -44,9 +57,6 @@ from .protocol import (
     FRONTEND_EXECUTE_PROMPT,
     FRONTEND_PERMISSION_RESPONSE,
     FRONTEND_SEARCH_REQUEST,
-    SearchRequestPayload,
-    SearchResponsePayload,
-    SessionDeclaredPayload,
     NODE_REGISTER,
     NODE_SESSION_DECLARED,
     NODE_HEARTBEAT,
@@ -79,7 +89,7 @@ class GatewayNodeService:
         config: GatewayNodeConfig,
         event_bus: Optional[GatewayEventBus] = None,
         uplink: Optional[GatewayUplinkTransport] = None,
-    ):
+    ) -> None:
         self.config = config
         self.event_bus = event_bus or GatewayEventBus()
         self.permission_registry = PermissionRegistry(
@@ -91,7 +101,7 @@ class GatewayNodeService:
 
         # Transport — create WebSocket uplink if URL configured
         if uplink:
-            self._uplink = uplink
+            self._uplink: Optional[GatewayUplinkTransport] = uplink
         elif config.uplink_url:
             self._uplink = WebSocketUplink(
                 url=config.uplink_url,
@@ -102,10 +112,12 @@ class GatewayNodeService:
             self._uplink = None
 
         self._shutdown_event = asyncio.Event()
-        self._session_agents: Dict[str, str] = {}     # session_id → agent_id
-        self._adapters: Dict[str, ACPAgentAdapter] = {}  # session_id → adapter
+        self._session_agents: Dict[str, str] = {}          # session_id → agent_id
+        self._adapters: Dict[str, AgentAdapter] = {}       # session_id → adapter
         self._monitor_tasks: Dict[str, asyncio.Task] = {}  # session_id → process monitor
-        self._indexer = None  # Lazy-init FuzzyIndexer
+        self._indexer: Optional[FuzzyIndexer] = None
+        self._current_identity: Optional[IdentitySnapshot] = None
+        self._anchor_env_id: Optional[str] = None
 
     async def start(self) -> None:
         """Run the daemon. Blocks until shutdown signal received."""
@@ -171,6 +183,9 @@ class GatewayNodeService:
         """Send POOL_REGISTRATION with detected agents and environment."""
         import sys
 
+        if not self._uplink:
+            return
+
         agents_info = list_available_agents()
         agents = [
             AgentDescriptorPayload(agent_id=agent_id, executable=info["registration"].executable, name=agent_id)
@@ -210,6 +225,8 @@ class GatewayNodeService:
         Re-registers with backend and re-declares all active sessions
         to trigger UC2 auto-recovery on the backend side.
         """
+        if not self._current_identity:
+            return
         logger.info("Uplink reconnected — re-registering and re-declaring sessions")
         await self._register(self._current_identity)
         await self._redeclare_active_sessions()
@@ -238,9 +255,9 @@ class GatewayNodeService:
     # Command dispatch — incoming WS messages from cloud
     # ------------------------------------------------------------------
 
-    def _safe_task(self, coro, name: str = "") -> asyncio.Task:
+    def _safe_task(self, coro: Awaitable[None], name: str = "") -> asyncio.Task:
         """Create a task with exception logging."""
-        async def wrapper():
+        async def wrapper() -> None:
             try:
                 await coro
             except Exception as e:
@@ -250,21 +267,30 @@ class GatewayNodeService:
     async def _handle_uplink_message(self, envelope: GatewayWsEnvelope) -> None:
         """Route incoming WebSocket messages to appropriate handlers."""
         route = envelope.route
+        payload = envelope.payload
 
         if route == FRONTEND_PERMISSION_RESPONSE:
-            self.permission_registry.resolve_request(
-                envelope.payload.permission_id,
-                envelope.payload.action,
-            )
+            if not isinstance(payload, PermissionResponsePayload):
+                logger.warning("Expected PermissionResponsePayload, got %s", type(payload).__name__)
+                return
+            self.permission_registry.resolve_request(payload.permission_id, payload.action)
 
         elif route == FRONTEND_EXECUTE_PROMPT:
-            self._safe_task(self._dispatch_prompt(envelope.payload), "dispatch_prompt")
+            if not isinstance(payload, ExecutePromptPayload):
+                logger.warning("Expected ExecutePromptPayload, got %s", type(payload).__name__)
+                return
+            self._safe_task(self._dispatch_prompt(payload), "dispatch_prompt")
 
         elif route == BACKEND_REGISTRATION_ACK:
-            self._handle_registration_ack(envelope.payload)
+            if not isinstance(payload, RegistrationAckPayload):
+                logger.warning("Expected RegistrationAckPayload, got %s", type(payload).__name__)
+                return
+            self._handle_registration_ack(payload)
 
         elif route == BACKEND_SESSION_ACKNOWLEDGED:
-            payload = envelope.payload
+            if not isinstance(payload, SessionAcknowledgedPayload):
+                logger.warning("Expected SessionAcknowledgedPayload, got %s", type(payload).__name__)
+                return
             logger.info(
                 "Session acknowledged: backend=%s acp=%s",
                 payload.session_id,
@@ -272,231 +298,258 @@ class GatewayNodeService:
             )
 
         elif route == BACKEND_SPAWN_AGENT:
-            self._safe_task(self._handle_spawn_agent(envelope.payload), "spawn_agent")
+            if not isinstance(payload, SpawnAgentPayload):
+                logger.warning("Expected SpawnAgentPayload, got %s", type(payload).__name__)
+                return
+            self._safe_task(self._handle_spawn_agent(payload), "spawn_agent")
 
         elif route == BACKEND_STOP_AGENT:
-            self._safe_task(self._handle_stop_agent(envelope.payload), "stop_agent")
+            if not isinstance(payload, StopAgentPayload):
+                logger.warning("Expected StopAgentPayload, got %s", type(payload).__name__)
+                return
+            self._safe_task(self._handle_stop_agent(payload), "stop_agent")
 
         elif route == BACKEND_APPLY_SETTINGS:
-            self._safe_task(self._handle_apply_settings(envelope.payload), "apply_settings")
+            if not isinstance(payload, ApplySettingsPayload):
+                logger.warning("Expected ApplySettingsPayload, got %s", type(payload).__name__)
+                return
+            self._safe_task(self._handle_apply_settings(payload), "apply_settings")
 
         elif route == FRONTEND_SEARCH_REQUEST:
-            self._safe_task(self._handle_search_request(envelope), "search_request")
+            if not isinstance(payload, SearchRequestPayload):
+                logger.warning("Expected SearchRequestPayload, got %s", type(payload).__name__)
+                return
+            self._safe_task(self._handle_search_request(payload, envelope.correlation_id), "search_request")
 
         else:
             logger.debug("Unhandled uplink route: %s", route)
 
-    def _handle_registration_ack(self, payload) -> None:
+    def _handle_registration_ack(self, payload: RegistrationAckPayload) -> None:
         """Handle registration ack — write anchor file with environment_id."""
-        env_id = payload.get("environment_id", "") if isinstance(payload, dict) else getattr(payload, "environment_id", "")
-        if not env_id:
+        if not payload.environment_id:
             return
         if not self._anchor_env_id:
             # First run — create anchor file
-            create_anchor(self.config.directory_scope, env_id, self._current_identity)
-            self._anchor_env_id = env_id
-        logger.info("Registration ack: environment_id=%s", env_id)
+            if self._current_identity:
+                create_anchor(self.config.directory_scope, payload.environment_id, self._current_identity)
+            self._anchor_env_id = payload.environment_id
+        logger.info("Registration ack: environment_id=%s", payload.environment_id)
 
     # ------------------------------------------------------------------
     # Prompt dispatch — spawn adapter if needed, forward to agent
     # ------------------------------------------------------------------
 
-    async def _dispatch_prompt(self, payload) -> None:
+    async def _dispatch_prompt(self, payload: ExecutePromptPayload) -> None:
         """Route incoming prompt to the appropriate agent adapter."""
-        agent_id = payload.agent_id if hasattr(payload, "agent_id") else payload.get("agent_id", "")
-        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
-        prompt_text = payload.prompt if hasattr(payload, "prompt") else payload.get("prompt", "")
-
-        if not agent_id or not prompt_text:
-            logger.warning("Invalid prompt payload: agent=%s prompt=%s", agent_id, prompt_text[:50] if prompt_text else "")
+        if not payload.agent_id or not payload.prompt:
+            logger.warning("Invalid prompt payload: agent=%s prompt=%s",
+                           payload.agent_id, payload.prompt[:50] if payload.prompt else "")
             return
 
-        logger.info("Dispatching prompt to %s (session=%s): %s", agent_id, session_id, prompt_text[:80])
+        logger.info("Dispatching prompt to %s (session=%s): %s",
+                     payload.agent_id, payload.session_id, payload.prompt[:80])
 
         # Get adapter — must be started via SpawnAgent before prompting
-        adapter = self._adapters.get(session_id)
+        adapter = self._adapters.get(payload.session_id)
         if not adapter:
-            logger.warning("No adapter for session %s — agent not started", session_id)
+            logger.warning("No adapter for session %s — agent not started", payload.session_id)
             return
 
         # Synthesize turn_id for this prompt dispatch
-        from uuid import uuid4
         turn_id = str(uuid4())
 
         async def forward_with_session_id(csu: ConsolidatedSessionUpdate) -> None:
             try:
-                csu.session_id = session_id
+                csu.session_id = payload.session_id
                 csu.turn_id = turn_id
                 await self._forward_csu(csu)
             except Exception as e:
-                logger.error("CSU forward failed (session=%s kind=%s): %s", session_id, csu.kind, e, exc_info=True)
+                logger.error("CSU forward failed (session=%s kind=%s): %s",
+                             payload.session_id, csu.kind, e, exc_info=True)
 
         async def permission_with_session_id(prp: PermissionRequestPayload) -> PermissionResponsePayload:
-            prp.session_id = session_id
+            prp.session_id = payload.session_id
             return await self._handle_adapter_permission(prp)
 
         # Signal turn lifecycle
         await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_STARTED))
         try:
             await adapter.prompt(
-                session_id=session_id,
-                content=PromptContent(text=prompt_text),
+                session_id=payload.session_id,
+                content=PromptContent(text=payload.prompt),
                 on_update=forward_with_session_id,
                 on_permission_request=permission_with_session_id,
             )
         except Exception as e:
-            logger.error("Prompt execution failed for %s (session=%s): %s", agent_id, session_id, e, exc_info=True)
+            logger.error("Prompt execution failed for %s (session=%s): %s",
+                         payload.agent_id, payload.session_id, e, exc_info=True)
         finally:
             await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
 
-    async def _handle_spawn_agent(self, payload) -> None:
+    async def _handle_spawn_agent(self, payload: SpawnAgentPayload) -> None:
         """Spawn agent adapter for a session — dedicated command from backend.
 
         When acp_session_id is provided, loads existing session (resume).
         Otherwise creates a fresh session.
         """
-        agent_id = payload.agent_id if hasattr(payload, "agent_id") else payload.get("agent_id", "")
-        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
-        acp_session_id = getattr(payload, "acp_session_id", None) or (payload.get("acp_session_id") if isinstance(payload, dict) else None)
-
-        if not agent_id or not session_id:
+        if not payload.agent_id or not payload.session_id:
+            logger.warning("Invalid spawn payload: agent=%s session=%s",
+                           payload.agent_id, payload.session_id)
             return
 
-        if session_id in self._adapters:
-            logger.info("Session %s already has adapter, skipping", session_id)
+        if payload.session_id in self._adapters:
+            logger.info("Session %s already has adapter, skipping", payload.session_id)
             return
 
         from .adapters.mock_adapter import MockTestingAgent, MOCK_AGENT_ID
-        if agent_id == MOCK_AGENT_ID:
+        adapter: AgentAdapter
+        if payload.agent_id == MOCK_AGENT_ID:
             adapter = MockTestingAgent()
         else:
-            adapter = ACPAgentAdapter(agent_id, self.config.directory_scope)
+            adapter = ACPAgentAdapter(payload.agent_id, self.config.directory_scope)
         try:
             async def forward_system_event(csu: ConsolidatedSessionUpdate) -> None:
                 if adapter.restoring:
                     return
                 try:
-                    csu.session_id = session_id
+                    csu.session_id = payload.session_id
                     await self._forward_csu(csu)
                 except Exception as e:
-                    logger.error("System event forward failed (session=%s kind=%s): %s", session_id, csu.kind, e, exc_info=True)
+                    logger.error("System event forward failed (session=%s kind=%s): %s",
+                                 payload.session_id, csu.kind, e, exc_info=True)
+
+            # Build session config from spawn payload + gateway defaults
+            spawn_config = payload.session_config
+            session_config = AgentSessionConfig(
+                directory_scope=self.config.directory_scope,
+                system_prompt=spawn_config.system_prompt if spawn_config else None,
+                allow_file_read=spawn_config.allow_file_read if spawn_config else True,
+                allow_file_write=spawn_config.allow_file_write if spawn_config else False,
+                allow_terminal=spawn_config.allow_terminal if spawn_config else False,
+                auto_approve_all=spawn_config.auto_approve_all if spawn_config else False,
+                mcp_servers=[
+                    MCPServerConfig(server_id=m.server_id, command=m.command, args=m.args, env=m.env)
+                    for m in spawn_config.mcp_servers
+                ] if spawn_config else [],
+            )
 
             await adapter.connect(
-                config=AgentSessionConfig(directory_scope=self.config.directory_scope),
+                config=session_config,
                 on_system_event=forward_system_event,
             )
             # Resume existing ACP session or create fresh
-            if acp_session_id:
-                await adapter.load_session(acp_session_id)
-                logger.info("Session %s resumed with ACP session %s", session_id, acp_session_id)
+            if payload.acp_session_id:
+                await adapter.load_session(payload.acp_session_id)
+                logger.info("Session %s resumed with ACP session %s",
+                            payload.session_id, payload.acp_session_id)
 
-            self._adapters[session_id] = adapter
-            self._session_agents[session_id] = agent_id
+            self._adapters[payload.session_id] = adapter
+            self._session_agents[payload.session_id] = payload.agent_id
 
             agent_pid = adapter.pid
             await self._emit_lifecycle(
-                session_id=session_id,
+                session_id=payload.session_id,
                 event=AgentLifecycleEvent.STARTED,
-                agent_id=agent_id,
+                agent_id=payload.agent_id,
                 pid=agent_pid,
                 model_id=adapter.current_model,
                 available_models=adapter.available_models,
                 acp_session_id=adapter._acp_session_id or "",
             )
-            self._monitor_tasks[session_id] = asyncio.create_task(
-                self._monitor_agent_process(adapter, session_id, agent_id, agent_pid)
+            self._monitor_tasks[payload.session_id] = asyncio.create_task(
+                self._monitor_agent_process(adapter, payload.session_id, payload.agent_id, agent_pid)
             )
         except Exception as e:
-            logger.error("Failed to spawn agent %s: %s", agent_id, e)
+            logger.error("Failed to spawn agent %s: %s", payload.agent_id, e)
             await self._emit_lifecycle(
-                session_id=session_id,
+                session_id=payload.session_id,
                 event=AgentLifecycleEvent.CRASHED,
-                agent_id=agent_id,
+                agent_id=payload.agent_id,
             )
 
-    async def _handle_stop_agent(self, payload) -> None:
+    async def _handle_stop_agent(self, payload: StopAgentPayload) -> None:
         """Stop agent adapter — dedicated command from backend."""
-        agent_id = payload.agent_id if hasattr(payload, "agent_id") else payload.get("agent_id", "")
-        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
-
-        adapter = self._adapters.get(session_id)
+        adapter = self._adapters.get(payload.session_id)
         if not adapter:
-            logger.warning("Session %s has no adapter, nothing to stop", session_id)
+            logger.warning("Session %s has no adapter, nothing to stop", payload.session_id)
             return
 
         # Cancel process monitor — we handle lifecycle directly (symmetric with start)
-        monitor = self._monitor_tasks.pop(session_id, None)
+        monitor = self._monitor_tasks.pop(payload.session_id, None)
         if monitor and not monitor.done():
             monitor.cancel()
 
         try:
             await adapter.disconnect()
         except Exception as e:
-            logger.warning("Error disconnecting adapter for session %s: %s", session_id, e)
+            logger.warning("Error disconnecting adapter for session %s: %s", payload.session_id, e)
 
-        self._adapters.pop(session_id, None)
-        self._session_agents.pop(session_id, None)
+        self._adapters.pop(payload.session_id, None)
+        self._session_agents.pop(payload.session_id, None)
 
         # Emit EXITED — symmetric with STARTED in _handle_spawn_agent
         await self._emit_lifecycle(
-            session_id=session_id,
+            session_id=payload.session_id,
             event=AgentLifecycleEvent.EXITED,
-            agent_id=agent_id,
+            agent_id=payload.agent_id,
         )
 
-    async def _handle_apply_settings(self, payload) -> None:
+    async def _handle_apply_settings(self, payload: ApplySettingsPayload) -> None:
         """Apply settings from backend — call ACP set_session_model, confirm back."""
-        session_id = payload.session_id if hasattr(payload, "session_id") else payload.get("session_id", "")
-        settings = payload.settings if hasattr(payload, "settings") else payload.get("settings", {})
-
-        if isinstance(settings, dict):
-            settings = AgentSettings(**settings)
-
-        adapter = self._adapters.get(session_id)
+        adapter = self._adapters.get(payload.session_id)
         if not adapter:
-            logger.warning("No adapter for settings change: session=%s", session_id)
+            logger.warning("No adapter for settings change: session=%s", payload.session_id)
             return
 
         # Apply model change via ACP
-        if settings.model:
-            success = await adapter.set_model(settings.model)
-            if success:
+        if payload.settings.model:
+            success = await adapter.set_model(payload.settings.model)
+            if success and self._uplink:
                 # Confirm back to backend — creates the AgentSettingChangeItem
                 confirm = AgentSettingChangePayload(
-                    session_id=session_id,
-                    settings=AgentSettings(model=settings.model),
+                    session_id=payload.session_id,
+                    settings=AgentSettings(model=payload.settings.model),
                 )
                 envelope = GatewayWsEnvelope(route=NODE_AGENT_SETTING_CHANGE, payload=confirm)
                 await self._uplink.send(envelope)
-                logger.info("Settings applied: session=%s model=%s", session_id, settings.model)
+                logger.info("Settings applied: session=%s model=%s",
+                            payload.session_id, payload.settings.model)
 
-    async def _handle_search_request(self, envelope: GatewayWsEnvelope) -> None:
+    async def _handle_search_request(
+        self,
+        payload: SearchRequestPayload,
+        correlation_id: Optional[str] = None,
+    ) -> None:
         """Handle file search request — query FuzzyIndexer, send response back."""
-        from .indexer import FuzzyIndexer
+        if not self._uplink:
+            return
 
-        payload = envelope.payload
-        query = payload.query if hasattr(payload, "query") else payload.get("query", "")
-        limit = payload.limit if hasattr(payload, "limit") else payload.get("limit", 15)
+        if not payload.query:
+            logger.warning("Empty search query")
+            return
 
         if not self._indexer:
             self._indexer = FuzzyIndexer(self.config.directory_scope, self.config.ignored_directories)
             await self._indexer.build_index()
             logger.info("FuzzyIndexer built: %d files", len(self._indexer._files))
 
-        results = await self._indexer.search(query, limit=limit)
+        results = await self._indexer.search(payload.query, limit=payload.limit)
         response = SearchResponsePayload(
-            results=[{"filepath": r.filepath, "score": r.overall_score, "snippets": []} for r in results],
+            results=[
+                SearchResultItem(filepath=r.filepath, score=r.overall_score, snippets=[])
+                for r in results
+            ],
         )
         resp_envelope = GatewayWsEnvelope(
             route="agw.node.search_response",
             payload=response,
-            correlation_id=envelope.correlation_id,
+            correlation_id=correlation_id,
         )
         await self._uplink.send(resp_envelope)
 
     async def _monitor_agent_process(
         self,
-        adapter: ACPAgentAdapter,
+        adapter: AgentAdapter,
         session_id: str,
         agent_id: str,
         pid: int,
@@ -537,7 +590,7 @@ class GatewayNodeService:
         version: str = "",
         model_id: str = "",
         return_code: int = 0,
-        available_models: list = None,
+        available_models: Optional[List[str]] = None,
         acp_session_id: str = "",
     ) -> None:
         """Emit independent lifecycle event to backend."""
@@ -560,6 +613,8 @@ class GatewayNodeService:
 
     async def _declare_session(self, acp_session_id: str, agent_id: str) -> None:
         """Declare an ACP session to backend via SESSION_DECLARED."""
+        if not self._uplink:
+            return
         payload = SessionDeclaredPayload(acp_session_id=acp_session_id, agent_id=agent_id)
         envelope = GatewayWsEnvelope(route=NODE_SESSION_DECLARED, payload=payload)
         await self._uplink.send(envelope)
@@ -584,11 +639,11 @@ class GatewayNodeService:
         return await self.permission_registry.register_request(prp)
 
     # ------------------------------------------------------------------
-    # Heartbeat — 3Hz global node health
+    # Heartbeat — 4Hz global node health
     # ------------------------------------------------------------------
 
     async def _heartbeat_loop(self) -> None:
-        """3Hz heartbeat broadcasting node health to cloud."""
+        """4Hz heartbeat broadcasting node health to cloud."""
         while not self._shutdown_event.is_set():
             await asyncio.sleep(HEARTBEAT_INTERVAL)
 

@@ -119,12 +119,10 @@ class ClaudeAdapter(ACPAgentAdapter):
         mcp_path = launch_config_path(self._agent_id, fp, ".mcp.json")
         mcp_path.write_text(json.dumps({"mcpServers": mcp_entries}, indent=2), encoding="utf-8")
 
+        # NOTE: claude-agent-acp ignores --append-system-prompt-file from argv.
+        # The system prompt is injected per-prompt via ACP _meta in
+        # _build_prompt_meta() below.
         extra_args = ["--settings", str(settings_path), "--mcp-config", str(mcp_path)]
 
-        if config.system_prompt_extension:
-            prompt_path = launch_config_path(self._agent_id, fp, ".prompt.md")
-            prompt_path.write_text(config.system_prompt_extension, encoding="utf-8")
-            extra_args += ["--append-system-prompt-file", str(prompt_path)]
-
-        logger.info("Claude Code config generated: %s (+mcp, +prompt)", settings_path)
+        logger.info("Claude Code config generated: %s (+mcp)", settings_path)
         return LaunchAdjustment(extra_args=extra_args)

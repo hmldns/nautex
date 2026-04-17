@@ -102,6 +102,7 @@ class ACPAgentAdapter(AgentAdapter):
         self._config: Optional[AgentSessionConfig] = None
         self._client: Optional[GatewayACPClient] = None
         self._launch_adjustment: Optional[LaunchAdjustment] = None
+        self._system_prompt_sent: bool = False
 
     @property
     def restoring(self) -> bool:
@@ -164,6 +165,7 @@ class ACPAgentAdapter(AgentAdapter):
         definitive user rejection and stops the turn silently.
         """
         return None
+
 
     @staticmethod
     def _build_acp_mcp_servers(config: AgentSessionConfig) -> list:
@@ -338,8 +340,17 @@ class ACPAgentAdapter(AgentAdapter):
         self._client._on_permission_request = self._wrap_permission_callback(on_permission_request)
         self._client._acp_session_id = acp_sid
 
-        # Extract prompt text
+        # Extract prompt text. On the first prompt of a session, prepend the
+        # session policy (system_prompt_extension) inline as plain prose so the
+        # agent treats it as natural setup rather than a tagged directive
+        # block (which smaller agents tend to ignore or over-interpret).
         prompt_text = content.text
+        if not self._system_prompt_sent and self._config and self._config.system_prompt_extension:
+            prompt_text = (
+                f"{self._config.system_prompt_extension}\n\n"
+                f"Initial request: {prompt_text}"
+            )
+            self._system_prompt_sent = True
 
         logger.info("Prompting agent %s (session=%s): %s", self._agent_id, acp_sid, prompt_text[:80])
 

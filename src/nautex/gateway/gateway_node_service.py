@@ -402,11 +402,12 @@ class GatewayNodeService:
             return
 
         from .adapters.mock_adapter import MockTestingAgent, MOCK_AGENT_ID
+        from .adapters.acp_adapter import create_adapter
         adapter: AgentAdapter
         if payload.agent_id == MOCK_AGENT_ID:
             adapter = MockTestingAgent()
         else:
-            adapter = ACPAgentAdapter(payload.agent_id, self.config.directory_scope)
+            adapter = create_adapter(payload.agent_id, self.config.directory_scope)
         try:
             async def forward_system_event(csu: ConsolidatedSessionUpdate) -> None:
                 if adapter.restoring:
@@ -422,11 +423,8 @@ class GatewayNodeService:
             spawn_config = payload.session_config
             session_config = AgentSessionConfig(
                 directory_scope=self.config.directory_scope,
-                system_prompt=spawn_config.system_prompt if spawn_config else None,
-                allow_file_read=spawn_config.allow_file_read if spawn_config else True,
-                allow_file_write=spawn_config.allow_file_write if spawn_config else False,
-                allow_terminal=spawn_config.allow_terminal if spawn_config else False,
-                auto_approve_all=spawn_config.auto_approve_all if spawn_config else False,
+                system_prompt_extension=spawn_config.system_prompt_extension if spawn_config else None,
+                permissions=dict(spawn_config.permissions) if spawn_config else {},
                 mcp_servers=[
                     MCPServerConfig(server_id=m.server_id, command=m.command, args=m.args, env=m.env)
                     for m in spawn_config.mcp_servers

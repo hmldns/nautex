@@ -49,6 +49,24 @@ class PermissionAction(str, Enum):
     DENY = "deny"
 
 
+class PermissionMode(str, Enum):
+    """Per-scope permission policy in SessionConfigPayload.
+
+    Applied by the adapter before the request reaches the user:
+    - DEFAULT → no override; the adapter forwards to UI (same as ASK behaviour).
+                When every scope is DEFAULT and there's no other config, we
+                skip native config generation entirely — the agent runs with
+                its own native defaults.
+    - DENY    → auto-denied, never surfaced.
+    - ASK     → forwarded to UI for user decision.
+    - ALLOW   → auto-approved, never surfaced.
+    """
+    DEFAULT = "default"
+    DENY = "deny"
+    ASK = "ask"
+    ALLOW = "allow"
+
+
 class AgentLifecycleEvent(str, Enum):
     """Agent lifecycle event types."""
     STARTED = "started"

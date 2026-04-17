@@ -8,7 +8,7 @@ All fields are explicitly typed — no Dict[str, Any] bags.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,7 @@ from .enums import (
     AgentLifecycleEvent,
     NodeStatus,
     PermissionAction,
+    PermissionMode,
     SessionUpdateKind,
     ToolCallStatus,
     ToolKind,
@@ -64,8 +65,13 @@ class PermissionRequestPayload(BaseModel):
     acp_session_id: str = ""
     tool_name: str
     tool_kind: Optional[ToolKind] = None
+    tool_call_id: Optional[str] = None      # ACP tool call this permission gates
     path: Optional[str] = None
     command: Optional[str] = None
+    # Set by the adapter when the session policy already decided the outcome.
+    # Backend records the permission item in its terminal state (no UI prompt)
+    # and immediately responds with this action.
+    policy_action: Optional[PermissionAction] = None
 
 
 class ConsolidatedSessionUpdate(BaseModel):
@@ -185,13 +191,13 @@ class SessionConfigPayload(BaseModel):
 
     Controls what MCP servers are injected, what instructions the agent receives,
     and what capabilities are allowed. Gateway merges these into AgentSessionConfig.
+
+    permissions is keyed by ACP ToolKind. Scopes not listed default to DENY.
+    The adapter enforces the mode before any request reaches the user.
     """
     mcp_servers: List[MCPServerEntry] = Field(default_factory=list)
-    system_prompt: Optional[str] = None
-    allow_file_read: bool = True
-    allow_file_write: bool = False
-    allow_terminal: bool = False
-    auto_approve_all: bool = False
+    system_prompt_extension: Optional[str] = None
+    permissions: Dict[ToolKind, PermissionMode] = Field(default_factory=dict)
 
 
 class SpawnAgentPayload(BaseModel):

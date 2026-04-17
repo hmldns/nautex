@@ -8,6 +8,7 @@ from .enums import (
     AgentLifecycleEvent,
     NodeStatus,
     PermissionAction,
+    PermissionMode,
     SessionUpdateKind,
     ToolCallStatus,
     ToolKind,
@@ -66,6 +67,7 @@ __all__ = [
     "ToolCallStatus",
     "ToolKind",
     "PermissionAction",
+    "PermissionMode",
     "AgentLifecycleEvent",
     "NodeStatus",
     # Envelope

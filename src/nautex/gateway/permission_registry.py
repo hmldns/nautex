@@ -61,7 +61,12 @@ class PermissionRegistry:
         """Register a permission request and block until resolved.
 
         The caller (adapter) awaits this — execution is suspended until
-        the future is resolved by one of the three paths.
+        the future is resolved by one of the four paths:
+        1. payload.policy_action set → resolve immediately with that action,
+           still notify the cloud for history persistence.
+        2. auto_approve → resolve immediately with approve.
+        3. headless_mode → delegate to cloud, wait for WS response.
+        4. interactive → notify local TUI, wait for user.
         """
         future: asyncio.Future[PermissionResponsePayload] = asyncio.get_event_loop().create_future()
         self._futures[payload.permission_id] = future
@@ -69,7 +74,12 @@ class PermissionRegistry:
 
         logger.debug("Permission registered: %s (%s)", payload.permission_id, payload.tool_name)
 
-        if self._auto_approve:
+        if payload.policy_action is not None:
+            # Record in cloud history first (item created in terminal state)
+            if self._headless_mode and self._on_delegate_to_cloud:
+                self._on_delegate_to_cloud(payload)
+            self.resolve_request(payload.permission_id, payload.policy_action.value)
+        elif self._auto_approve:
             self.resolve_request(payload.permission_id, "approve")
         elif self._headless_mode:
             if self._on_delegate_to_cloud:

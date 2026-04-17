@@ -29,8 +29,10 @@ from ..models import (
     PromptResponse,
     SupportedAgentRegistration,
 )
+from ..protocol.enums import PermissionAction, PermissionMode
 from .base import AgentAdapter, AgentConnectionState
 from .acp_client import GatewayACPClient
+from .launch_config import LaunchAdjustment, apply_implicit_permissions, resolve_mode
 from .stream_consolidator import StreamConsolidator
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,24 @@ class AdapterNoSessionError(Exception):
 
     def __init__(self, agent_id: str, operation: str):
         super().__init__(f"Agent '{agent_id}' has no ACP session — call connect() or create_session() before {operation}()")
+
+
+def create_adapter(agent_id: str, directory_scope: str) -> "ACPAgentAdapter":
+    """Factory: pick the per-agent subclass for native config generation.
+
+    Falls back to base ACPAgentAdapter for agents without a specialization
+    (MCP injection via ACP new_session still works as a default path).
+    """
+    if agent_id == "opencode":
+        from .opencode.runtime import OpenCodeAdapter
+        return OpenCodeAdapter(agent_id, directory_scope)
+    if agent_id == "claude_code":
+        from .claude.runtime import ClaudeAdapter
+        return ClaudeAdapter(agent_id, directory_scope)
+    if agent_id == "codex":
+        from .codex.runtime import CodexAdapter
+        return CodexAdapter(agent_id, directory_scope)
+    return ACPAgentAdapter(agent_id, directory_scope)
 
 
 class ACPAgentAdapter(AgentAdapter):
@@ -81,6 +101,7 @@ class ACPAgentAdapter(AgentAdapter):
         self._is_restoring = False
         self._config: Optional[AgentSessionConfig] = None
         self._client: Optional[GatewayACPClient] = None
+        self._launch_adjustment: Optional[LaunchAdjustment] = None
 
     @property
     def restoring(self) -> bool:
@@ -124,6 +145,26 @@ class ACPAgentAdapter(AgentAdapter):
             raise AdapterNoSessionError(self._agent_id, operation)
         return conn, self._acp_session_id
 
+    def _prepare_launch(self, config: AgentSessionConfig) -> LaunchAdjustment:
+        """Generate agent-native config files and return launch adjustments.
+
+        Base implementation is a no-op — subclasses override to emit
+        opencode.json / settings.json / config.toml etc. and point the
+        agent binary at them via env vars or CLI flags.
+        """
+        return LaunchAdjustment()
+
+    def _permission_response_mapper(self):
+        """Hook to customize PermissionAction → ACP response translation.
+
+        Return a callable `(PermissionAction, options) -> RequestPermissionResponse`
+        or None to use the spec-correct default (pick reject_once on deny,
+        fall back to DeniedOutcome/cancelled). Override in per-agent adapters
+        when the agent has quirks — e.g. Claude respects reject_once as a
+        definitive user rejection and stops the turn silently.
+        """
+        return None
+
     @staticmethod
     def _build_acp_mcp_servers(config: AgentSessionConfig) -> list:
         """Transform MCPServerConfig list → ACP SDK McpServerStdio list."""
@@ -146,28 +187,41 @@ class ACPAgentAdapter(AgentAdapter):
         on_system_event: Callable[[ConsolidatedSessionUpdate], Awaitable[None]],
     ) -> None:
         """Spawn agent, initialize ACP, authenticate (skip on failure), create session."""
+        # Apply pragmatic permission rule, then generate native config
+        config = apply_implicit_permissions(config)
         self._config = config
         self._on_system_event = on_system_event
         self._state = AgentConnectionState.INITIALIZING
 
+        adjustment = self._prepare_launch(config)
+        self._launch_adjustment = adjustment
+
         cmd = self._registration.executable
-        args = self._registration.launch_args
+        args = list(self._registration.launch_args) + list(adjustment.extra_args)
+        spawn_env = None
+        if adjustment.extra_env:
+            import os
+            spawn_env = {**os.environ, **adjustment.extra_env}
 
         logger.info("Connecting adapter: %s (cmd=%s %s)", self._agent_id, cmd, " ".join(args))
 
-        # Create client with mutable callback refs — rewired per-prompt
+        # Create client with mutable callback refs — rewired per-prompt.
+        # response_mapper is a per-adapter hook — subclasses override
+        # `_permission_response_mapper()` to customize how we translate
+        # PermissionAction → ACP RequestPermissionResponse for their agent.
         self._client = GatewayACPClient(
             acp_session_id="",
             consolidator=StreamConsolidator(""),
             on_update=on_system_event,
             on_permission_request=self._noop_permission,
             cwd=self._directory_scope,
+            response_mapper=self._permission_response_mapper(),
         )
         client = self._client
 
         # Spawn using ACP SDK — large limit for agents that return file contents
         self._context_manager = spawn_agent_process(
-            client, cmd, *args, cwd=self._directory_scope,
+            client, cmd, *args, cwd=self._directory_scope, env=spawn_env,
             transport_kwargs={"limit": 10 * 1024 * 1024},  # 10MB stdio buffer
         )
         self._conn, self._proc = await self._context_manager.__aenter__()
@@ -281,7 +335,7 @@ class ACPAgentAdapter(AgentAdapter):
         # Rewire the client's callbacks for this prompt
         self._client._consolidator = consolidator
         self._client._on_update = on_update
-        self._client._on_permission_request = on_permission_request
+        self._client._on_permission_request = self._wrap_permission_callback(on_permission_request)
         self._client._acp_session_id = acp_sid
 
         # Extract prompt text
@@ -330,6 +384,7 @@ class ACPAgentAdapter(AgentAdapter):
                 await self._context_manager.__aexit__(None, None, None)
             except Exception as e:
                 logger.warning("Disconnect error for %s: %s", self._agent_id, e)
+        self._launch_adjustment = None
         self._state = AgentConnectionState.STOPPED
         self._conn = None
         self._proc = None
@@ -344,3 +399,37 @@ class ACPAgentAdapter(AgentAdapter):
             acp_session_id=prp.acp_session_id,
             action=PermissionAction.APPROVE,
         )
+
+    def _wrap_permission_callback(
+        self,
+        outer: Callable[[PermissionRequestPayload], Awaitable[PermissionResponsePayload]],
+    ) -> Callable[[PermissionRequestPayload], Awaitable[PermissionResponsePayload]]:
+        """Apply the session's permission map before the outer handler surfaces to UI.
+
+        For DENY/ALLOW, the adapter stamps prp.policy_action with the forced
+        outcome and still calls outer — so the backend records the permission
+        item in its terminal state without waiting for user input. ASK forwards
+        unchanged and the outer handler surfaces an interactive prompt.
+        Unknown tool_kind → fail-closed DENY.
+        """
+        permissions = self._config.permissions if self._config else {}
+        agent_id = self._agent_id
+
+        async def _gated(prp: PermissionRequestPayload) -> PermissionResponsePayload:
+            kind = prp.tool_kind
+            if kind is None:
+                # Unknown kind: don't decide for the user, let them see it.
+                return await outer(prp)
+            mode = resolve_mode(permissions, kind)
+            if mode == PermissionMode.DENY:
+                logger.info("[%s] Policy deny %s (kind=%s)", agent_id, prp.tool_name, kind.value)
+                prp.policy_action = PermissionAction.DENY
+                return await outer(prp)
+            if mode == PermissionMode.ALLOW:
+                logger.info("[%s] Policy allow %s (kind=%s)", agent_id, prp.tool_name, kind.value)
+                prp.policy_action = PermissionAction.APPROVE
+                return await outer(prp)
+            # ASK and DEFAULT both surface to the user; only DENY/ALLOW pre-decide.
+            return await outer(prp)
+
+        return _gated

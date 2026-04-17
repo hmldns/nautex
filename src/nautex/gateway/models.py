@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, SecretStr
 
+from .protocol.enums import PermissionMode, ToolKind
+
 
 # ---------------------------------------------------------------------------
 # Layer 1: Agent Registration (static, describes the binary itself)
@@ -123,37 +125,16 @@ class MCPServerConfig(BaseModel):
 class AgentSessionConfig(BaseModel):
     """Per-session configuration for launching and constraining an agent.
 
-    Generic flags that the adapter interprets based on what it knows
-    about the specific binary. The caller doesn't need to know
-    agent-specific details — the adapter translates.
-
-    Examples:
-    - allow_file_read=True, allow_file_write=False → agent can read but not modify
-    - allow_terminal=False → adapter denies all terminal permission requests
-    - model="fast" → adapter resolves to agent-specific fast model
+    permissions is keyed by ACP ToolKind. Scopes not listed default to DENY.
+    The adapter enforces mode before any request reaches the user.
     """
-    # What the agent should do
-    system_prompt: Optional[str] = None
+    system_prompt_extension: Optional[str] = None
     model: Optional[str] = None
     directory_scope: str
 
-    # Granular capability flags — adapter enforces via permission gating
-    allow_file_read: bool = True
-    allow_file_write: bool = False
-    allow_terminal: bool = False
-    allow_mcp_tools: bool = True
-    auto_approve_all: bool = False
+    permissions: Dict[ToolKind, PermissionMode] = Field(default_factory=dict)
 
-    # Tool filtering — not yet wired; no ACP-level counterpart exists.
-    # Enforcement point: permission request callback in adapter, matching
-    # PermissionRequestPayload.tool_name against these lists.
-    # tools_allowed: List[str] = Field(default_factory=list)
-    # tools_denied: List[str] = Field(default_factory=list)
-
-    # MCP servers to inject
     mcp_servers: List[MCPServerConfig] = Field(default_factory=list)
-
-    # Credentials to inject into subprocess environment
     credentials: Dict[str, SecretStr] = Field(default_factory=dict)
 
 

@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive
+.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive install-acp-adapters
 
 # Default target
 help:
@@ -144,6 +144,34 @@ run-gateway-parent:
 
 run-mcp-inspector:
 	DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector
+
+# ---------------------------------------------------------------------------
+# ACP adapter bridges — npm packages that wrap native agent CLIs as ACP peers
+# ---------------------------------------------------------------------------
+
+# ACP bridges for agents that don't speak ACP natively. Re-install to pick up
+# upstream bug fixes (e.g. permission option changes). The Claude bridge was
+# renamed zed-industries → agentclientprotocol; codex stayed on zed-industries.
+ACP_ADAPTER_PACKAGES = \
+	@agentclientprotocol/claude-agent-acp@latest \
+	@zed-industries/codex-acp@latest
+
+install-acp-adapters:
+	@echo "Installing/updating ACP adapter bridges..."
+	npm install -g $(ACP_ADAPTER_PACKAGES)
+	@echo ""
+	@echo "Installed ACP adapter versions:"
+	@npm list -g --depth=0 2>/dev/null | grep -E "claude-agent-acp|codex-acp" || true
+	@echo ""
+	@echo "Native agent binaries discovered on PATH:"
+	@for bin in gemini opencode cursor-agent droid goose kiro-cli; do \
+		path=$$(command -v $$bin 2>/dev/null); \
+		if [ -n "$$path" ]; then \
+			printf "  ✓ %-14s %s\n" "$$bin" "$$path"; \
+		else \
+			printf "  ✗ %-14s (not found — install separately)\n" "$$bin"; \
+		fi; \
+	done
 
 dev-claude-mcp-setup:
 	cd src && claude mcp remove nautex

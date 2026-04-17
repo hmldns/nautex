@@ -17,7 +17,7 @@ import uuid
 from typing import Awaitable, Callable, List, Optional
 
 import acp
-from acp.schema import AllowedOutcome
+from acp.schema import AllowedOutcome, DeniedOutcome
 
 from ..protocol import (
     ConsolidatedSessionUpdate,
@@ -29,6 +29,65 @@ from ..protocol import (
 from .stream_consolidator import StreamConsolidator
 
 logger = logging.getLogger(__name__)
+
+
+# Words in an option's option_id that hint it's a "continue-style" reject —
+# the turn keeps iterating after denial (e.g. Codex exec offers "denied" =
+# "No, continue without running it" vs "abort" = turn-cancel). Prefer these
+# when multiple reject_once options exist.
+_CONTINUE_REJECT_IDS = ("denied", "reject", "deny", "skip", "no_once")
+# Outcome literal used for every non-cancel decision in ACP; option_id alone
+# distinguishes approve vs deny.
+_SELECTED = "selected"
+
+
+def _pick_reject_option(options: list):
+    """Choose the best reject option when we want to deny but continue the turn.
+
+    Prefers option_ids suggesting "continue after no" (denied/reject/skip) over
+    "abort" style rejects which agents tend to interpret as cancel-the-turn.
+    Returns the PermissionOption or None if nothing reject-like is offered.
+    """
+    rejects = [o for o in options if o.kind and "reject" in str(o.kind)]
+    for o in rejects:
+        oid = str(getattr(o, "option_id", "")).lower()
+        if any(w in oid for w in _CONTINUE_REJECT_IDS):
+            return o
+    return rejects[0] if rejects else None
+
+
+def _pick_allow_option(options: list):
+    """Choose the best allow option (allow_once preferred over allow_always)."""
+    for kind in ("allow_once", "allow_always"):
+        for o in options:
+            if o.kind and kind in str(o.kind):
+                return o
+    return options[0] if options else None
+
+
+def _map_response_to_acp(action: PermissionAction, options: list) -> "acp.RequestPermissionResponse":
+    """Map our PermissionAction to an ACP RequestPermissionResponse.
+
+    Rules:
+    - APPROVE → pick an allow option; fall back to first option.
+    - DENY    → pick a continue-style reject option; fall back to any reject;
+                last-resort DeniedOutcome(cancelled), which cancels the turn.
+    """
+    if action == PermissionAction.APPROVE:
+        opt = _pick_allow_option(options)
+        if opt is not None:
+            return acp.RequestPermissionResponse(
+                outcome=AllowedOutcome(option_id=opt.option_id, outcome=_SELECTED)
+            )
+        # No options at all — nothing sensible to return; fall through to cancel.
+    else:
+        opt = _pick_reject_option(options)
+        if opt is not None:
+            return acp.RequestPermissionResponse(
+                outcome=AllowedOutcome(option_id=opt.option_id, outcome=_SELECTED)
+            )
+    # Last resort: turn-cancel. Agents may interpret this as aborting the prompt.
+    return acp.RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
 
 
 class GatewayACPClient(acp.Client):
@@ -47,6 +106,7 @@ class GatewayACPClient(acp.Client):
             [PermissionRequestPayload], Awaitable[PermissionResponsePayload]
         ],
         cwd: str = ".",
+        response_mapper=None,
     ):
         self._acp_session_id = acp_session_id
         self._consolidator = consolidator
@@ -54,6 +114,10 @@ class GatewayACPClient(acp.Client):
         self._on_permission_request = on_permission_request
         self._cwd = os.path.abspath(cwd)
         self._terminals: dict = {}
+        # Per-adapter override for mapping our PermissionAction → ACP response.
+        # Default is the spec-correct mapper (pick reject_once option on deny,
+        # fall back to DeniedOutcome which cancels the turn).
+        self._response_mapper = response_mapper or _map_response_to_acp
 
     # --- Filesystem (local execution) ---
 
@@ -125,6 +189,7 @@ class GatewayACPClient(acp.Client):
     async def request_permission(self, options, session_id, tool_call, **kw):
         title = getattr(tool_call, "title", "unknown") if tool_call else "unknown"
         kind_str = getattr(tool_call, "kind", "") if tool_call else ""
+        tool_call_id = getattr(tool_call, "tool_call_id", None) if tool_call else None
 
         # Map ACP kind to protocol ToolKind
         tool_kind = None
@@ -150,33 +215,45 @@ class GatewayACPClient(acp.Client):
             acp_session_id=self._acp_session_id,
             tool_name=title,
             tool_kind=tool_kind,
+            tool_call_id=tool_call_id,
             path=path,
             command=command,
         )
 
-        logger.info("Permission request: %s (kind=%s)", title, kind_str)
+        opts_debug = [(getattr(o, "option_id", "?"), str(getattr(o, "kind", "?"))) for o in (options or [])]
+        logger.info("Permission request: %s (kind=%s) options=%s", title, kind_str, opts_debug)
 
         # Delegate to callback (cloud UI or auto-approve)
         response = await self._on_permission_request(prp)
 
-        # Map protocol response back to ACP format
-        if response.action == PermissionAction.APPROVE:
-            # Find the right option_id (agent-specific)
-            for opt in (options or []):
-                if opt.kind and "allow_once" in str(opt.kind):
-                    return acp.RequestPermissionResponse(
-                        outcome=AllowedOutcome(option_id=opt.option_id, outcome="selected")
-                    )
-            # Fallback
-            oid = options[0].option_id if options else "proceed_once"
-            return acp.RequestPermissionResponse(
-                outcome=AllowedOutcome(option_id=oid, outcome="selected")
-            )
-        else:
-            # Denied — use denied outcome
-            return acp.RequestPermissionResponse(
-                outcome=AllowedOutcome(option_id="denied", outcome="denied")
-            )
+        # If the session policy auto-decided, surface the outcome on the tool
+        # call widget so it doesn't sit visibly "Done" while actually denied.
+        if prp.policy_action is not None and tool_call_id:
+            await self._emit_policy_tool_update(tool_call_id, prp, response)
+
+        opt_list = list(options or [])
+        return self._response_mapper(response.action, opt_list)
+
+    async def _emit_policy_tool_update(
+        self,
+        tool_call_id: str,
+        prp: "PermissionRequestPayload",
+        response: "PermissionResponsePayload",
+    ) -> None:
+        """Emit a synthetic tool_call_update so the UI reflects the policy outcome."""
+        from ..protocol import ConsolidatedSessionUpdate, SessionUpdateKind, ToolCallStatus
+        denied = response.action == PermissionAction.DENY
+        csu = ConsolidatedSessionUpdate(
+            kind=SessionUpdateKind.TOOL_CALL_UPDATE,
+            acp_session_id=self._acp_session_id,
+            tool_call_id=tool_call_id,
+            tool_status=ToolCallStatus.ERROR if denied else ToolCallStatus.COMPLETED,
+            text="Denied by policy" if denied else "Allowed by policy",
+        )
+        try:
+            await self._on_update(csu)
+        except Exception as e:
+            logger.warning("Policy tool_call_update emit failed: %s", e)
 
     # --- Session updates (feed to StreamConsolidator → CSU callbacks) ---
 

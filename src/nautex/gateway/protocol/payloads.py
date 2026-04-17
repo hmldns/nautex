@@ -97,6 +97,9 @@ class ConsolidatedSessionUpdate(BaseModel):
     usage_used: Optional[int] = None
     turn_id: Optional[str] = None              # synthesized by gateway per prompt dispatch
     acp_message_id: Optional[str] = None       # preserved from ACP ContentChunk.message_id
+    # Error fields — used with kind=AGENT_ERROR
+    error_code: Optional[int] = None           # JSON-RPC error code (e.g. -32603)
+    error_detail: Optional[str] = None         # JSON-serialized error.data for expand-on-click
 
 
 class TelemetryPayload(BaseModel):

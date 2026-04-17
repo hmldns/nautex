@@ -16,6 +16,7 @@ class SessionUpdateKind(str, Enum):
     """
     AGENT_MESSAGE = "agent_message_chunk"
     AGENT_THOUGHT = "agent_thought_chunk"
+    AGENT_ERROR = "agent_error"  # JSON-RPC error surfaced to the session feed
     TOOL_CALL = "tool_call"
     TOOL_CALL_UPDATE = "tool_call_update"
     AVAILABLE_COMMANDS = "available_commands_update"

@@ -29,7 +29,7 @@ from ..models import (
     PromptResponse,
     SupportedAgentRegistration,
 )
-from ..protocol.enums import PermissionAction, PermissionMode
+from ..protocol.enums import PermissionAction, PermissionMode, SessionUpdateKind
 from .base import AgentAdapter, AgentConnectionState
 from .acp_client import GatewayACPClient
 from .launch_config import LaunchAdjustment, apply_implicit_permissions, resolve_mode
@@ -360,6 +360,33 @@ class ACPAgentAdapter(AgentAdapter):
                 prompt_id=acp_sid,
                 stop_reason=str(getattr(result, "stop_reason", "end_turn")),
             )
+        except acp.exceptions.RequestError as e:
+            # JSON-RPC error from the agent — structured (code, message, data).
+            # The agent's actionable text (rate-limit, upgrade URL, retry-at)
+            # typically lives in `data`; `str(e)` alone is generic.
+            code = getattr(e, "code", -32603)
+            data = getattr(e, "data", None)
+            summary = self._format_error_data(data) or str(e)
+            import json as _json
+            try:
+                detail_json = _json.dumps(data, indent=2) if data is not None else None
+            except Exception:
+                detail_json = repr(data)
+            logger.error("Prompt failed for %s (code=%s data=%r): %s", self._agent_id, code, data, e)
+            try:
+                await on_update(ConsolidatedSessionUpdate(
+                    kind=SessionUpdateKind.AGENT_ERROR,
+                    acp_session_id=acp_sid,
+                    text=summary,
+                    error_code=code,
+                    error_detail=detail_json,
+                ))
+            except Exception as emit_err:
+                logger.warning("Failed to emit AGENT_ERROR CSU: %s", emit_err)
+            # Request-level error — the process is still alive and the session
+            # remains usable. Don't mark the adapter as CRASHED; the user can
+            # retry the prompt once the underlying condition is resolved.
+            return PromptResponse(prompt_id=acp_sid, stop_reason="refusal")
         except Exception as e:
             self._state = AgentConnectionState.CRASHED
             logger.error("Prompt failed for %s: %s", self._agent_id, e)
@@ -389,6 +416,31 @@ class ACPAgentAdapter(AgentAdapter):
         self._conn = None
         self._proc = None
         logger.info("Adapter disconnected: %s", self._agent_id)
+
+    @staticmethod
+    def _format_error_data(data) -> str:
+        """Render the JSON-RPC error.data payload as user-friendly text.
+
+        Bridges often stash the native CLI's error message in `data` — e.g.
+        Codex puts rate-limit text ("You've hit your usage limit...") here.
+        We accept common shapes: str, dict with message-ish keys, list, or fallback
+        to repr. Whatever we return goes straight into an agent_message chunk.
+        """
+        if data is None:
+            return ""
+        if isinstance(data, str):
+            return data
+        if isinstance(data, dict):
+            for key in ("message", "detail", "description", "error", "text"):
+                val = data.get(key)
+                if isinstance(val, str) and val:
+                    return val
+            import json as _json
+            try:
+                return _json.dumps(data, indent=2)
+            except Exception:
+                return repr(data)
+        return repr(data)
 
     @staticmethod
     async def _noop_permission(prp: PermissionRequestPayload) -> PermissionResponsePayload:

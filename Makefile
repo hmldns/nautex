@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive install-acp-adapters
+.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive install-acp-adapters session-config-probe session-config-probe-list
 
 # Default target
 help:
@@ -76,6 +76,16 @@ install-dev:
 		echo "Warning: Not in a virtual environment. Installing with --user flag..."; \
 		pip install --user -e .[dev]; \
 	fi
+
+# ---------------------------------------------------------------------------
+# Dev-mode flag — `NAUTEX_DEV_MODE=1` exposes dev-only providers
+# (mock_testing_agent). Central resolver is
+# `nautex.gateway.config.is_dev_mode_active`. Dev-facing targets below
+# prefix the var; production entry points do not.
+# ---------------------------------------------------------------------------
+
+NAUTEX_DEV_MODE := 1
+export NAUTEX_DEV_MODE
 
 install:
 	@echo "Installing package..."
@@ -155,6 +165,23 @@ run-mcp-inspector:
 ACP_ADAPTER_PACKAGES = \
 	@agentclientprotocol/claude-agent-acp@latest \
 	@zed-industries/codex-acp@latest
+
+# ---------------------------------------------------------------------------
+# Session-config probe — run permission/prompt scenarios against real agent
+# adapters (claude_code, opencode, codex by default), driving each with a
+# specific `AgentSessionConfig`. Artifacts land under
+# ~/.nautex/session_config_probe/<timestamp>/ with a top-level index.json
+# for LLM review.
+# ---------------------------------------------------------------------------
+
+# Override: `make session-config-probe ARGS="--agent claude_code --scenario deny_write"`
+ARGS ?= --all
+
+session-config-probe:
+	PYTHONPATH=src .venv/bin/python scripts/session_config_probe.py $(ARGS)
+
+session-config-probe-list:
+	PYTHONPATH=src .venv/bin/python scripts/session_config_probe.py --list
 
 install-acp-adapters:
 	@echo "Installing/updating ACP adapter bridges..."

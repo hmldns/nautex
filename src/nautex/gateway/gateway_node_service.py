@@ -34,6 +34,7 @@ from .protocol import (
     AgentSettingChangePayload,
     AgentSettings,
     ApplySettingsPayload,
+    CancelSessionPayload,
     EnvironmentDescriptor,
     ExecutePromptPayload,
     GatewayWsEnvelope,
@@ -54,6 +55,7 @@ from .protocol import (
     BACKEND_APPLY_SETTINGS,
     BACKEND_SPAWN_AGENT,
     BACKEND_STOP_AGENT,
+    FRONTEND_CANCEL_SESSION,
     FRONTEND_EXECUTE_PROMPT,
     FRONTEND_PERMISSION_RESPONSE,
     FRONTEND_SEARCH_REQUEST,
@@ -321,6 +323,12 @@ class GatewayNodeService:
                 return
             self._safe_task(self._handle_search_request(payload, envelope.correlation_id), "search_request")
 
+        elif route == FRONTEND_CANCEL_SESSION:
+            if not isinstance(payload, CancelSessionPayload):
+                logger.warning("Expected CancelSessionPayload, got %s", type(payload).__name__)
+                return
+            self._safe_task(self._handle_cancel_session(payload), "cancel_session")
+
         else:
             logger.debug("Unhandled uplink route: %s", route)
 
@@ -403,8 +411,16 @@ class GatewayNodeService:
 
         from .adapters.mock_adapter import MockTestingAgent, MOCK_AGENT_ID
         from .adapters.acp_adapter import create_adapter
+        from .config import DEV_MODE_ENV_VAR, is_dev_mode_active
         adapter: AgentAdapter
         if payload.agent_id == MOCK_AGENT_ID:
+            if not is_dev_mode_active():
+                logger.warning(
+                    "Refusing to spawn %s: set %s=1 to enable dev-only providers",
+                    MOCK_AGENT_ID,
+                    DEV_MODE_ENV_VAR,
+                )
+                return
             adapter = MockTestingAgent()
         else:
             adapter = create_adapter(payload.agent_id, self.config.directory_scope)
@@ -491,6 +507,30 @@ class GatewayNodeService:
             event=AgentLifecycleEvent.EXITED,
             agent_id=payload.agent_id,
         )
+
+    async def _handle_cancel_session(self, payload: CancelSessionPayload) -> None:
+        """Forward a frontend cancel to the agent via ACP `session/cancel`.
+
+        The backend sends FRONTEND_CANCEL_SESSION with the ACP session id;
+        we look up the adapter by session id and invoke its `cancel` hook
+        (which sends the native ACP notification). Per TRD-86, no
+        SIGTERM/SIGKILL — the agent is expected to unwind and the in-flight
+        `session/prompt` call resolves with stop_reason="cancelled",
+        emerging as a TURN_COMPLETE consolidated update.
+        """
+        adapter = self._adapters.get(payload.session_id)
+        if not adapter:
+            logger.warning(
+                "cancel_session: no adapter for session %s", payload.session_id,
+            )
+            return
+        try:
+            await adapter.cancel(payload.session_id)
+        except Exception as e:
+            logger.error(
+                "cancel_session: adapter.cancel failed for %s: %s",
+                payload.session_id, e, exc_info=True,
+            )
 
     async def _handle_apply_settings(self, payload: ApplySettingsPayload) -> None:
         """Apply settings from backend — call ACP set_session_model, confirm back."""

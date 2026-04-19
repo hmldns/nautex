@@ -20,9 +20,22 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 
 import acp
 from acp.schema import AllowedOutcome
+
+# Our `_claude_response_mapper` deliberately returns an AllowedOutcome with
+# outcome="denied" (not the Literal["selected"] pydantic expects) — Claude is
+# lenient about this and it keeps the turn alive, which is the whole point of
+# the soft-deny. Pydantic logs three noisy warnings every time we do it; they
+# aren't actionable, so silence exactly those three.
+warnings.filterwarnings(
+    "ignore",
+    message=r"^Pydantic serializer warnings:",
+    category=UserWarning,
+    module=r"pydantic\.main",
+)
 
 from ...models import AgentSessionConfig
 from ...protocol import PermissionAction

@@ -69,14 +69,44 @@ class AgentBinaryNotFoundError(Exception):
     pass
 
 
+# ---------------------------------------------------------------------------
+# Dev-mode gating — hides dev-only providers (mock_testing_agent) unless
+# the `NAUTEX_DEV_MODE` env var is truthy. Makefile dev targets prefix
+# the var; production installs leave it unset.
+# ---------------------------------------------------------------------------
+
+DEV_MODE_ENV_VAR = "NAUTEX_DEV_MODE"
+DEV_ONLY_AGENTS = frozenset({"mock_testing_agent"})
+
+
+def is_dev_mode_active() -> bool:
+    """True when `$NAUTEX_DEV_MODE` is set to a truthy value (1/true/yes/on)."""
+    raw = os.environ.get(DEV_MODE_ENV_VAR, "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def available_supported_agents() -> Dict[str, SupportedAgentRegistration]:
+    """Registry view honoring the dev-mode gate.
+
+    Every caller that enumerates or looks up agents should go through
+    this accessor — the raw `SUPPORTED_AGENTS` dict must not leak
+    dev-only agents into production builds.
+    """
+    if is_dev_mode_active():
+        return dict(SUPPORTED_AGENTS)
+    return {k: v for k, v in SUPPORTED_AGENTS.items() if k not in DEV_ONLY_AGENTS}
+
+
 def get_registration(agent_id: str) -> SupportedAgentRegistration:
     """Look up agent registration from the registry.
 
-    Raises AgentNotFoundError if not registered.
+    Raises AgentNotFoundError if not registered or if the agent is
+    gated behind an inactive dev mode.
     """
-    reg = SUPPORTED_AGENTS.get(agent_id)
+    agents = available_supported_agents()
+    reg = agents.get(agent_id)
     if not reg:
-        available = ", ".join(SUPPORTED_AGENTS.keys())
+        available = ", ".join(agents.keys())
         raise AgentNotFoundError(
             f"Agent '{agent_id}' not registered. Available: {available}"
         )
@@ -172,7 +202,7 @@ def list_available_agents() -> Dict[str, Dict[str, Any]]:
     Returns dict of agent_id → {registration, installed, binary_path}.
     """
     result = {}
-    for agent_id, reg in SUPPORTED_AGENTS.items():
+    for agent_id, reg in available_supported_agents().items():
         is_builtin = reg.executable == "<built-in>"
         path = None if is_builtin else shutil.which(reg.executable)
         result[agent_id] = {

@@ -410,10 +410,36 @@ class ACPAgentAdapter(AgentAdapter):
         return {}
 
     async def cancel(self, session_id: str) -> None:
-        """Cancel ongoing execution — kill the process."""
-        if self._proc and self._proc.returncode is None:
-            self._proc.kill()
-            logger.info("Cancelled agent %s", self._agent_id)
+        """Cancel the current turn via the native ACP `session/cancel` notification.
+
+        Per TRD-86, we must avoid OS-level process kills (SIGTERM/SIGKILL) for
+        turn interruption — the agent should unwind naturally and the in-flight
+        `session/prompt` call is expected to resolve with `stop_reason="cancelled"`,
+        which the prompt loop treats as TURN_COMPLETE. We therefore send the
+        `session/cancel` notification through the live ACP connection when
+        available and leave the agent process running.
+
+        The `session_id` parameter from callers is the **backend** session id
+        (used to find this adapter); the ACP protocol needs the **ACP** session
+        id, which the adapter captured during `create_session`/`load_session`.
+        We use the stored `_acp_session_id` for the notification.
+        """
+        conn = self._conn
+        acp_sid = self._acp_session_id
+        if conn is None or not acp_sid:
+            logger.debug(
+                "cancel: no active ACP session for %s (backend=%s, acp=%s)",
+                self._agent_id, session_id, acp_sid,
+            )
+            return
+        try:
+            await conn.cancel(acp_sid)
+            logger.info("ACP session/cancel sent: agent=%s acp_session=%s", self._agent_id, acp_sid)
+        except Exception as e:
+            logger.warning(
+                "ACP session/cancel failed for %s (acp_session=%s): %s",
+                self._agent_id, acp_sid, e,
+            )
 
     async def disconnect(self) -> None:
         """Teardown agent process."""

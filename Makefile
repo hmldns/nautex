@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format check test build publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive install-acp-adapters session-config-probe session-config-probe-list
+.PHONY: help install install-dev lint format check test build publish old-build old-publish clean run-cli run-setup run-status run-mcp test-scope test-scope-interactive test-scope-api test-scope-api-interactive install-acp-adapters session-config-probe session-config-probe-list
 
 # Default target
 help:
@@ -26,8 +26,10 @@ help:
 	@echo "  format       Format code with black and isort"
 	@echo "  check        Run format check without modifying files"
 	@echo "  test         Run tests (manual for MVP)"
-	@echo "  build        Build the package for distribution"
-	@echo "  publish      Publish to PyPI (requires build first)"
+	@echo "  build        Build the package for distribution (uv)"
+	@echo "  publish      Publish to PyPI (uv, runs clean+build first)"
+	@echo "  old-build    Legacy build via .venv + python-build"
+	@echo "  old-publish  Legacy publish via twine"
 	@echo "  clean        Clean build artifacts and virtual environment"
 
 # Complete setup
@@ -119,12 +121,30 @@ check:
 	@echo "Running mypy..."
 	mypy src/nautex/
 
-# Build and publish targets
+# Build and publish targets (uv-based)
 build:
+	@echo "Building package with uv..."
+	uv build
+
+PYPIRC ?= $(HOME)/.pypirc
+PYPIRC_SECTION ?= pypi
+
+# Extract `password = ...` from the [$(PYPIRC_SECTION)] block of ~/.pypirc
+PYPI_TOKEN = $(shell awk '/^\[$(PYPIRC_SECTION)\]/{f=1;next} /^\[/{f=0} f && /^[[:space:]]*password[[:space:]]*=/{sub(/^[[:space:]]*password[[:space:]]*=[[:space:]]*/,""); print; exit}' $(PYPIRC))
+
+publish: clean build
+	@if [ -z "$(PYPI_TOKEN)" ]; then \
+		echo "ERROR: could not read password from [$(PYPIRC_SECTION)] in $(PYPIRC)"; exit 1; \
+	fi
+	@echo "Publishing to PyPI with uv (token from $(PYPIRC) [$(PYPIRC_SECTION)])..."
+	UV_PUBLISH_TOKEN='$(PYPI_TOKEN)' uv publish
+
+# Legacy build/publish (venv + build + twine)
+old-build:
 	@echo "Building package..."
 	.venv/bin/python -m build
 
-publish: clean build
+old-publish: clean old-build
 	@echo "Publishing to PyPI..."
 	twine upload dist/*
 

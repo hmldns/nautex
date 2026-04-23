@@ -37,9 +37,11 @@ async def run_noninteractive_setup(args, config_service: ConfigurationService) -
 
 
 async def _run_setup(args, config_service: ConfigurationService) -> None:
-    # 1. Validate all 4 args are present
+    # 1. Resolve token: CLI arg wins, otherwise fall back to existing .nautex/.env
+    effective_token = args.token or config_service.config.get_token()
+
     missing = []
-    if not args.token:
+    if not effective_token:
         missing.append("--token")
     if not args.project:
         missing.append("--project")
@@ -50,9 +52,13 @@ async def _run_setup(args, config_service: ConfigurationService) -> None:
 
     if missing:
         console.print(f"[red]Error: Missing required arguments: {', '.join(missing)}[/red]")
-        console.print("All four arguments are required for non-interactive setup:")
+        console.print("Required for non-interactive setup:")
         console.print("  nautex setup --token TOKEN --project PROJECT_ID --plan PLAN_ID --agent AGENT")
+        console.print("--token is optional if a token is already saved in .nautex/.env")
         sys.exit(1)
+
+    if not args.token:
+        console.print("Using existing API token from .nautex/.env")
 
     # 2. Map agent string to AgentType enum
     agent_type = AGENT_MAP[args.agent]
@@ -69,11 +75,11 @@ async def _run_setup(args, config_service: ConfigurationService) -> None:
 
     try:
         # Validate token
-        account_info = await api_service.get_account_info(token_override=args.token)
+        account_info = await api_service.get_account_info(token_override=effective_token)
         console.print(f"  Token valid. Account: [green]{account_info.profile_email}[/green]")
 
         # Set token so subsequent API calls authenticate
-        config_service._config = NautexConfig(api_token=args.token)
+        config_service._config = NautexConfig(api_token=effective_token)
 
         # Validate project exists (silent=True to avoid triggering onboarding flags)
         project_name = None
@@ -137,7 +143,7 @@ async def _run_setup(args, config_service: ConfigurationService) -> None:
     config_service.save_configuration()
     console.print("  Config saved to .nautex/config.json")
 
-    config_service.save_token_to_nautex_env(args.token)
+    config_service.save_token_to_nautex_env(effective_token)
     console.print("  Token saved to .nautex/.env")
 
     # 7. Write MCP configuration

@@ -106,13 +106,6 @@ class MockTestingAgent(AgentAdapter):
         self._acp_session_id = acp_session_id
         logger.info("Mock agent loaded session: %s", acp_session_id)
 
-    async def resume_session(self, session_id: str) -> None:
-        self._acp_session_id = session_id
-        self._state = AgentConnectionState.ACTIVE
-        if not self._emit_task or self._emit_task.done():
-            self._emit_task = asyncio.create_task(self._emit_loop())
-        logger.info("Mock agent resumed: session=%s", session_id)
-
     async def prompt(
         self,
         session_id: str,

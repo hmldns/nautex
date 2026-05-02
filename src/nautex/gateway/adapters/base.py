@@ -105,11 +105,6 @@ class AgentAdapter(ABC):
         ...
 
     @abstractmethod
-    async def resume_session(self, session_id: str) -> None:
-        """Invoke session/load for state reconciliation."""
-        ...
-
-    @abstractmethod
     async def prompt(
         self,
         session_id: str,

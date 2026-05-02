@@ -406,7 +406,17 @@ class GatewayNodeService:
             return
 
         if payload.session_id in self._adapters:
-            logger.info("Session %s already has adapter, skipping", payload.session_id)
+            existing = self._adapters[payload.session_id]
+            logger.info("Session %s already has adapter, re-emitting STARTED", payload.session_id)
+            await self._emit_lifecycle(
+                session_id=payload.session_id,
+                event=AgentLifecycleEvent.STARTED,
+                agent_id=self._session_agents.get(payload.session_id, payload.agent_id),
+                pid=existing.pid,
+                model_id=existing.current_model,
+                available_models=existing.available_models,
+                acp_session_id=existing._acp_session_id or "",
+            )
             return
 
         from .adapters.mock_adapter import MockTestingAgent, MOCK_AGENT_ID
@@ -451,11 +461,35 @@ class GatewayNodeService:
                 config=session_config,
                 on_system_event=forward_system_event,
             )
-            # Resume existing ACP session or create fresh
+            # Resume existing ACP session if requested. We always attempt
+            # `session/load` — backend keeps `acp_session_id` across crashes
+            # so reconnect/recovery flows can transparently restore state.
+            #
+            # Only one failure mode is recoverable here: the agent's new
+            # subprocess doesn't know that session id. ACP signals this with
+            # JSON-RPC code -32002 (`resource_not_found`,
+            # `acp.RequestError.resource_not_found`). On that, fall through
+            # to the fresh session already created by `adapter.connect()` —
+            # STARTED below carries the new id and the backend's lifecycle
+            # handler writes it back into `session.acp_session_id`.
+            #
+            # Any other error (auth, internal, transport) is propagated so
+            # the spawn fails loudly and backend retries with the same id.
             if payload.acp_session_id:
-                await adapter.load_session(payload.acp_session_id)
-                logger.info("Session %s resumed with ACP session %s",
-                            payload.session_id, payload.acp_session_id)
+                from acp.exceptions import RequestError
+                try:
+                    await adapter.load_session(payload.acp_session_id)
+                    logger.info("Session %s resumed with ACP session %s",
+                                payload.session_id, payload.acp_session_id)
+                except RequestError as e:
+                    if e.code != -32002:
+                        raise
+                    logger.warning(
+                        "Session %s: ACP session %s unknown to agent (%s); "
+                        "establishing fresh session %s",
+                        payload.session_id, payload.acp_session_id, e,
+                        adapter._acp_session_id,
+                    )
 
             self._adapters[payload.session_id] = adapter
             self._session_agents[payload.session_id] = payload.agent_id

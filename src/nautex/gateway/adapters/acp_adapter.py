@@ -299,10 +299,6 @@ class ACPAgentAdapter(AgentAdapter):
         self._state = AgentConnectionState.ACTIVE
         logger.info("ACP session loaded: %s (agent=%s, restoring=suppressed)", acp_session_id, self._agent_id)
 
-    async def resume_session(self, session_id: str) -> None:
-        """Base class abstract method — delegates to load_session."""
-        await self.load_session(session_id)
-
     async def set_model(self, model_id: str) -> bool:
         """Switch model mid-session via ACP set_session_model. Returns True on success."""
         try:

@@ -233,11 +233,19 @@ def generate_task_type_scope_context() -> ScopeContext:
         type=TaskType.EXPLORE
     )
 
+    align_task = ScopeTask(
+        task_designator="TASK-6",
+        name="Align Task",
+        description="A spec-vs-codebase alignment task",
+        status=TaskStatus.NOT_STARTED,
+        type=TaskType.ALIGN
+    )
+
     return ScopeContext(
-        tasks=[code_task, review_task, test_task, input_task, explore_task],
+        tasks=[code_task, review_task, test_task, input_task, explore_task, align_task],
         project_id="PROJECT-1",
         mode=ScopeContextMode.ExecuteSubtasks,
-        focus_tasks=["TASK-1", "TASK-2", "TASK-3", "TASK-4", "TASK-5"]
+        focus_tasks=["TASK-1", "TASK-2", "TASK-3", "TASK-4", "TASK-5", "TASK-6"]
     )
 
 

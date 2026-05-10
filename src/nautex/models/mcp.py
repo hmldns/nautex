@@ -75,7 +75,7 @@ class MCPScopeTask(BaseModel):
     workflow_info: MCPWorkflowInfo = Field(default_factory=MCPWorkflowInfo, description="Workflow orchestration metadata")
     description: Optional[str] = Field(None, description="Detailed task description")
     status: TaskStatus = Field(..., description="Current task status")
-    type: TaskType = Field(..., description="Task type (Code, Review, Test, Input, Explore)")
+    type: TaskType = Field(..., description="Task type (Code, Review, Test, Input, Explore, Align)")
     requirements: List[str] = Field(default_factory=list, description="List of requirement designators")
     files: List[str] = Field(default_factory=list, description="List of file paths to manage according to the task")
     subtasks: List["MCPScopeTask"] = Field(default_factory=list, description="List of subtasks")
@@ -224,6 +224,14 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
                           "Do not mark as 'Done' until the user explicitly confirms the exploration findings and decisions. ")
     INST_CONTINUE_EXPLORE = f"Continue exploring and presenting findings to user. Address gaps with proposed solutions, make decisions with user. Don't put status to \"{TaskStatus.DONE.value}\" until direct confirmation from user is provided."
 
+    INST_START_ALIGN = ("Align the plan/spec with the existing codebase before any implementation. "
+                        "Examine the relevant codebase area: existing patterns, modules, data models, and integration points referenced by this task. "
+                        "Compare them against the plan vision and present findings to the user, explicitly calling out gaps, contradictions, and integration concerns. "
+                        f"CRITICAL: Use the `{CMD_SUBMIT_CHANGE_REQUEST}` command to propose solutions for any gaps so the spec stays consistent with codebase reality. "
+                        f"Do not mark as \"{TaskStatus.DONE.value}\" until the user explicitly confirms the alignment findings and any decisions. ")
+    INST_CONTINUE_ALIGN = (f"Continue the spec-codebase alignment. Address open gaps with proposed change requests via `{CMD_SUBMIT_CHANGE_REQUEST}`, make decisions with the user, "
+                           f"and only set status to \"{TaskStatus.DONE.value}\" after explicit user confirmation. ")
+
     INST_FINALIZE_MASTER_TASK = "All subtasks are complete. Finalize the master task by integrating the work, reviewing and testing subtasks in scope. "
     INST_CONTINUE_FINALIZE_MASTER_TASK = "Continue finalizing the master task via assessing subtasks. "
 
@@ -257,6 +265,10 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
                                                                                        INST_START_EXPLORE + INST_PUT_STATUS_TO_IN_PROGRESS),
         (TaskStatus.IN_PROGRESS, TaskType.EXPLORE, ScopeContextMode.ExecuteSubtasks): ("",
                                                                                        INST_CONTINUE_EXPLORE),
+        (TaskStatus.NOT_STARTED, TaskType.ALIGN, ScopeContextMode.ExecuteSubtasks): ("",
+                                                                                     INST_START_ALIGN + INST_PUT_STATUS_TO_IN_PROGRESS),
+        (TaskStatus.IN_PROGRESS, TaskType.ALIGN, ScopeContextMode.ExecuteSubtasks): ("",
+                                                                                     INST_CONTINUE_ALIGN),
 
         # --- Mode: FinalizeMasterTask ---
         (TaskStatus.NOT_STARTED, TaskType.CODE, ScopeContextMode.FinalizeMasterTask): ("", INST_FINALIZE_MASTER_TASK),
@@ -272,6 +284,8 @@ def get_task_instruction(status: TaskStatus, type: TaskType, mode: ScopeContextM
         (TaskStatus.IN_PROGRESS, TaskType.INPUT, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FOR_INPUT),
         (TaskStatus.NOT_STARTED, TaskType.EXPLORE, ScopeContextMode.FinalizeMasterTask): ("", INST_FINALIZE_MASTER_TASK),
         (TaskStatus.IN_PROGRESS, TaskType.EXPLORE, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FINALIZE_MASTER_TASK),
+        (TaskStatus.NOT_STARTED, TaskType.ALIGN, ScopeContextMode.FinalizeMasterTask): ("", INST_FINALIZE_MASTER_TASK),
+        (TaskStatus.IN_PROGRESS, TaskType.ALIGN, ScopeContextMode.FinalizeMasterTask): ("", INST_CONTINUE_FINALIZE_MASTER_TASK),
     }
 
     if status == TaskStatus.BLOCKED:

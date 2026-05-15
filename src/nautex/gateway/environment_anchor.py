@@ -201,7 +201,7 @@ class EnvironmentDriftError(Exception):
     def __init__(self, drifts: List[IdentityDrift]):
         self.drifts = drifts
         msg = format_drift_message(drifts)
-        msg += "\nRun gateway in interactive mode to resolve: nautex gateway"
+        msg += "\nRun gateway in interactive mode to resolve: uvx nautex gateway"
         super().__init__(msg)
 
 

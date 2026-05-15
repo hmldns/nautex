@@ -150,9 +150,16 @@ def main() -> None:
     gw_subparsers = gw_parser.add_subparsers(dest="gateway_command")
 
     # gateway setup --access-token <ACCESS_TOKEN>
-    gw_setup_parser = gw_subparsers.add_parser("setup", help="Save gateway access token to .nautex/.env")
+    gw_setup_parser = gw_subparsers.add_parser("setup", help="Save gateway access token and install ACP adapters")
     gw_setup_parser.add_argument("--auth-token", required=True, dest="auth_token", help="Access token for gateway authentication")
     gw_setup_parser.add_argument("--host", default=None, help="Override API host URL")
+    gw_setup_parser.add_argument("--yes", "-y", action="store_true", default=False,
+                                 help="Auto-confirm ACP adapter install prompts")
+    gw_setup_parser.add_argument("--skip-adapters", action="store_true", default=False,
+                                 help="Skip ACP adapter detection/install (token only)")
+
+    # gateway status — agent capability and dependency report (read-only)
+    gw_subparsers.add_parser("status", help="Show supported agents and ACP adapter install status")
 
     # gateway [run] (default — start the daemon)
     gw_parser.add_argument("--uplink-url", default=None,
@@ -186,7 +193,21 @@ def main() -> None:
             if args.host:
                 config_service.save_to_nautex_env('API_HOST', args.host)
                 print(f"API host saved to .nautex/.env")
-            print("\nNext step: run `nautex gateway` to start the daemon.")
+
+            if not args.skip_adapters:
+                from .gateway.adapter_install import prompt_install_missing_npm
+                from .gateway.status import format_status_report
+                print()
+                prompt_install_missing_npm(yes=args.yes)
+                print()
+                print(format_status_report())
+
+            print("\nNext step: run `uvx nautex gateway` to start the daemon.")
+            return
+
+        if gateway_cmd == "status":
+            from .gateway.status import format_status_report
+            print(format_status_report())
             return
 
         # Default: run the gateway daemon
@@ -198,7 +219,7 @@ def main() -> None:
         # Resolve auth token: CLI arg > config api_token
         auth_token = args.auth_token or config_service.config.get_token()
         if not auth_token:
-            print("Error: No auth token. Run `nautex gateway setup --auth-token <TOKEN>` first, or pass --auth-token.", file=sys.stderr)
+            print("Error: No auth token. Run `uvx nautex gateway setup --auth-token <TOKEN>` first, or pass --auth-token.", file=sys.stderr)
             sys.exit(1)
 
         # Resolve uplink URL: CLI arg > derived from config api_host

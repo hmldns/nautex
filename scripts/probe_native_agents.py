@@ -32,6 +32,7 @@ AGENTS = [
     ("cursor_agent",  "cursor-agent", ["acp"],                             False),
     ("codex",         "codex-acp",    [],                                  False),
     ("droid",         "droid",        ["daemon", "--port", "0"],            True),
+    ("hermes",        "hermes-acp",   [],                                   False),
 ]
 
 INITIALIZE_REQUEST = json.dumps({

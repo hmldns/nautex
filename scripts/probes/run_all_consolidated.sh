@@ -22,6 +22,7 @@ AGENTS=(
     "codex:probe_codex.py"
     "goose:probe_goose.py"
     "kiro:probe_kiro.py"
+    "hermes:probe_hermes.py"
 )
 
 # Kill existing session if present

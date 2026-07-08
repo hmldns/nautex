@@ -17,6 +17,7 @@ import uuid
 from typing import Awaitable, Callable, List, Optional
 
 import acp
+from acp.exceptions import RequestError
 from acp.schema import AllowedOutcome, DeniedOutcome
 
 from ..protocol import (
@@ -24,8 +25,10 @@ from ..protocol import (
     PermissionRequestPayload,
     PermissionResponsePayload,
     PermissionAction,
+    PermissionMode,
     ToolKind,
 )
+from .launch_config import resolve_mode
 from .stream_consolidator import StreamConsolidator
 
 logger = logging.getLogger(__name__)
@@ -107,6 +110,8 @@ class GatewayACPClient(acp.Client):
         ],
         cwd: str = ".",
         response_mapper=None,
+        permissions: Optional[dict] = None,
+        gate_fs_ask: bool = False,
     ):
         self._acp_session_id = acp_session_id
         self._consolidator = consolidator
@@ -118,6 +123,16 @@ class GatewayACPClient(acp.Client):
         # Default is the spec-correct mapper (pick reject_once option on deny,
         # fall back to DeniedOutcome which cancels the turn).
         self._response_mapper = response_mapper or _map_response_to_acp
+        # Session permission map (ToolKind → PermissionMode) — enforced on the
+        # delegated fs/terminal surface, which agent-native sandbox/approval
+        # settings do not constrain (the write happens in OUR process).
+        self._permissions = permissions or {}
+        # Surface an interactive permission request for delegated fs writes
+        # when EDIT is ASK. Opt-in per adapter — only for agents whose bridge
+        # delegates writes without a preceding session/request_permission
+        # (Codex ≥ 1.x); gating unconditionally would double-prompt agents
+        # that already gate delegated writes themselves (Gemini, Droid).
+        self._gate_fs_ask = gate_fs_ask
 
     # --- Filesystem (local execution) ---
 
@@ -131,15 +146,66 @@ class GatewayACPClient(acp.Client):
 
     async def write_text_file(self, path, text, session_id=None, **kw):
         full = os.path.join(self._cwd, path) if not os.path.isabs(path) else path
+        await self._gate_fs_write(full)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "w") as f:
             f.write(text)
         logger.debug("Wrote %d bytes to %s", len(text), full)
         return acp.WriteTextFileResponse()
 
+    async def _gate_fs_write(self, full_path: str) -> None:
+        """Enforce the session's EDIT policy on delegated fs writes.
+
+        Agents that delegate file writes call fs/write_text_file on the
+        gateway process — the sandbox/approval settings we generate for the
+        agent don't constrain this path, so policy must be enforced here.
+        DENY always refuses (the permission callback records the item in its
+        terminal state); ASK surfaces an interactive request only when the
+        adapter opted in via gate_fs_ask. Refusal is a JSON-RPC error on the
+        fs/write_text_file request — the agent sees the tool fail and
+        narrates it; the turn continues.
+        """
+        mode = resolve_mode(self._permissions, ToolKind.EDIT)
+        gated = mode == PermissionMode.DENY or (
+            mode == PermissionMode.ASK and self._gate_fs_ask
+        )
+        if not gated:
+            return
+        prp = PermissionRequestPayload(
+            permission_id=f"perm-{uuid.uuid4().hex[:8]}",
+            acp_session_id=self._acp_session_id,
+            tool_name="fs/write_text_file",
+            tool_kind=ToolKind.EDIT,
+            path=full_path,
+        )
+        response = await self._on_permission_request(prp)
+        if mode == PermissionMode.DENY or response.action != PermissionAction.APPROVE:
+            logger.info("Delegated write blocked: %s (edit=%s)", full_path, mode.value)
+            raise RequestError(
+                -32000,
+                f"Write to {full_path} rejected by session permission policy (edit: {mode.value})",
+            )
+
     # --- Terminal (local execution) ---
 
     async def create_terminal(self, command, session_id=None, **kw):
+        # Hard backstop: EXECUTE=DENY refuses delegated terminals outright.
+        # ASK/ALLOW are left to the agent's own gating (delegating agents
+        # request permission before terminal/create).
+        if resolve_mode(self._permissions, ToolKind.EXECUTE) == PermissionMode.DENY:
+            prp = PermissionRequestPayload(
+                permission_id=f"perm-{uuid.uuid4().hex[:8]}",
+                acp_session_id=self._acp_session_id,
+                tool_name="terminal/create",
+                tool_kind=ToolKind.EXECUTE,
+                command=command,
+            )
+            await self._on_permission_request(prp)
+            logger.info("Delegated terminal blocked (execute=deny): %s", command)
+            raise RequestError(
+                -32000,
+                "Terminal execution rejected by session permission policy (execute: deny)",
+            )
         tid = f"term-{uuid.uuid4().hex[:8]}"
         proc = await asyncio.create_subprocess_shell(
             command,
@@ -178,7 +244,7 @@ class GatewayACPClient(acp.Client):
         proc = self._terminals.pop(terminal_id, None)
         if proc and proc.returncode is None:
             proc.kill()
-        return acp.KillTerminalCommandResponse()
+        return acp.KillTerminalResponse()
 
     async def release_terminal(self, session_id, terminal_id, **kw):
         self._terminals.pop(terminal_id, None)

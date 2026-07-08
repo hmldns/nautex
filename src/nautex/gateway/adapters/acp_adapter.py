@@ -17,7 +17,7 @@ import acp
 from acp import spawn_agent_process, text_block
 from acp.client.connection import ClientSideConnection
 
-from ..config import get_registration, build_launch_command, resolve_auth_method
+from ..config import get_registration, build_launch_command, extract_session_models, resolve_auth_method
 from ..models import (
     AgentDescriptor,
     AgentSessionConfig,
@@ -155,6 +155,17 @@ class ACPAgentAdapter(AgentAdapter):
         """
         return LaunchAdjustment()
 
+    def _gate_delegated_fs_ask(self) -> bool:
+        """Whether the client surfaces an interactive permission request for
+        delegated fs writes when EDIT is ASK.
+
+        Opt-in for agents whose bridge delegates writes without a preceding
+        session/request_permission (Codex ≥ 1.x). Agents that gate their own
+        delegated writes (Gemini, Droid) must keep this off or the user gets
+        prompted twice per write.
+        """
+        return False
+
     def _permission_response_mapper(self):
         """Hook to customize PermissionAction → ACP response translation.
 
@@ -218,6 +229,8 @@ class ACPAgentAdapter(AgentAdapter):
             on_permission_request=self._noop_permission,
             cwd=self._directory_scope,
             response_mapper=self._permission_response_mapper(),
+            permissions=config.permissions,
+            gate_fs_ask=self._gate_delegated_fs_ask(),
         )
         client = self._client
 
@@ -260,10 +273,7 @@ class ACPAgentAdapter(AgentAdapter):
         acp_mcp_servers = self._build_acp_mcp_servers(config)
         session = await self._conn.new_session(cwd=self._directory_scope, mcp_servers=acp_mcp_servers)
         self._acp_session_id = session.session_id
-        model_state = session.models
-        if model_state:
-            self._available_models = [m.model_id for m in model_state.available_models] if model_state.available_models else []
-            self._current_model = model_state.current_model_id or ""
+        self._apply_model_state(session)
         logger.info("ACP session: %s (agent=%s) models=%d current=%s",
                      self._acp_session_id, self._agent_id, len(self._available_models), self._current_model)
 
@@ -292,18 +302,26 @@ class ACPAgentAdapter(AgentAdapter):
             mcp_servers=[],
         )
         self._acp_session_id = acp_session_id
-        model_state = response.models if response else None
-        if model_state:
-            self._available_models = [m.model_id for m in model_state.available_models] if model_state.available_models else []
-            self._current_model = model_state.current_model_id or ""
+        if response:
+            self._apply_model_state(response)
         self._state = AgentConnectionState.ACTIVE
         logger.info("ACP session loaded: %s (agent=%s, restoring=suppressed)", acp_session_id, self._agent_id)
 
+    def _apply_model_state(self, session_response) -> None:
+        """Capture available/current model from a session/new or session/load response."""
+        models, current_id = extract_session_models(session_response)
+        if not models and current_id is None:
+            return
+        self._available_models = [m.id for m in models]
+        self._current_model = current_id or ""
+
     async def set_model(self, model_id: str) -> bool:
-        """Switch model mid-session via ACP set_session_model. Returns True on success."""
+        """Switch model mid-session via the unified session config option
+        (session/set_config_option with config_id="model"). Returns True on success.
+        """
         try:
             conn, acp_sid = self._require_session("set_model")
-            await conn.set_session_model(model_id=model_id, session_id=acp_sid)
+            await conn.set_config_option(config_id="model", session_id=acp_sid, value=model_id)
             logger.info("Model set to %s for agent %s", model_id, self._agent_id)
             return True
         except Exception as e:

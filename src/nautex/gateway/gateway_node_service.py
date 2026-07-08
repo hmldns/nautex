@@ -567,7 +567,7 @@ class GatewayNodeService:
             )
 
     async def _handle_apply_settings(self, payload: ApplySettingsPayload) -> None:
-        """Apply settings from backend — call ACP set_session_model, confirm back."""
+        """Apply settings from backend — set the ACP "model" config option, confirm back."""
         adapter = self._adapters.get(payload.session_id)
         if not adapter:
             logger.warning("No adapter for settings change: session=%s", payload.session_id)

@@ -64,10 +64,12 @@ class OpenCodeAdapter(ACPAgentAdapter):
 
         mcp: dict = {}
         for m in config.mcp_servers:
+            # opencode >= 1.x: command is an array including the args
+            # (a string command + separate "args" key fails config validation
+            # and the process exits before ACP initialize).
             mcp[m.server_id] = {
                 "type": "local",
-                "command": m.command,
-                "args": list(m.args),
+                "command": [m.command, *m.args],
                 "environment": dict(m.env),
             }
 

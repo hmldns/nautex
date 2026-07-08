@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import acp
 from acp import text_block, spawn_agent_process
-from acp.schema import ClientCapabilities
+from acp.schema import ClientCapabilities, SessionConfigOptionSelect, SessionConfigSelectGroup
 
 # Suppress SDK background task noise — these are non-fatal schema mismatches
 logging.getLogger("root").setLevel(logging.CRITICAL)
@@ -93,6 +93,15 @@ AGENTS = {
         "default_model": None,
         "auth_prefer": None,
         "notes": "Custom HTTP API. WebSocket endpoint format differs from standard port discovery.",
+    },
+    "hermes": {
+        "cmd": "hermes-acp",
+        "args": [],
+        "default_model": None,
+        "auth_prefer": None,
+        "notes": "Hermes ACP extra ('pip install hermes-agent[acp]' or 'uv tool install ...'). "
+                 "Inherits provider/model from ~/.hermes/config.yaml. "
+                 "Three permission tiers: allow_once / allow_session / allow_always.",
     },
 }
 
@@ -393,16 +402,27 @@ async def run_probe(agent_def: dict, tmpdir: str, prompt: str, model: str | None
         session = await conn.new_session(cwd=tmpdir, mcp_servers=[])
         log("session", C.CYAN, session.session_id)
 
-        models_info = getattr(session, "models", None)
-        if models_info and hasattr(models_info, "available_models") and models_info.available_models:
-            ids = [m.model_id for m in models_info.available_models]
-            log("models", C.DIM, f"available={ids}")
-            log("models", C.DIM, f"current={models_info.current_model_id}")
+        model_opt = next(
+            (o for o in session.config_options or []
+             if isinstance(o, SessionConfigOptionSelect) and o.id == "model"),
+            None,
+        )
+        if model_opt:
+            entries = []
+            for entry in model_opt.options:
+                if isinstance(entry, SessionConfigSelectGroup):
+                    entries.extend(entry.options)
+                else:
+                    entries.append(entry)
+            log("models", C.DIM, f"available={[e.value for e in entries]}")
+            log("models", C.DIM, f"current={model_opt.current_value}")
 
         target = model or agent_def.get("default_model")
         if target:
             try:
-                await conn.set_session_model(session_id=session.session_id, model_id=target)
+                await conn.set_config_option(
+                    session_id=session.session_id, config_id="model", value=target,
+                )
                 log("model", C.GREEN, f"switched → {target}")
             except Exception as e:
                 log("model", C.YELLOW, f"switch failed: {e} (using default)")

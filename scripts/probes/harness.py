@@ -20,10 +20,11 @@ from typing import Any, Dict, List, Optional
 
 import acp
 from acp import spawn_agent_process, text_block
-from acp.schema import AllowedOutcome, ClientCapabilities, FileSystemCapability
+from acp.schema import AllowedOutcome, ClientCapabilities, FileSystemCapabilities
 
 # Import production gateway modules
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from nautex.gateway.config import extract_session_models
 from nautex.gateway.models import ConsolidatedSessionUpdate
 from nautex.gateway.adapters.stream_consolidator import StreamConsolidator, ProtocolParseError
 
@@ -382,7 +383,7 @@ async def phase_initialize(conn, timeout=15):
         conn.initialize(
             protocol_version=acp.PROTOCOL_VERSION,
             client_capabilities=ClientCapabilities(
-                fs=FileSystemCapability(read_text_file=True, write_text_file=True),
+                fs=FileSystemCapabilities(read_text_file=True, write_text_file=True),
                 terminal=True,
             ),
             client_info={"name": "nautex-probe", "title": "Nautex Probe", "version": "0.3.0"},
@@ -416,20 +417,22 @@ async def phase_authenticate(conn, init_result, prefer_method=None, timeout=15):
     return True
 
 
-async def phase_session(conn, cwd, timeout=15):
+async def phase_session(conn, cwd, timeout=15, mcp_servers=None):
     """Create session. Returns session result."""
     log("phase", C.CYAN, "session/new")
+    if mcp_servers:
+        names = [getattr(s, "name", "?") for s in mcp_servers]
+        log("mcp", C.DIM, f"injecting servers: {names}")
     session = await asyncio.wait_for(
-        conn.new_session(cwd=cwd, mcp_servers=[]),
+        conn.new_session(cwd=cwd, mcp_servers=mcp_servers or []),
         timeout=timeout,
     )
     log("session", C.GREEN, session.session_id)
 
-    models_info = getattr(session, "models", None)
-    if models_info and hasattr(models_info, "available_models") and models_info.available_models:
-        ids = [m.model_id for m in models_info.available_models]
-        log("models", C.DIM, f"{ids}")
-        log("models", C.DIM, f"current={models_info.current_model_id}")
+    models, current_id = extract_session_models(session)
+    if models:
+        log("models", C.DIM, f"{[m.id for m in models]}")
+        log("models", C.DIM, f"current={current_id}")
 
     return session
 
@@ -438,7 +441,7 @@ async def phase_set_model(conn, session_id, model_id, timeout=10):
     """Switch model. Returns True on success."""
     try:
         await asyncio.wait_for(
-            conn.set_session_model(session_id=session_id, model_id=model_id),
+            conn.set_config_option(session_id=session_id, config_id="model", value=model_id),
             timeout=timeout,
         )
         log("model", C.GREEN, f"→ {model_id}")
@@ -536,13 +539,10 @@ def show_consolidated(client: ProbeClient):
     for i, csu in enumerate(updates):
         kind = csu.kind
         kind_counts[kind] = kind_counts.get(kind, 0) + 1
-        data_preview = dict(csu.data)
+        data_preview = csu.model_dump(exclude_none=True, exclude={"kind", "session_id", "payload_type"})
 
-        # Truncate text for display
         if "text" in data_preview:
-            t = data_preview["text"]
-            if len(t) > 80:
-                data_preview["text"] = t.replace("\n", "\\n")
+            data_preview["text"] = data_preview["text"].replace("\n", "\\n")
 
         color = KIND_COLORS.get(kind, C.YELLOW)
         data_str = json.dumps(data_preview, default=str) if data_preview else ""
@@ -551,7 +551,7 @@ def show_consolidated(client: ProbeClient):
     # Final telemetry from production consolidator
     t = sc.get_telemetry()
     print(f"\n{C.BOLD}--- Production Telemetry (StreamConsolidator) ---{C.RESET}")
-    print(f"  session_id:     {t.session_id}")
+    print(f"  acp_session_id: {t.acp_session_id}")
     print(f"  tokens_est:     {t.processed_tokens_estimate}")
     print(f"  is_typing:      {t.is_typing}")
     print(f"  active_tool:    {t.active_tool}")

@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from acp.schema import SessionConfigOptionSelect, SessionConfigSelectGroup
+
 from .models import (
     AgentCapabilities,
     AgentDescriptor,
@@ -253,6 +255,39 @@ def build_descriptor_from_init(
     return descriptor
 
 
+def extract_session_models(
+    session_result: Any,
+) -> tuple[List[ModelInfo], Optional[str]]:
+    """Extract (available models, current model id) from a session/new or
+    session/load response.
+
+    Per ACP (agent-client-protocol >= 0.11), model selection is a unified
+    session config option: the select option with id == "model" in
+    config_options. Its options list is either flat SessionConfigSelectOption
+    entries or SessionConfigSelectGroup groups.
+    """
+    for opt in session_result.config_options or []:
+        if not isinstance(opt, SessionConfigOptionSelect) or opt.id != "model":
+            continue
+        entries = []
+        for entry in opt.options:
+            if isinstance(entry, SessionConfigSelectGroup):
+                entries.extend(entry.options)
+            else:
+                entries.append(entry)
+        model_list = [
+            ModelInfo(
+                id=e.value,
+                name=e.name or e.value,
+                default=(e.value == opt.current_value),
+            )
+            for e in entries
+        ]
+        return model_list, opt.current_value
+
+    return [], None
+
+
 def update_descriptor_from_session(
     descriptor: AgentDescriptor,
     session_result: Any,
@@ -261,23 +296,9 @@ def update_descriptor_from_session(
 
     Extracts available models and current model from the session response.
     """
-    models_info = getattr(session_result, "models", None)
-    if not models_info:
+    model_list, current_id = extract_session_models(session_result)
+    if not model_list:
         return descriptor
-
-    available = getattr(models_info, "available_models", None) or []
-    current_id = getattr(models_info, "current_model_id", None)
-
-    model_list = []
-    for m in available:
-        model_id = getattr(m, "model_id", "") or ""
-        name = getattr(m, "name", model_id) or model_id
-        model_list.append(ModelInfo(
-            id=model_id,
-            name=name,
-            default=(model_id == current_id),
-        ))
-
     descriptor.available_models = model_list
     descriptor.current_model = current_id
     return descriptor

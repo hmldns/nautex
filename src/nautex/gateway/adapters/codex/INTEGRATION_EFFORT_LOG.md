@@ -170,3 +170,50 @@ intro.sh created on disk, executable, content correct.
 4. **Highest session update volume** — 112 updates for intro.sh is 2.3x the next highest (Cursor at 48). Session update processing must not be a bottleneck.
 5. **Zed wrapper pattern confirmed** — Like Claude Code, the working binary comes from `@zed-industries`, not the upstream vendor. Two of eight agents now use Zed wrappers as their ACP interface.
 6. **Permission option ID diversity continues** — `approved` is the fifth distinct option ID. The set is now: `proceed_once`, `allow-once`, `allow`, `approved`, `allow_once`, and none. Dynamic reading from permission options is mandatory.
+
+## Step N: Bridge migration @zed-industries/codex-acp 0.16 → @agentclientprotocol/codex-acp 1.1.0 (2026-07-08)
+
+Context: the zed-industries package is deprecated; `make install-acp-adapters`
+now installs `@agentclientprotocol/codex-acp` (1.1.0, bundles codex-core
+0.142.5; also verified against global codex 0.143.0). This is a full rewrite
+of the bridge with a different config and enforcement surface.
+
+Observed (all via session-config probe + raw JSON-RPC probes + dist source):
+
+1. **CLI args are gone.** The entrypoint only parses `--version`, `login`,
+   `cli`; everything else starts the ACP server. Our `-c key=value` launch
+   overrides were silently ignored. Config channels are now env vars:
+   `CODEX_PATH` (codex binary override), `CODEX_CONFIG` (JSON, codex-core
+   config.toml keys, spread into every thread config by
+   `createSessionConfig`), `INITIAL_AGENT_MODE`, `MODEL_PROVIDER`,
+   `DEFAULT_AUTH_REQUEST`.
+2. **Permission control = AgentMode presets.** "read-only" / "agent" /
+   "agent-full-access"; each turn passes the preset's approvalPolicy +
+   sandboxPolicy to `thread/runTurn`, overriding config keys.
+   `INITIAL_AGENT_MODE` verified applied (session/new modes.currentModeId).
+3. **Guardian auto-approval defeats DENY/ASK.** Even in read-only mode,
+   apply_patch is auto-approved by codex-core's Guardian review
+   (`item/autoApprovalReview/*` → shown as "Guardian Review" tool call);
+   `item/fileChange/requestApproval` is never sent, so no
+   session/request_permission reaches the client and the write lands.
+   Defeated levers (each verified ineffective by re-running
+   `--agent codex --scenario deny_write`):
+   - `--disable guardian_approval` on the app-server cmdline via a
+     CODEX_PATH wrapper (flag applies, behavior unchanged);
+   - `features.guardian_approval=false` via CODEX_CONFIG;
+   - `projects."<cwd>".trust_level="untrusted"` via wrapper `-c` (the
+     bridge stamps `trust_level="trusted"` per thread AFTER spreading
+     CODEX_CONFIG — not overridable from outside);
+   - `--enable request_permissions_tool --enable exec_permission_approvals`.
+   Conclusion: enforcement gap is inside codex-core/bridge; needs an
+   upstream issue or a bridge fork. deny_write, deny_all_writes_and_exec,
+   approval_flow currently FAIL for codex.
+4. **fs delegation no longer observed** — patches are applied locally by
+   codex-core (the 0.16-era `fs/write_text_file` delegation did not occur in
+   any probe run). The new GatewayACPClient delegated-write gate therefore
+   does not fire for codex today, but stays on as a backstop.
+5. **Models moved to unified config options** (ACP ≥ 0.11): select option
+   id="model" (+ id="reasoning_effort"); legacy `models` field removed from
+   session/new. Model switching via `session/set_config_option`.
+6. Still passing after migration: default_noop, read_only_exploration,
+   system_prompt_marker, mcp_injection.

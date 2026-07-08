@@ -180,11 +180,11 @@ run-mcp-inspector:
 # ---------------------------------------------------------------------------
 
 # ACP bridges for agents that don't speak ACP natively. Re-install to pick up
-# upstream bug fixes (e.g. permission option changes). The Claude bridge was
-# renamed zed-industries → agentclientprotocol; codex stayed on zed-industries.
+# upstream bug fixes (e.g. permission option changes). Both bridges now live
+# under the agentclientprotocol scope (zed-industries packages are deprecated).
 ACP_ADAPTER_PACKAGES = \
 	@agentclientprotocol/claude-agent-acp@latest \
-	@zed-industries/codex-acp@latest
+	@agentclientprotocol/codex-acp@latest
 
 # ---------------------------------------------------------------------------
 # Session-config probe — run permission/prompt scenarios against real agent

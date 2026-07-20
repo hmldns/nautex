@@ -27,7 +27,7 @@ class MockConfigService:
 class TestMCPService(MCPService):
     """MCPService subclass that skips document loading."""
 
-    async def ensure_dependency_documents(self, documents_meta=None):
+    async def ensure_dependency_documents(self, documents_updated_at=None, server_time=None):
         return {}  # No docs in test mode
 
     def is_configured(self) -> bool:

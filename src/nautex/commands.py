@@ -216,15 +216,17 @@ async def mcp_handle_list_plans(project_id: str) -> MCPListPlansResponse:
         return MCPListPlansResponse(success=False, error=str(e))
 
 
-async def mcp_handle_next_scope(full: bool = False) -> MCPNextScopeResponse:
+async def mcp_handle_next_scope(full: bool = False, force_docs_sync: bool = False) -> MCPNextScopeResponse:
     """Get the next scope for the current project and plan.
 
     Args:
         full: If True, force full scope tree. If False (default), use auto mode
               (compact with smart auto-expand rules).
+        force_docs_sync: If True, re-download all dependency documents,
+              bypassing the last-update timestamp check.
     """
     try:
-        logger.debug(f"Executing next scope tool (full={full})")
+        logger.debug(f"Executing next scope tool (full={full}, force_docs_sync={force_docs_sync})")
         service = _get_service()
 
         configured, error_response = _check_configured()
@@ -248,7 +250,8 @@ async def mcp_handle_next_scope(full: bool = False) -> MCPNextScopeResponse:
 
         if next_scope:
             docs_lut = await service.ensure_dependency_documents(
-                documents_meta=next_scope.documents_meta
+                documents_updated_at=None if force_docs_sync else next_scope.documents_updated_at,
+                server_time=next_scope.server_time,
             )
             response_scope = convert_scope_context_to_mcp_response(next_scope, docs_lut)
             return MCPNextScopeResponse(
@@ -344,7 +347,8 @@ async def mcp_handle_update_tasks(
                 )
                 if next_scope:
                     docs_lut = await service.ensure_dependency_documents(
-                        documents_meta=next_scope.documents_meta
+                        documents_updated_at=next_scope.documents_updated_at,
+                        server_time=next_scope.server_time,
                     )
                     response_scope = convert_scope_context_to_mcp_response(
                         next_scope, docs_lut

@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 from mcp.types import TextContent
 
 from . import ConfigurationService, IntegrationStatusService
-from ..api.scope_context_model import DocumentsMeta
+from ..api.scope_context_model import DocumentsUpdatedAt
 from ..models.config import NautexConfig, MCPOutputFormat
 from .nautex_api_protocol import NautexAPIProtocol
 from ..models.mcp import format_response_as_markdown
@@ -77,19 +77,23 @@ class MCPService:
         return self.config.response_format
 
     async def ensure_dependency_documents(
-        self, documents_meta: Optional[DocumentsMeta] = None,
+        self,
+        documents_updated_at: Optional[DocumentsUpdatedAt] = None,
+        server_time: Optional[str] = None,
     ) -> Dict[str, str]:
         """Sync dependency documents from backend into .nautex/docs/.
 
-        With documents_meta (from the scope response), only changed or missing
-        documents are re-fetched; without it, everything is downloaded.
+        With documents_updated_at (from the scope response), only changed or missing
+        documents are re-fetched; without it, everything is downloaded. server_time
+        is the server's reference clock for staleness comparisons.
         """
         logger.info("Syncing dependency documents")
         try:
             doc_results = await self.document_service.ensure_plan_dependency_documents(
                 project_id=self.config.project_id,
                 plan_id=self.config.plan_id,
-                documents_meta=documents_meta,
+                documents_updated_at=documents_updated_at,
+                server_time=server_time,
             )
             successful_loads = sum(
                 1 for path in doc_results.values()
@@ -127,15 +131,17 @@ async def status() -> Union[List[TextContent], Dict[str, Any]]:
 
 
 @mcp.tool
-async def next_scope(full: bool = False) -> Union[List[TextContent], Dict[str, Any]]:
+async def next_scope(full: bool = False, force_docs_sync: bool = False) -> Union[List[TextContent], Dict[str, Any]]:
     """Get the next scope for the current project and plan.
 
     Args:
         full: If True, force full scope tree. Default is auto mode
               (compact with smart auto-expand).
+        force_docs_sync: If True, re-download all dependency documents even if
+              they look up to date. Use when local nautex/docs files may be stale because of failure
     """
     from ..commands import mcp_handle_next_scope
-    response = await mcp_handle_next_scope(full=full)
+    response = await mcp_handle_next_scope(full=full, force_docs_sync=force_docs_sync)
     if mcp_service().response_format == MCPOutputFormat.MD_YAML:
         if response.success and response.data:
             text = format_response_as_markdown("Next Scope", response.data)

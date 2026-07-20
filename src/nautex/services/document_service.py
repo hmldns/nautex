@@ -7,10 +7,10 @@ from pathlib import Path
 import aiofiles
 
 from ..api.api_models import Document
-from ..api.scope_context_model import DocumentsMeta
+from ..api.scope_context_model import DocumentsUpdatedAt
 from ..services.nautex_api_service import NautexAPIService
 from ..services.config_service import ConfigurationService
-from ..services.docs_meta import DocsSyncMeta, needs_refetch
+from ..services.docs_meta import DocsSyncMeta, needs_refetch, parse_iso_utc
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -86,16 +86,19 @@ class DocumentService:
         self,
         project_id: str,
         doc_designators: List[str],
-        documents_meta: Optional[DocumentsMeta] = None,
+        documents_updated_at: Optional[DocumentsUpdatedAt] = None,
+        server_time: Optional[str] = None,
     ) -> Dict[str, str]:
         """Ensure documents are available locally.
 
         Args:
             project_id: The ID of the project
             doc_designators: List of document designators to ensure
-            documents_meta: Server-provided designator → last-update timestamp map.
+            documents_updated_at: Server-provided designator → last-update timestamp map.
                 When present, unchanged documents are skipped based on the sync
                 metafile; when None (older backend), every document is fetched.
+            server_time: Server current time (ISO-8601) used as the reference clock
+                for staleness checks; falls back to the local clock when absent.
 
         Returns:
             Dictionary mapping document designators to file paths or error messages
@@ -107,6 +110,7 @@ class DocumentService:
         os.makedirs(documents_path, exist_ok=True)
 
         meta = DocsSyncMeta.load(documents_path)
+        reference_now = parse_iso_utc(server_time)
 
         # Process each document
         for designator in doc_designators:
@@ -114,9 +118,10 @@ class DocumentService:
                 output_filename = f"{designator}.md"
                 output_path = documents_path / output_filename
 
-                if documents_meta is not None:
+                if documents_updated_at is not None:
                     refetch, reason = needs_refetch(
-                        meta.get(designator), documents_meta.get(designator), output_path,
+                        meta.get(designator), documents_updated_at.get(designator), output_path,
+                        now=reference_now,
                     )
                     if not refetch:
                         logger.debug(f"Document {designator} is up to date, skipping fetch")
@@ -135,7 +140,7 @@ class DocumentService:
                         # Server-authoritative timestamp: doc response first, scope meta as fallback
                         meta.record_sync(
                             designator,
-                            updated_at=document.updated_at or (documents_meta or {}).get(designator),
+                            updated_at=document.updated_at or (documents_updated_at or {}).get(designator),
                             path=output_filename,
                         )
                 else:
@@ -154,32 +159,35 @@ class DocumentService:
         self,
         project_id: str,
         plan_id: str,
-        documents_meta: Optional[DocumentsMeta] = None,
+        documents_updated_at: Optional[DocumentsUpdatedAt] = None,
+        server_time: Optional[str] = None,
     ) -> Dict[str, str]:
         """Ensure all dependency documents for a plan are available locally.
 
         Args:
             project_id: The ID of the project
             plan_id: The ID of the implementation plan
-            documents_meta: Server-provided designator → timestamp map from the scope
+            documents_updated_at: Server-provided designator → timestamp map from the scope
                 response. When present, its keys are the dependency document list
                 (skips the plan fetch) and unchanged documents are not re-fetched.
+            server_time: Server current time (ISO-8601) forwarded to staleness checks.
 
         Returns:
             Dictionary mapping document designators to file paths or error messages, or empty dict if plan not found
         """
         try:
-            if documents_meta is not None:
-                dependency_docs = list(documents_meta.keys())
+            if documents_updated_at is not None:
+                dependency_docs = list(documents_updated_at.keys())
                 if not dependency_docs:
                     logger.info(f"No dependency documents found for plan {plan_id}")
                     return {}
                 logger.info(f"Syncing {len(dependency_docs)} dependency documents for plan {plan_id}")
                 return await self.ensure_documents(
-                    project_id, dependency_docs, documents_meta=documents_meta,
+                    project_id, dependency_docs, documents_updated_at=documents_updated_at,
+                    server_time=server_time,
                 )
 
-            # Older backend without documents_meta: resolve the dependency list via the plan
+            # Older backend without documents_updated_at: resolve the dependency list via the plan
             plan = await self.nautex_api_service.get_implementation_plan(project_id, plan_id)
 
             if not plan:

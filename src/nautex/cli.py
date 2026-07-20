@@ -52,6 +52,10 @@ def register_cli_commands(subparsers) -> None:
         "--full", action="store_true", default=False,
         help="Force full scope tree (default: auto mode with smart expand)",
     )
+    ns_parser.add_argument(
+        "--force-docs-sync", action="store_true", default=False,
+        help="Re-download all dependency documents, bypassing the timestamp check",
+    )
 
     ut_parser = subparsers.add_parser("update-tasks", help="Update task statuses")
     ut_parser.add_argument(
@@ -90,7 +94,7 @@ async def run_cli_command(command: str, args, config_service) -> None:
         print(_render_response("Status", response, fmt))
 
     elif command == "next-scope":
-        response = await mcp_handle_next_scope(full=args.full)
+        response = await mcp_handle_next_scope(full=args.full, force_docs_sync=args.force_docs_sync)
         if fmt == MCPOutputFormat.MD_YAML and response.success and response.data:
             print(format_response_as_markdown("Next Scope", response.data))
         else:

@@ -28,7 +28,7 @@ class ScopeContextMode(str, Enum):
 
 # Dependency document designator → ISO-8601 UTC last-update timestamp;
 # None when the document has no timestamp recorded yet (must still be fetched).
-DocumentsMeta = Dict[str, Optional[str]]
+DocumentsUpdatedAt = Dict[str, Optional[str]]
 
 
 class Reference(BaseModel):
@@ -79,9 +79,15 @@ class ScopeContext(BaseModel):
     mode: ScopeContextMode = Field(..., description="Current state of the scope context")
     focus_tasks: List[str] = Field(default_factory=list, description="List of task designators to focus on")
     # None = backend without doc timestamps; {} = plan has no dependency docs.
-    documents_meta: Optional[DocumentsMeta] = Field(
+    documents_updated_at: Optional[DocumentsUpdatedAt] = Field(
         None,
         description="Dependency document designator → ISO-8601 UTC last-update timestamp (or null if unknown)",
+    )
+    # Reference clock for staleness comparisons — shields sync decisions from a
+    # broken local machine clock.
+    server_time: Optional[str] = Field(
+        None,
+        description="Server current time (ISO-8601 UTC) when this scope was generated",
     )
 
     def find_task_by_designator(self, designator: str) -> Optional[ScopeTask]:

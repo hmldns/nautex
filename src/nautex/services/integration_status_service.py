@@ -117,14 +117,16 @@ class IntegrationStatusService:
             status.api_response_time = None
 
     async def _update_implementation_plan(self, status: IntegrationStatus):
-        """Update the implementation plan."""
+        """Update the implementation plan. API failures (e.g. 403) manifest as
+        an unloaded plan in the status, never as a crash of the setup flow."""
         try:
             if self.config_service.config.plan_id:
                 plan = await self._nautex_api_service.get_implementation_plan(status.config.project_id, status.config.plan_id)
                 status.implementation_plan = plan
 
-        except Exception:
-            raise
+        except Exception as e:
+            logger.warning(f"Failed to load implementation plan: {e}")
+            status.implementation_plan = None
 
     def start_polling(self, on_update: Optional[Callable[[IntegrationStatus], None]] = None, interval: Optional[float] = None) -> None:
         """Start a background task to poll for integration status updates.

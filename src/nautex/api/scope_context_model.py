@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 import os
 from enum import Enum
@@ -24,6 +24,11 @@ class ScopeContextMode(str, Enum):
     """Enum for the state of a scope context."""
     ExecuteSubtasks = "ExecuteSubtasks"
     FinalizeMasterTask = "FinalizeMasterTask"
+
+
+# Dependency document designator → ISO-8601 UTC last-update timestamp;
+# None when the document has no timestamp recorded yet (must still be fetched).
+DocumentsMeta = Dict[str, Optional[str]]
 
 
 class Reference(BaseModel):
@@ -64,11 +69,20 @@ class ScopeTask(BaseModel):
 
 
 class ScopeContext(BaseModel):
-    """Root model for scope context representing a tasks tree fragment."""
+    """Root model for scope context representing a tasks tree fragment.
+
+    Hand-mirrored with nt-backend/data_api/scope_context_model.py — keep field
+    changes in sync manually.
+    """
     tasks: List[ScopeTask] = Field(default_factory=list, description="List of tasks in the scope")
     project_id: Optional[str] = Field(None, description="Project identifier")
     mode: ScopeContextMode = Field(..., description="Current state of the scope context")
     focus_tasks: List[str] = Field(default_factory=list, description="List of task designators to focus on")
+    # None = backend without doc timestamps; {} = plan has no dependency docs.
+    documents_meta: Optional[DocumentsMeta] = Field(
+        None,
+        description="Dependency document designator → ISO-8601 UTC last-update timestamp (or null if unknown)",
+    )
 
     def find_task_by_designator(self, designator: str) -> Optional[ScopeTask]:
         """

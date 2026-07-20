@@ -207,6 +207,9 @@ class Document(BaseModel):
     """
     designator: str = Field(..., description="Document designator")
     title: str = Field(..., description="Document title")
+    # Kept as a raw string: parsing is centralized in services/docs_meta.py so a
+    # malformed backend value can never fail model_validate and kill the fetch.
+    updated_at: Optional[str] = Field(None, description="ISO-8601 UTC timestamp of the last document update")
 
     node: Node = Field(..., description="Root node of the document")
 

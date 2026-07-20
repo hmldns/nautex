@@ -27,7 +27,7 @@ class MockConfigService:
 class TestMCPService(MCPService):
     """MCPService subclass that skips document loading."""
 
-    async def ensure_dependency_documents_on_disk(self):
+    async def ensure_dependency_documents(self, documents_meta=None):
         return {}  # No docs in test mode
 
     def is_configured(self) -> bool:
@@ -87,16 +87,16 @@ class InteractiveHarness:
             Rendered output string (markdown with YAML)
         """
         result = await mcp_handle_next_scope(full=full)
-        data = result.get("data", {})
+        data = result.data or {}
 
         # Update tree from response (works for both mock and API)
         if "tasks" in data:
             self.task_tree.update_from_scope_data(data["tasks"])
 
-        if result.get("success"):
+        if result.success:
             return format_response_as_markdown("Next Scope", data)
         else:
-            return format_response_as_markdown("Error", result)
+            return format_response_as_markdown("Error", result.model_dump(exclude_none=True))
 
     async def cmd_update(self, designator: str, status: TaskStatus) -> str:
         """Update a task's status via actual MCP layer.

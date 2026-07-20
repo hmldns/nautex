@@ -7,6 +7,7 @@ from fastmcp import FastMCP
 from mcp.types import TextContent
 
 from . import ConfigurationService, IntegrationStatusService
+from ..api.scope_context_model import DocumentsMeta
 from ..models.config import NautexConfig, MCPOutputFormat
 from .nautex_api_protocol import NautexAPIProtocol
 from ..models.mcp import format_response_as_markdown
@@ -75,22 +76,29 @@ class MCPService:
     def response_format(self) -> MCPOutputFormat:
         return self.config.response_format
 
-    async def ensure_dependency_documents(self) -> Dict[str, str]:
-        """Fetch dependency documents from backend and write to .nautex/docs/."""
-        logger.info("Downloading dependency documents")
+    async def ensure_dependency_documents(
+        self, documents_meta: Optional[DocumentsMeta] = None,
+    ) -> Dict[str, str]:
+        """Sync dependency documents from backend into .nautex/docs/.
+
+        With documents_meta (from the scope response), only changed or missing
+        documents are re-fetched; without it, everything is downloaded.
+        """
+        logger.info("Syncing dependency documents")
         try:
             doc_results = await self.document_service.ensure_plan_dependency_documents(
                 project_id=self.config.project_id,
                 plan_id=self.config.plan_id,
+                documents_meta=documents_meta,
             )
             successful_loads = sum(
                 1 for path in doc_results.values()
                 if not path.startswith("Error") and not path.startswith("Document")
             )
-            logger.info(f"Downloaded {successful_loads} of {len(doc_results)} dependency documents")
+            logger.info(f"Synced {successful_loads} of {len(doc_results)} dependency documents")
             self._designators_paths = doc_results
         except Exception as e:
-            logger.error(f"Error downloading dependency documents: {e}")
+            logger.error(f"Error syncing dependency documents: {e}")
             raise
         return self._designators_paths
 

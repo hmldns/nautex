@@ -276,16 +276,17 @@ class TestLocking:
 # ---------------------------------------------------------------------------
 
 class TestGitignore:
-    def test_default_layout_adds_entries(self, tmp_path):
+    """The docs folder gets its own .gitignore covering the metafile and lock."""
+
+    def test_gitignore_created_inside_docs_dir(self, tmp_path):
         docs_dir = tmp_path / ".nautex" / "docs"
         meta = DocsSyncMeta(docs_dir)
         meta.record_sync("PRD", updated_at=TS_OLD, path="PRD.md")
         meta.save()
 
-        gitignore = tmp_path / ".nautex" / ".gitignore"
-        lines = gitignore.read_text().splitlines()
-        assert f"docs/{SYNC_META_FILENAME}" in lines
-        assert f"docs/{LOCK_FILENAME}" in lines
+        lines = (docs_dir / ".gitignore").read_text().splitlines()
+        assert SYNC_META_FILENAME in lines
+        assert LOCK_FILENAME in lines
 
     def test_idempotent(self, tmp_path):
         docs_dir = tmp_path / ".nautex" / "docs"
@@ -294,28 +295,32 @@ class TestGitignore:
         meta.save()
         meta.save()
 
-        lines = (tmp_path / ".nautex" / ".gitignore").read_text().splitlines()
-        assert lines.count(f"docs/{SYNC_META_FILENAME}") == 1
-        assert lines.count(f"docs/{LOCK_FILENAME}") == 1
+        lines = (docs_dir / ".gitignore").read_text().splitlines()
+        assert lines.count(SYNC_META_FILENAME) == 1
+        assert lines.count(LOCK_FILENAME) == 1
 
     def test_preserves_existing_lines(self, tmp_path):
-        nautex_dir = tmp_path / ".nautex"
-        nautex_dir.mkdir()
-        (nautex_dir / ".gitignore").write_text(".env\n")
+        docs_dir = tmp_path / ".nautex" / "docs"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / ".gitignore").write_text("*.tmp\n")
 
-        meta = DocsSyncMeta(nautex_dir / "docs")
+        meta = DocsSyncMeta(docs_dir)
         meta.record_sync("PRD", updated_at=TS_OLD, path="PRD.md")
         meta.save()
 
-        lines = (nautex_dir / ".gitignore").read_text().splitlines()
-        assert ".env" in lines
-        assert f"docs/{SYNC_META_FILENAME}" in lines
+        lines = (docs_dir / ".gitignore").read_text().splitlines()
+        assert "*.tmp" in lines
+        assert SYNC_META_FILENAME in lines
+        assert LOCK_FILENAME in lines
 
-    def test_custom_docs_dir_skipped(self, tmp_path):
+    def test_custom_docs_dir_also_covered(self, tmp_path):
+        # Unlike the old .nautex/.gitignore approach, a custom docs location
+        # gets the same protection — the .gitignore travels with the folder.
         docs_dir = tmp_path / "custom_docs"
         meta = DocsSyncMeta(docs_dir)
         meta.record_sync("PRD", updated_at=TS_OLD, path="PRD.md")
         meta.save()
 
-        assert not (tmp_path / ".gitignore").exists()
-        assert not (docs_dir / ".gitignore").exists()
+        lines = (docs_dir / ".gitignore").read_text().splitlines()
+        assert SYNC_META_FILENAME in lines
+        assert LOCK_FILENAME in lines

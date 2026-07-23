@@ -268,27 +268,18 @@ def _meta_lock(docs_dir: Path):
 
 
 def _ensure_metafile_gitignored(docs_dir: Path) -> None:
-    """Add the metafile and lock file to .nautex/.gitignore when applicable.
+    """Ensure the docs folder's own .gitignore covers the sync metafile and lock.
 
-    Only acts when the docs dir sits inside a `.nautex` directory (the default
-    `.nautex/docs` layout); custom docs locations are left to the user.
-    Mirrors gateway/environment_anchor._ensure_gitignored (duplicated locally —
-    services must not depend on the gateway layer).
+    Nautex owns the docs folder, so the .gitignore lives right inside it —
+    this works for any docs location, default or custom. Existing content is
+    preserved; only missing lines are appended.
     """
     try:
-        resolved = docs_dir.resolve()
-        nautex_dir = next(
-            (p for p in (resolved, *resolved.parents) if p.name == ".nautex"), None,
-        )
-        if nautex_dir is None:
-            logger.debug("Docs dir %s not under .nautex — skipping gitignore update", docs_dir)
-            return
-        rel = resolved.relative_to(nautex_dir)
-        for filename in (SYNC_META_FILENAME, LOCK_FILENAME):
-            line = filename if str(rel) == "." else str(rel / filename)
-            _ensure_gitignored_line(nautex_dir / ".gitignore", line)
+        gitignore = docs_dir / ".gitignore"
+        for line in (SYNC_META_FILENAME, LOCK_FILENAME):
+            _ensure_gitignored_line(gitignore, line)
     except Exception as e:
-        logger.warning("Failed to update .nautex/.gitignore for docs sync metadata: %s", e)
+        logger.warning("Failed to update docs .gitignore for sync metadata: %s", e)
 
 
 def _ensure_gitignored_line(gitignore: Path, line: str) -> None:

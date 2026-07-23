@@ -28,6 +28,7 @@ STRIPPED_ENV_KEYS = frozenset([
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "GEMINI_API_KEY",
+    "XAI_API_KEY",
 ])
 
 # 5MB buffer limit on stdout/stderr pipes to prevent RAM exhaustion

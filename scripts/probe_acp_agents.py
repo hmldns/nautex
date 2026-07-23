@@ -103,6 +103,15 @@ AGENTS = {
                  "Inherits provider/model from ~/.hermes/config.yaml. "
                  "Three permission tiers: allow_once / allow_session / allow_always.",
     },
+    "grok_build": {
+        "cmd": "grok",
+        "args": ["agent", "-m", "grok-4.5", "--reasoning-effort", "high", "stdio"],
+        "default_model": "grok-4.5",
+        "auth_prefer": "cached_token",
+        "notes": "Native ACP (no npm bridge). Auth via ~/.grok/auth.json cached_token or XAI_API_KEY. "
+                 "Models via field_meta not config_options; effort via session/set_mode. "
+                 "Default: grok-4.5 + high effort.",
+    },
 }
 
 DEFAULT_PROMPT = (
@@ -182,8 +191,13 @@ class ProbeClient(acp.Client):
     async def create_terminal(self, command, session_id, args=None, cwd=None, env=None, output_byte_limit=None, **kw):
         self._tid += 1
         tid = f"t{self._tid}"
-        full_cmd = [command] + (args or [])
-        log("term:run", C.GREEN, f"[{tid}] {' '.join(full_cmd)}")
+        args = list(args or [])
+        # Grok (and other fully-delegated agents) often pass a full shell line as
+        # `command` with empty args (e.g. `/usr/bin/bash -lc '…'`). Prefer shell
+        # when no argv split is provided — matches GatewayACPClient.
+        use_shell = not args
+        display = command if use_shell else " ".join([command] + args)
+        log("term:run", C.GREEN, f"[{tid}] {display}")
 
         env_dict = dict(os.environ)
         if env:
@@ -191,13 +205,22 @@ class ProbeClient(acp.Client):
                 env_dict[getattr(e, 'name', '')] = getattr(e, 'value', '')
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *full_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                cwd=cwd or os.getcwd(),
-                env=env_dict,
-            )
+            if use_shell:
+                proc = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    cwd=cwd or os.getcwd(),
+                    env=env_dict,
+                )
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    command, *args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    cwd=cwd or os.getcwd(),
+                    env=env_dict,
+                )
             self._terminals[tid] = proc
         except Exception as e:
             log("term:err", C.RED, f"[{tid}] Failed to spawn: {e}")

@@ -33,6 +33,7 @@ AGENTS = [
     ("codex",         "codex-acp",    [],                                  False),
     ("droid",         "droid",        ["daemon", "--port", "0"],            True),
     ("hermes",        "hermes-acp",   [],                                   False),
+    ("grok_build",    "grok",         ["agent", "stdio"],                   False),
 ]
 
 INITIALIZE_REQUEST = json.dumps({

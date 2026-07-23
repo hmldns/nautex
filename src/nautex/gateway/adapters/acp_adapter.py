@@ -67,6 +67,9 @@ def create_adapter(agent_id: str, directory_scope: str) -> "ACPAgentAdapter":
     if agent_id == "codex":
         from .codex.runtime import CodexAdapter
         return CodexAdapter(agent_id, directory_scope)
+    if agent_id == "grok_build":
+        from .grok.runtime import GrokAdapter
+        return GrokAdapter(agent_id, directory_scope)
     return ACPAgentAdapter(agent_id, directory_scope)
 
 
@@ -177,6 +180,13 @@ class ACPAgentAdapter(AgentAdapter):
         """
         return None
 
+    async def _after_session_created(self, session: Any) -> None:
+        """Hook after session/new (or equivalent). Override for post-create setup.
+
+        Base is a no-op. Grok uses this to force max reasoning effort via
+        session/set_mode because it does not implement session/set_config_option.
+        """
+        return None
 
     @staticmethod
     def _build_acp_mcp_servers(config: AgentSessionConfig) -> list:
@@ -274,6 +284,11 @@ class ACPAgentAdapter(AgentAdapter):
         session = await self._conn.new_session(cwd=self._directory_scope, mcp_servers=acp_mcp_servers)
         self._acp_session_id = session.session_id
         self._apply_model_state(session)
+        # Also harvest models from initialize field_meta when session omits them
+        # (e.g. Grok advertises modelState on init, not config_options).
+        if not self._available_models:
+            self._apply_model_state(init)
+        await self._after_session_created(session)
         logger.info("ACP session: %s (agent=%s) models=%d current=%s",
                      self._acp_session_id, self._agent_id, len(self._available_models), self._current_model)
 
@@ -304,6 +319,7 @@ class ACPAgentAdapter(AgentAdapter):
         self._acp_session_id = acp_session_id
         if response:
             self._apply_model_state(response)
+        await self._after_session_created(response)
         self._state = AgentConnectionState.ACTIVE
         logger.info("ACP session loaded: %s (agent=%s, restoring=suppressed)", acp_session_id, self._agent_id)
 

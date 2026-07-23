@@ -129,7 +129,12 @@ def validate_binary(reg: SupportedAgentRegistration) -> str:
 
 
 # Default env keys to strip — security policy for credential sandboxing
-DEFAULT_STRIP_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]
+DEFAULT_STRIP_KEYS = [
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "XAI_API_KEY",
+]
 
 
 def build_env(
@@ -188,14 +193,25 @@ def resolve_auth_method(
             return str(am.get("id", ""))
         return str(getattr(am, "id", ""))
 
+    ids = [_get_id(am) for am in acp_auth_methods]
+    ids = [i for i in ids if i]
+    if not ids:
+        return None
+
+    # Prefer non-interactive / cached credentials over browser OAuth.
+    for prefer in ("cached_token", "api_key", "xai.api_key"):
+        for am_id in ids:
+            if prefer in am_id.lower():
+                return am_id
+
     # Prefer oauth/login pattern
-    for am in acp_auth_methods:
-        am_id = _get_id(am)
-        if "oauth" in am_id or "login" in am_id:
+    for am_id in ids:
+        lower = am_id.lower()
+        if "oauth" in lower or "login" in lower:
             return am_id
 
     # First available
-    return _get_id(acp_auth_methods[0])
+    return ids[0]
 
 
 def list_available_agents() -> Dict[str, Dict[str, Any]]:
@@ -255,6 +271,21 @@ def build_descriptor_from_init(
     return descriptor
 
 
+def _field_meta_dict(obj: Any) -> Dict[str, Any]:
+    """Normalize ACP field_meta (object or dict) to a plain dict."""
+    meta = getattr(obj, "field_meta", None)
+    if meta is None and isinstance(obj, dict):
+        meta = obj.get("field_meta")
+    if meta is None:
+        return {}
+    if hasattr(meta, "model_dump"):
+        dumped = meta.model_dump()
+        return dumped if isinstance(dumped, dict) else {}
+    if isinstance(meta, dict):
+        return meta
+    return {}
+
+
 def extract_session_models(
     session_result: Any,
 ) -> tuple[List[ModelInfo], Optional[str]]:
@@ -265,6 +296,11 @@ def extract_session_models(
     session config option: the select option with id == "model" in
     config_options. Its options list is either flat SessionConfigSelectOption
     entries or SessionConfigSelectGroup groups.
+
+    Fallback (Grok Build and similar): models advertised under vendor
+    field_meta keys:
+      - ``x.ai/sessionConfig``.options[{category: model}]
+      - ``modelState``.availableModels / currentModelId (init or session)
     """
     for opt in session_result.config_options or []:
         if not isinstance(opt, SessionConfigOptionSelect) or opt.id != "model":
@@ -285,7 +321,95 @@ def extract_session_models(
         ]
         return model_list, opt.current_value
 
+    return _extract_models_from_field_meta(session_result)
+
+
+def _extract_models_from_field_meta(
+    result: Any,
+) -> tuple[List[ModelInfo], Optional[str]]:
+    """Parse vendor field_meta model listings (Grok Build, etc.)."""
+    meta = _field_meta_dict(result)
+    if not meta:
+        return [], None
+
+    # Prefer session-scoped config when present
+    sc = meta.get("x.ai/sessionConfig") or {}
+    if isinstance(sc, dict):
+        options = sc.get("options") or []
+        model_list: List[ModelInfo] = []
+        current: Optional[str] = None
+        for opt in options:
+            if not isinstance(opt, dict) or opt.get("category") != "model":
+                continue
+            mid = str(opt.get("id") or "")
+            if not mid:
+                continue
+            selected = bool(opt.get("selected"))
+            model_list.append(
+                ModelInfo(
+                    id=mid,
+                    name=str(opt.get("label") or mid),
+                    default=selected,
+                )
+            )
+            if selected:
+                current = mid
+        if model_list:
+            return model_list, current
+
+    # Init-style modelState (also appears on some session responses)
+    state = meta.get("modelState") or {}
+    if isinstance(state, dict):
+        available = state.get("availableModels") or []
+        current_id = state.get("currentModelId")
+        model_list = []
+        for m in available:
+            if not isinstance(m, dict):
+                continue
+            mid = str(m.get("modelId") or m.get("id") or "")
+            if not mid:
+                continue
+            model_list.append(
+                ModelInfo(
+                    id=mid,
+                    name=str(m.get("name") or mid),
+                    default=(mid == current_id),
+                )
+            )
+        if model_list:
+            return model_list, str(current_id) if current_id else None
+
     return [], None
+
+
+def extract_session_effort(session_result: Any) -> Optional[str]:
+    """Extract current reasoning-effort / mode id from vendor field_meta.
+
+    Grok exposes effort as sessionConfig options with category ``mode``
+    (high / medium / low). Returns the selected id, or None.
+    """
+    meta = _field_meta_dict(session_result)
+    sc = meta.get("x.ai/sessionConfig") or {}
+    if not isinstance(sc, dict):
+        return None
+    for opt in sc.get("options") or []:
+        if isinstance(opt, dict) and opt.get("category") == "mode" and opt.get("selected"):
+            eid = opt.get("id")
+            return str(eid) if eid else None
+    # init modelState.reasoningEffort
+    state = meta.get("modelState") or {}
+    if isinstance(state, dict):
+        effort = state.get("reasoningEffort")
+        if effort:
+            return str(effort)
+        # nested under first available model _meta
+        for m in state.get("availableModels") or []:
+            if not isinstance(m, dict):
+                continue
+            nested = m.get("_meta") or {}
+            if isinstance(nested, dict) and nested.get("reasoningEffort"):
+                return str(nested["reasoningEffort"])
+    return None
 
 
 def update_descriptor_from_session(

@@ -54,35 +54,37 @@ Each agent is evaluated across these dimensions:
 | Error behavior | How does agent report failures? Error codes? Retry patterns? |
 | SDK compatibility | Does `agent-client-protocol` SDK work cleanly, or are there schema mismatches? |
 
-### Compatibility Matrix — All 8 Agents (observed evidence, 2026-03-14)
+### Compatibility Matrix — Agents (observed evidence; Grok row 2026-07-22)
 
-| Dimension | Gemini | OpenCode | Cursor | Claude | Droid | Codex | Goose | Kiro |
-|---|---|---|---|---|---|---|---|---|
-| **intro.sh** | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS |
-| Binary | gemini | opencode | cursor-agent | claude-agent-acp | droid | codex-acp | goose | kiro-cli |
-| Version | 0.33.1 | 1.2.26 | — | 0.21.0 | 0.68.1 | 0.10.0 | 1.27.2 | 1.27.2 |
-| Transport | stdio | stdio | stdio | stdio | stdio | stdio | stdio | stdio |
-| agentInfo | yes | yes | **no** | yes | yes | yes | **no** | yes |
-| **Execution** | delegated | local | local | local | delegated | partial | local | local |
-| fs delegation | yes | no | no | no | yes | **yes** | no | no |
-| terminal delegation | yes | no | no | no | yes | no | no | no |
-| **Auth required** | yes | **no** | yes | **no** | yes | yes | yes | **no** |
-| Auth method | oauth-personal | (fails, skip) | cursor_login | (none) | device-pairing | chatgpt | goose-provider | (fails, skip) |
-| Credential source | ACP auth | internal file | ACP auth | env var | ACP auth | ACP auth | **env var** | internal |
-| Needs full env | no | no | no | no | no | no | **yes** | no |
-| **Perm: edit** | gated | none | none | gated | gated | gated | none | gated |
-| **Perm: execute** | gated | none | gated | gated | gated | none | none | gated |
-| Perm option ID | proceed_once | — | allow-once | allow | proceed_once | approved | — | allow_once |
-| Perm kind field | edit/execute | — | execute | edit/execute | edit/execute | edit | — | **None** |
-| Models count | 7 | 80+ | 23 | 3 | 20 | 22 | 9 | 7 |
-| Model format | flat | provider/model | model[params] | simple | versioned | model/effort | flat | simple |
-| Default model | auto-gemini-3 | big-pickle | default[] | default | glm-5 | gpt-5.4/xhigh | claude-sonnet-4-6 | auto |
-| Session ID | UUID | ses_xxx | UUID | UUID | UUID | UUID | date-based | UUID |
-| Session updates | 9 | 23 | 48 | 32 | — | 112 | 53 | 11 |
-| embeddedContext | true | true | **false** | true | true | true | true | **false** |
-| image | true | true | true | true | true | true | true | true |
-| audio | **true** | false | false | false | false | false | false | false |
-| loadSession | true | true | true | true | true | true | true | true |
+| Dimension | Gemini | OpenCode | Cursor | Claude | Droid | Codex | Goose | Kiro | Grok |
+|---|---|---|---|---|---|---|---|---|---|
+| **intro.sh** | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | **PASS** |
+| Binary | gemini | opencode | cursor-agent | claude-agent-acp | droid | codex-acp | goose | kiro-cli | grok |
+| Version | 0.33.1 | 1.2.26 | — | 0.21.0 | 0.68.1 | 0.10.0 | 1.27.2 | 1.27.2 | 0.2.111 |
+| Transport | stdio | stdio | stdio | stdio | stdio | stdio | stdio | stdio | stdio |
+| agentInfo | yes | yes | **no** | yes | yes | yes | **no** | yes | **no** |
+| **Execution** | delegated | local | local | local | delegated | partial | local | local | **delegated** |
+| fs delegation | yes | no | no | no | yes | **yes** | no | no | **yes** |
+| terminal delegation | yes | no | no | no | yes | no | no | no | **yes** |
+| **Auth required** | yes | **no** | yes | **no** | yes | yes | yes | **no** | yes |
+| Auth method | oauth-personal | (fails, skip) | cursor_login | (none) | device-pairing | chatgpt | goose-provider | (fails, skip) | cached_token |
+| Credential source | ACP auth | internal file | ACP auth | env var | ACP auth | ACP auth | **env var** | internal | ACP auth |
+| Needs full env | no | no | no | no | no | no | **yes** | no | no |
+| **Perm: edit** | gated | none | none | gated | gated | gated | none | gated | none* |
+| **Perm: execute** | gated | none | gated | gated | gated | none | none | gated | none* |
+| Perm option ID | proceed_once | — | allow-once | allow | proceed_once | approved | — | allow_once | — |
+| Perm kind field | edit/execute | — | execute | edit/execute | edit/execute | edit | — | **None** | — |
+| Models count | 7 | 80+ | 23 | 3 | 20 | 22 | 9 | 7 | 1+ |
+| Model format | flat | provider/model | model[params] | simple | versioned | model/effort | flat | simple | flat + mode effort |
+| Default model | auto-gemini-3 | big-pickle | default[] | default | glm-5 | gpt-5.4/xhigh | claude-sonnet-4-6 | auto | grok-4.5 / high |
+| Session ID | UUID | ses_xxx | UUID | UUID | UUID | UUID | date-based | UUID | UUID |
+| Session updates | 9 | 23 | 48 | 32 | — | 112 | 53 | 11 | TBD |
+| embeddedContext | true | true | **false** | true | true | true | true | **false** | true |
+| image | true | true | true | true | true | true | true | true | **false** |
+| audio | **true** | false | false | false | false | false | false | false | false |
+| loadSession | true | true | true | true | true | true | true | true | true |
+| set_config_option | yes | yes | yes | yes | yes | yes | yes | yes | **no** |
+| set_session_mode | — | — | — | — | — | — | — | — | **yes** (effort) |
 
 ### Execution Model Taxonomy (from evidence)
 
@@ -124,6 +126,7 @@ These cannot be generalized — must be per-agent config:
 - [`codex/INTEGRATION_EFFORT_LOG.md`](codex/INTEGRATION_EFFORT_LOG.md) — Partial delegation, chatgpt auth, effort tiers.
 - [`goose/INTEGRATION_EFFORT_LOG.md`](goose/INTEGRATION_EFFORT_LOG.md) — Local, env var bug, --with-builtin flag.
 - [`kiro/INTEGRATION_EFFORT_LOG.md`](kiro/INTEGRATION_EFFORT_LOG.md) — Local + gating, auth skippable, kind=None anomaly.
+- [`grok/INTEGRATION_EFFORT_LOG.md`](grok/INTEGRATION_EFFORT_LOG.md) — Native stdio, field_meta models, set_mode effort, no set_config_option.
 
 ## Credential Sandboxing
 
@@ -133,6 +136,7 @@ The process manager strips known sensitive environment variables from the host b
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
+- `XAI_API_KEY`
 
 Extend as new agents are integrated.
 

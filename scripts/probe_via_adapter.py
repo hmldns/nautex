@@ -12,7 +12,7 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from nautex.gateway.adapters.acp_adapter import ACPAgentAdapter
+from nautex.gateway.adapters.acp_adapter import create_adapter
 from nautex.gateway.models import AgentSessionConfig, PromptContent
 from nautex.gateway.protocol import ConsolidatedSessionUpdate, PermissionRequestPayload, PermissionResponsePayload, PermissionAction
 
@@ -40,14 +40,21 @@ async def main():
     with tempfile.TemporaryDirectory(prefix=f"nautex-adapter-probe-{agent_id}-") as tmpdir:
         logger.info("Agent: %s, Workspace: %s", agent_id, tmpdir)
 
-        adapter = ACPAgentAdapter(agent_id, tmpdir)
+        # Use the production factory so per-agent subclasses (Grok, Claude, …) apply.
+        adapter = create_adapter(agent_id, tmpdir)
 
         logger.info("--- Connect ---")
         await adapter.connect(
             config=AgentSessionConfig(directory_scope=tmpdir),
             on_system_event=on_update,
         )
-        logger.info("Connected: state=%s session=%s", adapter.state, adapter._acp_session_id)
+        logger.info(
+            "Connected: state=%s session=%s model=%s models=%s",
+            adapter.state,
+            adapter._acp_session_id,
+            adapter.current_model,
+            adapter.available_models,
+        )
 
         logger.info("--- Prompt ---")
         result = await adapter.prompt(

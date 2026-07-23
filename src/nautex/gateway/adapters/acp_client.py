@@ -140,17 +140,22 @@ class GatewayACPClient(acp.Client):
         full = os.path.join(self._cwd, path) if not os.path.isabs(path) else path
         try:
             with open(full, "r") as f:
-                return acp.ReadTextFileResponse(text=f.read())
+                # ACP schema field is `content` (not `text`)
+                return acp.ReadTextFileResponse(content=f.read())
         except Exception as e:
-            return acp.ReadTextFileResponse(text=f"Error: {e}")
+            return acp.ReadTextFileResponse(content=f"Error: {e}")
 
-    async def write_text_file(self, path, text, session_id=None, **kw):
+    async def write_text_file(self, path, content=None, session_id=None, text=None, **kw):
+        # SDK / agents use `content`; accept legacy `text` as alias.
+        body = content if content is not None else (text if text is not None else "")
         full = os.path.join(self._cwd, path) if not os.path.isabs(path) else path
         await self._gate_fs_write(full)
-        os.makedirs(os.path.dirname(full), exist_ok=True)
+        parent = os.path.dirname(full)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with open(full, "w") as f:
-            f.write(text)
-        logger.debug("Wrote %d bytes to %s", len(text), full)
+            f.write(body)
+        logger.debug("Wrote %d bytes to %s", len(body), full)
         return acp.WriteTextFileResponse()
 
     async def _gate_fs_write(self, full_path: str) -> None:
@@ -188,33 +193,56 @@ class GatewayACPClient(acp.Client):
 
     # --- Terminal (local execution) ---
 
-    async def create_terminal(self, command, session_id=None, **kw):
+    async def create_terminal(self, command, session_id=None, args=None, env=None, cwd=None, **kw):
         # Hard backstop: EXECUTE=DENY refuses delegated terminals outright.
         # ASK/ALLOW are left to the agent's own gating (delegating agents
         # request permission before terminal/create).
+        args = list(args or [])
+        display = command if not args else " ".join([command] + args)
         if resolve_mode(self._permissions, ToolKind.EXECUTE) == PermissionMode.DENY:
             prp = PermissionRequestPayload(
                 permission_id=f"perm-{uuid.uuid4().hex[:8]}",
                 acp_session_id=self._acp_session_id,
                 tool_name="terminal/create",
                 tool_kind=ToolKind.EXECUTE,
-                command=command,
+                command=display,
             )
             await self._on_permission_request(prp)
-            logger.info("Delegated terminal blocked (execute=deny): %s", command)
+            logger.info("Delegated terminal blocked (execute=deny): %s", display)
             raise RequestError(
                 -32000,
                 "Terminal execution rejected by session permission policy (execute: deny)",
             )
         tid = f"term-{uuid.uuid4().hex[:8]}"
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            cwd=self._cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
+        workdir = cwd or self._cwd
+        env_dict = None
+        if env:
+            env_dict = dict(os.environ)
+            for e in env:
+                name = getattr(e, "name", None) or (e.get("name") if isinstance(e, dict) else None)
+                value = getattr(e, "value", None) or (e.get("value") if isinstance(e, dict) else None)
+                if name:
+                    env_dict[str(name)] = str(value or "")
+        # Grok often passes a full shell line as `command` with empty args.
+        # Other agents pass argv as command + args. Prefer shell when no args.
+        if args:
+            proc = await asyncio.create_subprocess_exec(
+                command, *args,
+                cwd=workdir,
+                env=env_dict,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+        else:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                cwd=workdir,
+                env=env_dict,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
         self._terminals[tid] = proc
-        logger.debug("Terminal %s: %s (pid=%d)", tid, command, proc.pid)
+        logger.debug("Terminal %s: %s (pid=%d)", tid, display, proc.pid)
         return acp.CreateTerminalResponse(terminal_id=tid)
 
     async def terminal_output(self, session_id, terminal_id, **kw):

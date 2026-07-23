@@ -101,6 +101,14 @@ SUPPORTED_AGENTS: Dict[str, SupportedAgentRegistration] = {
         launch_args=["acp"],
         credential_source=CredentialSource.INTERNAL,
     ),
+    # Native ACP: `grok agent [flags] stdio`. Flags (-m, --reasoning-effort)
+    # are injected by GrokAdapter before the `stdio` subcommand.
+    "grok_build": SupportedAgentRegistration(
+        agent_id="grok_build",
+        executable="grok",
+        launch_args=["agent"],
+        credential_source=CredentialSource.ACP_AUTH,
+    ),
     "mock_testing_agent": SupportedAgentRegistration(
         agent_id="mock_testing_agent",
         executable="<built-in>",

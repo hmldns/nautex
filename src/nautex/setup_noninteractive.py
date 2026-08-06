@@ -24,6 +24,7 @@ AGENT_MAP = {
     "codex": AgentType.CODEX,
     "opencode": AgentType.OPENCODE,
     "gemini": AgentType.GEMINI,
+    "grok": AgentType.GROK,
 }
 
 

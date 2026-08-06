@@ -7,6 +7,7 @@ Supported agents:
 - Codex
 - OpenCode
 - Gemini CLI
+- Grok Build
 
 # Motivation
 
@@ -103,7 +104,7 @@ uvx nautex setup --token <TOKEN> --project <PROJECT_ID> --plan <PLAN_ID> --agent
 | `--token`, `-t` | API token (create at [nautex.ai](https://app.nautex.ai/settings/nautex-api)) |
 | `--project`, `-p` | Project ID |
 | `--plan`, `-l` | Implementation plan ID |
-| `--agent`, `-a` | Agent type: `claude`, `cursor`, `codex`, `opencode`, `gemini` |
+| `--agent`, `-a` | Agent type: `claude`, `cursor`, `codex`, `opencode`, `gemini`, `grok` |
 | `--yes`, `-y` | Skip confirmation prompts |
 
 This validates your token, project, and plan, then writes all configuration to your project root:
@@ -182,6 +183,14 @@ All configuration is scoped per-project in your project root.
 
 - MCP config: `.gemini/settings.json`
 - Rules: managed section added to `GEMINI.md`
+</details>
+
+<details>
+<summary>Grok Build</summary>
+
+- MCP config: `.grok/config.toml` (project-local, backup created as `config.toml.bak` before first write; `startup_timeout_sec = 20`)
+- Rules: managed section added to `AGENTS.md`
+- Verify: run `grok mcp list` / `grok mcp doctor nautex`, or open `/mcps` in the Grok TUI
 </details>
 
 ## Start Coding

@@ -26,6 +26,7 @@ class AgentType(str, Enum):
     CODEX = "codex"
     OPENCODE = "opencode"
     GEMINI = "gemini"
+    GROK = "grok"
 
     @classmethod
     def list(cls) -> List['AgentType']:
@@ -50,6 +51,8 @@ class AgentType(str, Enum):
             return "OpenCode"
         elif self == AgentType.GEMINI:
             return "Gemini"
+        elif self == AgentType.GROK:
+            return "Grok Build"
         return self.value.title()
 
 

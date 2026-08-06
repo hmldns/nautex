@@ -139,7 +139,7 @@ def main() -> None:
     setup_parser.add_argument("--project", "-p", default=None, help="Project ID")
     setup_parser.add_argument("--plan", "-l", default=None, help="Implementation plan ID")
     setup_parser.add_argument("--agent", "-a", default=None,
-                              choices=["claude", "cursor", "codex", "opencode", "gemini"],
+                              choices=["claude", "cursor", "codex", "opencode", "gemini", "grok"],
                               help="Agent type")
     setup_parser.add_argument("--host", default=None,
                               help="Override API host URL (saved to .nautex/.env)")

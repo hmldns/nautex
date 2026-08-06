@@ -1,10 +1,10 @@
-"""Utility functions for MCP configuration in TOML format (for Codex).
+"""Utility functions for MCP configuration in TOML format (Codex, Grok Build, etc.).
 
 Strict TOML parsing via `tomli` (Python 3.10).
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import logging
 import tomli
 
@@ -57,7 +57,20 @@ def validate_mcp_toml_file(mcp_path: Path, cwd: Path | None = None) -> MCPConfig
         return MCPConfigStatus.MISCONFIGURED
 
 
-def write_mcp_toml_configuration(target_path: Path, cwd: Path | None = None) -> bool:
+def write_mcp_toml_configuration(
+    target_path: Path,
+    cwd: Path | None = None,
+    *,
+    entry_extras: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Write or merge a Nautex MCP server entry into a TOML config.
+
+    Args:
+        target_path: Path to the agent TOML config (e.g. `.codex/config.toml`).
+        cwd: Unused; kept for call-site compatibility.
+        entry_extras: Optional extra fields merged into ``mcp_servers.nautex``
+            (e.g. ``enabled``, ``startup_timeout_sec`` for Grok Build).
+    """
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -67,7 +80,7 @@ def write_mcp_toml_configuration(target_path: Path, cwd: Path | None = None) -> 
             if not isinstance(base, dict):
                 base = {}
 
-        # Ensure correct top-level table for Codex
+        # Ensure correct top-level table for Codex / Grok-style configs
         if "mcp_servers" not in base or not isinstance(base.get("mcp_servers"), dict):
             base["mcp_servers"] = {}
 
@@ -75,7 +88,8 @@ def write_mcp_toml_configuration(target_path: Path, cwd: Path | None = None) -> 
             "command": "uvx",
             "args": ["nautex", "mcp"],
         }
-        # env table is optional; omit by default
+        if entry_extras:
+            nautex_entry.update(entry_extras)
 
         base["mcp_servers"]["nautex"] = nautex_entry
 

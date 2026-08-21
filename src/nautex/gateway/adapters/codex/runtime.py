@@ -42,6 +42,8 @@ from ..launch_config import (
     launch_config_path,
     resolve_mode,
 )
+from ..stream_consolidator import StreamConsolidator
+from .provider_errors import parse_codex_provider_error
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,12 @@ def _resolve_agent_mode(config: AgentSessionConfig) -> str:
 
 
 class CodexAdapter(ACPAgentAdapter):
+    def _create_consolidator(self, session_id: str) -> StreamConsolidator:
+        return StreamConsolidator(
+            session_id,
+            parse_agent_error=parse_codex_provider_error,
+        )
+
     def _gate_delegated_fs_ask(self) -> bool:
         """If the bridge ever delegates an fs write without a preceding
         permission request, the gateway client must surface ASK itself."""

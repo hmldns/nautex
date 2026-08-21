@@ -180,6 +180,14 @@ class ACPAgentAdapter(AgentAdapter):
         """
         return None
 
+    def _create_consolidator(self, session_id: str) -> StreamConsolidator:
+        """Create the stream boundary used for this adapter's ACP updates.
+
+        Subclasses may supply narrowly observed normalization behavior without
+        teaching the shared ACP client about one bridge's wire quirks.
+        """
+        return StreamConsolidator(session_id)
+
     async def _after_session_created(self, session: Any) -> None:
         """Hook after session/new (or equivalent). Override for post-create setup.
 
@@ -234,7 +242,7 @@ class ACPAgentAdapter(AgentAdapter):
         # PermissionAction → ACP RequestPermissionResponse for their agent.
         self._client = GatewayACPClient(
             acp_session_id="",
-            consolidator=StreamConsolidator(""),
+            consolidator=self._create_consolidator(""),
             on_update=on_system_event,
             on_permission_request=self._noop_permission,
             cwd=self._directory_scope,
@@ -361,7 +369,7 @@ class ACPAgentAdapter(AgentAdapter):
             raise AdapterNotConnectedError(self._agent_id, "prompt")
         self._is_restoring = False
 
-        consolidator = StreamConsolidator(acp_sid)
+        consolidator = self._create_consolidator(acp_sid)
         self._consolidator = consolidator
 
         # Rewire the client's callbacks for this prompt

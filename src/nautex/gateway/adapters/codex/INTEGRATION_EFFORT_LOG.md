@@ -217,3 +217,21 @@ Observed (all via session-config probe + raw JSON-RPC probes + dist source):
    session/new. Model switching via `session/set_config_option`.
 6. Still passing after migration: default_noop, read_only_exploration,
    system_prompt_marker, mcp_injection.
+
+## Step O: Provider HTTP error leaked as agent speech (2026-08-21)
+
+Observed in a production exploration using `codex-acp` 1.1.0 with its bundled
+Codex 0.142.5. The selected `gpt-5.6-sol` model rejected that client version.
+Instead of failing `session/prompt` with JSON-RPC `RequestError`, the bridge
+sent the provider's complete HTTP error envelope through
+`agent_message_chunk` and completed the turn with `stopReason=end_turn`.
+The shared adapter exception handler therefore could not emit its existing
+`AGENT_ERROR` update, and the backend persisted the failure as agent speech.
+
+Nautex normalizes this only at the Codex adapter boundary. A complete text
+message must validate as the strict envelope `{type: "error", status: 4xx/5xx,
+error: {message: non-empty}}`; then the adapter converts it to the existing
+`AGENT_ERROR` CSU with the HTTP status as code and the original JSON as detail.
+The shared stream consolidator owns only the typed normalization hook. Other
+agents retain their ordinary message semantics until the same behavior is
+observed for them.

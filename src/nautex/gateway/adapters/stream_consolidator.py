@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from acp.contrib.session_state import SessionAccumulator
@@ -41,6 +42,18 @@ _TEXT_KINDS = frozenset({
 _SENTENCE_TERMINATORS = frozenset(".!?\n")
 
 
+@dataclass(frozen=True)
+class ParsedAgentError:
+    """Adapter-specific interpretation of assistant text as a real failure."""
+
+    message: str
+    code: Optional[int] = None
+    detail: Optional[str] = None
+
+
+AgentErrorParser = Callable[[str], Optional[ParsedAgentError]]
+
+
 class ProtocolParseError(Exception):
     """Raised when an incoming ACP payload fails strict validation.
 
@@ -60,9 +73,15 @@ class StreamConsolidator:
     and can be sampled at 3Hz via get_telemetry().
     """
 
-    def __init__(self, session_id: str, buffer_text: bool = True):
+    def __init__(
+        self,
+        session_id: str,
+        buffer_text: bool = True,
+        parse_agent_error: Optional[AgentErrorParser] = None,
+    ):
         self._session_id = session_id
         self._buffer_text = buffer_text
+        self._parse_agent_error = parse_agent_error
         self._accumulator = SessionAccumulator()
         self._updates: List[ConsolidatedSessionUpdate] = []
 
@@ -216,12 +235,29 @@ class StreamConsolidator:
                 self._text_buffer_kind = None
             return []
         text = "".join(self._text_parts)
-        csu = ConsolidatedSessionUpdate(
-            kind=self._text_buffer_kind or SessionUpdateKind.AGENT_MESSAGE,
-            text=text,
-            acp_session_id=self._session_id,
-            acp_message_id=self._text_buffer_message_id,
+        kind = self._text_buffer_kind or SessionUpdateKind.AGENT_MESSAGE
+        parsed_error = (
+            self._parse_agent_error(text)
+            if kind == SessionUpdateKind.AGENT_MESSAGE
+            and self._parse_agent_error is not None
+            else None
         )
+        if parsed_error is not None:
+            csu = ConsolidatedSessionUpdate(
+                kind=SessionUpdateKind.AGENT_ERROR,
+                text=parsed_error.message,
+                error_code=parsed_error.code,
+                error_detail=parsed_error.detail,
+                acp_session_id=self._session_id,
+                acp_message_id=self._text_buffer_message_id,
+            )
+        else:
+            csu = ConsolidatedSessionUpdate(
+                kind=kind,
+                text=text,
+                acp_session_id=self._session_id,
+                acp_message_id=self._text_buffer_message_id,
+            )
         self._updates.append(csu)
         self._text_parts.clear()
         if reset_identity:

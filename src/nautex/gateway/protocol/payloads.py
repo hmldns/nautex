@@ -126,6 +126,7 @@ class ExecutePromptPayload(BaseModel):
     session_id: str
     agent_id: str
     prompt: str
+    turn_id: Optional[str] = None
     system_prompt: Optional[str] = None
     model: Optional[str] = None
 
@@ -240,6 +241,8 @@ class AgentLifecyclePayload(BaseModel):
     model_id: str = ""
     pid: int = 0
     return_code: int = 0
+    turn_id: str = ""
+    error_detail: Optional[str] = None
     available_models: List[str] = []
 
 

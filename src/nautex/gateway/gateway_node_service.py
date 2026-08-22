@@ -117,6 +117,7 @@ class GatewayNodeService:
         self._session_agents: Dict[str, str] = {}          # session_id → agent_id
         self._adapters: Dict[str, AgentAdapter] = {}       # session_id → adapter
         self._monitor_tasks: Dict[str, asyncio.Task] = {}  # session_id → process monitor
+        self._active_turn_ids: Dict[str, str] = {}         # session_id → backend attempt id
         self._indexer: Optional[FuzzyIndexer] = None
         self._current_identity: Optional[IdentitySnapshot] = None
         self._anchor_env_id: Optional[str] = None
@@ -357,14 +358,9 @@ class GatewayNodeService:
         logger.info("Dispatching prompt to %s (session=%s): %s",
                      payload.agent_id, payload.session_id, payload.prompt[:80])
 
-        # Get adapter — must be started via SpawnAgent before prompting
-        adapter = self._adapters.get(payload.session_id)
-        if not adapter:
-            logger.warning("No adapter for session %s — agent not started", payload.session_id)
-            return
-
-        # Synthesize turn_id for this prompt dispatch
-        turn_id = str(uuid4())
+        # The backend supplies the dispatch-attempt identity. Direct AGW
+        # callers remain compatible by letting the gateway create one.
+        turn_id = payload.turn_id or str(uuid4())
 
         async def forward_with_session_id(csu: ConsolidatedSessionUpdate) -> None:
             try:
@@ -375,12 +371,36 @@ class GatewayNodeService:
                 logger.error("CSU forward failed (session=%s kind=%s): %s",
                              payload.session_id, csu.kind, e, exc_info=True)
 
+        # Get adapter — it must have been started explicitly before prompting.
+        # A stale backend lifecycle must fail visibly instead of swallowing the
+        # prompt and leaving the dispatch PROCESSING forever.
+        adapter = self._adapters.get(payload.session_id)
+        if not adapter:
+            detail = f"No active adapter for session {payload.session_id}"
+            logger.warning(detail)
+            await forward_with_session_id(ConsolidatedSessionUpdate(
+                kind=SessionUpdateKind.AGENT_ERROR,
+                text=detail,
+                error_detail=detail,
+            ))
+            await self._emit_lifecycle(
+                session_id=payload.session_id,
+                event=AgentLifecycleEvent.CRASHED,
+                agent_id=payload.agent_id,
+                turn_id=turn_id,
+                error_detail=detail,
+            )
+            return
+
+        self._active_turn_ids[payload.session_id] = turn_id
+
         async def permission_with_session_id(prp: PermissionRequestPayload) -> PermissionResponsePayload:
             prp.session_id = payload.session_id
             return await self._handle_adapter_permission(prp)
 
         # Signal turn lifecycle
         await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_STARTED))
+        completed = False
         try:
             await adapter.prompt(
                 session_id=payload.session_id,
@@ -388,11 +408,26 @@ class GatewayNodeService:
                 on_update=forward_with_session_id,
                 on_permission_request=permission_with_session_id,
             )
+            completed = True
         except Exception as e:
             logger.error("Prompt execution failed for %s (session=%s): %s",
                          payload.agent_id, payload.session_id, e, exc_info=True)
+            await forward_with_session_id(ConsolidatedSessionUpdate(
+                kind=SessionUpdateKind.AGENT_ERROR,
+                text=str(e),
+                error_detail=repr(e),
+            ))
+            await self._finalize_agent(
+                adapter=adapter,
+                session_id=payload.session_id,
+                agent_id=payload.agent_id,
+                event=AgentLifecycleEvent.CRASHED,
+                error_detail=str(e),
+            )
         finally:
-            await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
+            self._active_turn_ids.pop(payload.session_id, None)
+            if completed:
+                await forward_with_session_id(ConsolidatedSessionUpdate(kind=SessionUpdateKind.TURN_COMPLETE))
 
     async def _handle_spawn_agent(self, payload: SpawnAgentPayload) -> None:
         """Spawn agent adapter for a session — dedicated command from backend.
@@ -493,6 +528,7 @@ class GatewayNodeService:
 
             self._adapters[payload.session_id] = adapter
             self._session_agents[payload.session_id] = payload.agent_id
+            self._active_turn_ids.pop(payload.session_id, None)
 
             agent_pid = adapter.pid
             await self._emit_lifecycle(
@@ -513,6 +549,7 @@ class GatewayNodeService:
                 session_id=payload.session_id,
                 event=AgentLifecycleEvent.CRASHED,
                 agent_id=payload.agent_id,
+                error_detail=str(e),
             )
 
     async def _handle_stop_agent(self, payload: StopAgentPayload) -> None:
@@ -522,21 +559,8 @@ class GatewayNodeService:
             logger.warning("Session %s has no adapter, nothing to stop", payload.session_id)
             return
 
-        # Cancel process monitor — we handle lifecycle directly (symmetric with start)
-        monitor = self._monitor_tasks.pop(payload.session_id, None)
-        if monitor and not monitor.done():
-            monitor.cancel()
-
-        try:
-            await adapter.disconnect()
-        except Exception as e:
-            logger.warning("Error disconnecting adapter for session %s: %s", payload.session_id, e)
-
-        self._adapters.pop(payload.session_id, None)
-        self._session_agents.pop(payload.session_id, None)
-
-        # Emit EXITED — symmetric with STARTED in _handle_spawn_agent
-        await self._emit_lifecycle(
+        await self._finalize_agent(
+            adapter=adapter,
             session_id=payload.session_id,
             event=AgentLifecycleEvent.EXITED,
             agent_id=payload.agent_id,
@@ -637,21 +661,62 @@ class GatewayNodeService:
                 event = AgentLifecycleEvent.EXITED
             else:
                 event = AgentLifecycleEvent.CRASHED
-            await self._emit_lifecycle(
+            await self._finalize_agent(
+                adapter=adapter,
                 session_id=session_id,
                 event=event,
                 agent_id=agent_id,
                 pid=pid,
                 return_code=returncode,
             )
-            # Clean up adapter + monitor ref
-            self._adapters.pop(session_id, None)
-            self._session_agents.pop(session_id, None)
-            self._monitor_tasks.pop(session_id, None)
         except asyncio.CancelledError:
             pass
         except Exception as e:
             logger.error("Process monitor error for %s: %s", agent_id, e)
+
+    async def _finalize_agent(
+        self,
+        *,
+        adapter: AgentAdapter,
+        session_id: str,
+        agent_id: str,
+        event: AgentLifecycleEvent,
+        pid: int = 0,
+        return_code: int = 0,
+        error_detail: Optional[str] = None,
+    ) -> bool:
+        """Own one terminal lifecycle transition for one adapter instance."""
+        if self._adapters.get(session_id) is not adapter:
+            return False
+
+        self._adapters.pop(session_id, None)
+        self._session_agents.pop(session_id, None)
+        turn_id = self._active_turn_ids.pop(session_id, "")
+
+        monitor = self._monitor_tasks.pop(session_id, None)
+        current_task = asyncio.current_task()
+        if monitor and monitor is not current_task and not monitor.done():
+            monitor.cancel()
+
+        try:
+            await adapter.disconnect()
+        except Exception as error:
+            logger.warning(
+                "Error cleaning adapter for session %s: %s",
+                session_id,
+                error,
+            )
+
+        await self._emit_lifecycle(
+            session_id=session_id,
+            event=event,
+            agent_id=agent_id,
+            pid=pid,
+            return_code=return_code,
+            turn_id=turn_id,
+            error_detail=error_detail,
+        )
+        return True
 
     async def _emit_lifecycle(
         self,
@@ -662,6 +727,8 @@ class GatewayNodeService:
         version: str = "",
         model_id: str = "",
         return_code: int = 0,
+        turn_id: str = "",
+        error_detail: Optional[str] = None,
         available_models: Optional[List[str]] = None,
         acp_session_id: str = "",
     ) -> None:
@@ -677,6 +744,8 @@ class GatewayNodeService:
             version=version,
             model_id=model_id,
             return_code=return_code,
+            turn_id=turn_id,
+            error_detail=error_detail,
             available_models=available_models or [],
         )
         envelope = GatewayWsEnvelope(route=NODE_AGENT_LIFECYCLE, payload=payload)
@@ -751,16 +820,8 @@ class GatewayNodeService:
             if not adapter:
                 continue
 
-            monitor = self._monitor_tasks.pop(sid, None)
-            if monitor and not monitor.done():
-                monitor.cancel()
-
-            try:
-                await adapter.disconnect()
-            except Exception as e:
-                logger.warning("Adapter disconnect error for session %s: %s", sid, e)
-
-            await self._emit_lifecycle(
+            await self._finalize_agent(
+                adapter=adapter,
                 session_id=sid,
                 event=AgentLifecycleEvent.EXITED,
                 agent_id=agent_id,

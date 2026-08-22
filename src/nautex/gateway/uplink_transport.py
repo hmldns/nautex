@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine, Optional
 
@@ -31,8 +32,9 @@ logger = logging.getLogger(__name__)
 
 # Backoff config
 INITIAL_BACKOFF = 1.0
-MAX_BACKOFF = 5.0
+MAX_BACKOFF = 30.0
 BACKOFF_FACTOR = 2.0
+STABLE_CONNECTION_SECONDS = 10.0
 
 # Connection state payloads emitted to event bus
 CONNECTION_STATE_CONNECTED = "connected"
@@ -63,6 +65,15 @@ class GatewayUplinkTransport(ABC):
     def on_message(
         self, handler: Callable[[GatewayWsEnvelope], Coroutine[Any, Any, None]]
     ) -> None: ...
+
+    @abstractmethod
+    def on_reconnect(
+        self,
+        handler: Callable[[], Coroutine[Any, Any, None]],
+    ) -> None: ...
+
+    @abstractmethod
+    async def drain(self, timeout: float = 2.0) -> None: ...
 
     @property
     @abstractmethod
@@ -104,6 +115,9 @@ class WebSocketUplink(GatewayUplinkTransport):
         self._send_task: Optional[asyncio.Task] = None
         self._reconnect_task: Optional[asyncio.Task] = None
         self._reconnecting = False
+        self._reconnect_backoff = INITIAL_BACKOFF
+        self._connected_at: Optional[float] = None
+        self._bootstrap_messages: Optional[list[str]] = None
 
     @property
     def is_connected(self) -> bool:
@@ -118,9 +132,7 @@ class WebSocketUplink(GatewayUplinkTransport):
     ) -> None:
         self._handler = handler
 
-    def on_reconnect(
-        self, handler: Callable[[], Coroutine[Any, Any, None]]
-    ) -> None:
+    def on_reconnect(self, handler: Callable[[], Coroutine[Any, Any, None]]) -> None:
         """Set callback invoked on reconnection (before send loop resumes)."""
         self._on_reconnect = handler
 
@@ -156,10 +168,17 @@ class WebSocketUplink(GatewayUplinkTransport):
 
     async def send(self, envelope: GatewayWsEnvelope) -> None:
         """Enqueue an envelope for sending. Non-blocking, unbounded."""
-        self._queue.put_nowait(envelope.model_dump_json())
+        self._enqueue(envelope.model_dump_json())
 
     async def send_raw(self, data: str) -> None:
         """Enqueue a raw JSON string for sending."""
+        self._enqueue(data)
+
+    def _enqueue(self, data: str) -> None:
+        """Queue normal traffic, or capture reconnect bootstrap traffic."""
+        if self._bootstrap_messages is not None:
+            self._bootstrap_messages.append(data)
+            return
         self._queue.put_nowait(data)
 
     # ------------------------------------------------------------------
@@ -193,10 +212,14 @@ class WebSocketUplink(GatewayUplinkTransport):
             self._ws = None
 
         try:
-            self._ws = await websockets.connect(
-                self._url, additional_headers=headers, open_timeout=5,
+            websocket = await websockets.connect(
+                self._url,
+                additional_headers=headers,
+                open_timeout=5,
             )
+            self._ws = websocket
             self._connected = True
+            self._connected_at = time.monotonic()
             is_reconnect = self._has_connected_once
             self._has_connected_once = True
             logger.info("Uplink connected to %s", self._url)
@@ -204,10 +227,15 @@ class WebSocketUplink(GatewayUplinkTransport):
 
             # On reconnect: re-register + re-declare before unblocking send loop
             if is_reconnect and self._on_reconnect:
+                self._bootstrap_messages = []
                 try:
                     await self._on_reconnect()
                 except Exception as e:
                     logger.error("on_reconnect callback failed: %s", e)
+                finally:
+                    bootstrap_messages = self._bootstrap_messages
+                    self._bootstrap_messages = None
+                self._prepend_messages(bootstrap_messages)
 
             # Unblock send loop
             self._connected_event.set()
@@ -215,7 +243,7 @@ class WebSocketUplink(GatewayUplinkTransport):
             # Cancel stale recv loop before starting a fresh one
             if self._recv_task and not self._recv_task.done():
                 self._recv_task.cancel()
-            self._recv_task = asyncio.create_task(self._recv_loop())
+            self._recv_task = asyncio.create_task(self._recv_loop(websocket))
         except Exception as e:
             logger.warning("Connection failed: %s", e)
             self._connected = False
@@ -245,33 +273,42 @@ class WebSocketUplink(GatewayUplinkTransport):
                 break
 
             try:
-                await self._ws.send(data)
+                websocket = self._ws
+                if websocket is None:
+                    raise ConnectionError("Uplink socket disappeared before send")
+                await websocket.send(data)
                 self._queue.task_done()
             except Exception as e:
                 # Send failed — re-enqueue at front and trigger reconnect
                 logger.warning("Send failed, re-queuing: %s", e)
                 self._queue.task_done()
                 self._requeue_front(data)
-                self._connected = False
-                self._connected_event.clear()
+                self._mark_disconnected()
                 self._emit_connection_state(CONNECTION_STATE_DISCONNECTED)
                 self._trigger_reconnect()
 
     def _requeue_front(self, data: str) -> None:
         """Put a failed message back at the front of the queue."""
+        self._prepend_messages([data])
+
+    def _prepend_messages(self, messages: list[str]) -> None:
+        """Put ordered bootstrap/retry messages before buffered traffic."""
+        if not messages:
+            return
         old_queue = self._queue
         self._queue = asyncio.Queue()
-        self._queue.put_nowait(data)
+        for message in messages:
+            self._queue.put_nowait(message)
         while not old_queue.empty():
             try:
                 self._queue.put_nowait(old_queue.get_nowait())
             except asyncio.QueueEmpty:
                 break
 
-    async def _recv_loop(self) -> None:
+    async def _recv_loop(self, websocket: ClientConnection) -> None:
         """Read messages from WebSocket and dispatch to handler."""
         try:
-            async for raw in self._ws:
+            async for raw in websocket:
                 if self._shutdown:
                     break
                 try:
@@ -280,31 +317,56 @@ class WebSocketUplink(GatewayUplinkTransport):
                         await self._handler(envelope)
                 except Exception as e:
                     logger.warning("Failed to parse incoming message: %s", e)
-        except websockets.ConnectionClosed:
-            logger.info("Uplink connection closed")
+        except websockets.ConnectionClosed as e:
+            logger.info(
+                "Uplink connection closed: code=%s reason=%s",
+                e.code,
+                e.reason,
+            )
         except Exception as e:
             logger.warning("Recv loop error: %s", e)
         finally:
-            self._connected = False
-            self._connected_event.clear()
-            if not self._shutdown:
-                self._emit_connection_state(CONNECTION_STATE_DISCONNECTED)
-                self._trigger_reconnect()
+            # A cancelled receive task from an older socket must not mark a
+            # newer replacement connection as disconnected.
+            if self._ws is websocket:
+                self._mark_disconnected()
+                if not self._shutdown:
+                    self._emit_connection_state(CONNECTION_STATE_DISCONNECTED)
+                    self._trigger_reconnect()
+
+    def _mark_disconnected(self) -> None:
+        """Record a disconnect; reset backoff only after a stable session."""
+        if self._connected_at is not None:
+            connected_for = time.monotonic() - self._connected_at
+            if connected_for >= STABLE_CONNECTION_SECONDS:
+                self._reconnect_backoff = INITIAL_BACKOFF
+            self._connected_at = None
+        self._connected = False
+        self._connected_event.clear()
 
     async def _reconnect(self) -> None:
         """Exponential backoff reconnection loop."""
         try:
             self._emit_connection_state(CONNECTION_STATE_RECONNECTING)
-            backoff = INITIAL_BACKOFF
             while not self._shutdown:
-                logger.info("Reconnecting in %.1fs... (queued=%d)", backoff, self._queue.qsize())
+                backoff = self._reconnect_backoff
+                logger.info(
+                    "Reconnecting in %.1fs... (queued=%d)",
+                    backoff,
+                    self._queue.qsize(),
+                )
                 await asyncio.sleep(backoff)
                 if self._shutdown:
                     break
+                # Advance before attempting so a briefly accepted connection
+                # cannot restart a new reconnect loop at the initial delay.
+                self._reconnect_backoff = min(
+                    backoff * BACKOFF_FACTOR,
+                    MAX_BACKOFF,
+                )
                 await self._establish(start_reconnect_on_fail=False)
                 if self._connected:
                     return
-                backoff = min(backoff * BACKOFF_FACTOR, MAX_BACKOFF)
         except asyncio.CancelledError:
             raise
         finally:

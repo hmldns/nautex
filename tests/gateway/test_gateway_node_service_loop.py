@@ -1,6 +1,8 @@
 """Integration tests for GatewayNodeService with mock WebSocket server."""
 
 import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
 
 from nautex.gateway.config import GatewayNodeConfig
@@ -9,10 +11,14 @@ from nautex.gateway.gateway_node_service import GatewayNodeService
 from nautex.gateway.protocol import (
     GatewayWsEnvelope,
     HeartbeatPayload,
+    ExecutePromptPayload,
+    AgentLifecycleEvent,
     PermissionResponsePayload,
     PermissionRequestPayload,
+    NODE_AGENT_LIFECYCLE,
+    NODE_SESSION_UPDATE,
 )
-from nautex.gateway.uplink_transport import WebSocketUplink
+from nautex.gateway.uplink_transport import GatewayUplinkTransport, WebSocketUplink
 
 from .dummy_ws_server import DummyWsServer
 
@@ -166,3 +172,48 @@ class TestBuffering:
         )
         await uplink.send(envelope)
         assert uplink.buffered_count == 1
+
+
+class TestPromptLifecycle:
+
+    @pytest.mark.asyncio
+    async def test_unexpected_prompt_failure_crashes_agent_without_turn_complete(
+        self,
+        config,
+    ):
+        uplink = AsyncMock(spec=GatewayUplinkTransport)
+        adapter = AsyncMock()
+        adapter.prompt.side_effect = RuntimeError("adapter transport lost")
+        svc = GatewayNodeService(config, uplink=uplink)
+        svc._adapters["session-1"] = adapter
+        svc._session_agents["session-1"] = "codex"
+
+        await svc._dispatch_prompt(ExecutePromptPayload(
+            session_id="session-1",
+            agent_id="codex",
+            prompt="Implement the task",
+            turn_id="attempt-1",
+        ))
+
+        envelopes = [call.args[0] for call in uplink.send.await_args_list]
+        session_updates = [
+            envelope.payload
+            for envelope in envelopes
+            if envelope.route == NODE_SESSION_UPDATE
+        ]
+        lifecycle = [
+            envelope.payload
+            for envelope in envelopes
+            if envelope.route == NODE_AGENT_LIFECYCLE
+        ]
+
+        assert [update.kind.value for update in session_updates] == [
+            "turn_started",
+            "agent_error",
+        ]
+        assert all(update.turn_id == "attempt-1" for update in session_updates)
+        assert len(lifecycle) == 1
+        assert lifecycle[0].event == AgentLifecycleEvent.CRASHED
+        assert lifecycle[0].error_detail == "adapter transport lost"
+        assert "session-1" not in svc._adapters
+        adapter.disconnect.assert_awaited_once()

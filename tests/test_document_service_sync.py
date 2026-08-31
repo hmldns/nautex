@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import nautex.services.document_service as document_service_module
 from nautex.api.api_models import Document, ImplementationPlan, Node
 from nautex.services.document_service import DocumentService
 from nautex.services.docs_meta import SYNC_META_FILENAME, DocsSyncMeta
@@ -72,6 +73,57 @@ async def test_fresh_sync_fetches_all_and_stamps_meta(service, api_service, docs
 
 
 @pytest.mark.asyncio
+async def test_document_is_written_atomically_as_utf8(service, docs_dir, monkeypatch):
+    document = Document(
+        designator="MDS",
+        title="MDS title",
+        updated_at=TS_OLD,
+        node=Node(title="root", content="Flow → result; subset ⊆ set"),
+    )
+    output_path = docs_dir / "MDS.md"
+    open_calls = []
+    real_open = document_service_module.aiofiles.open
+
+    def recording_open(*args, **kwargs):
+        open_calls.append((args, kwargs))
+        return real_open(*args, **kwargs)
+
+    monkeypatch.setattr(document_service_module.aiofiles, "open", recording_open)
+
+    success, result = await service.save_document_to_file(document, output_path)
+
+    assert success, result
+    assert "Flow → result; subset ⊆ set" in output_path.read_text(encoding="utf-8")
+    assert open_calls[0][1]["encoding"] == "utf-8"
+    assert open_calls[0][1]["newline"] == "\n"
+    assert open_calls[0][0][0] != output_path
+    assert not list(docs_dir.glob(".MDS.md.*.tmp"))
+
+
+@pytest.mark.asyncio
+async def test_failed_atomic_replace_preserves_existing_document(
+    service, docs_dir, monkeypatch
+):
+    docs_dir.mkdir(parents=True)
+    output_path = docs_dir / "MDS.md"
+    output_path.write_text("last good version", encoding="utf-8")
+
+    def fail_replace(source, destination):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(document_service_module.os, "replace", fail_replace)
+
+    success, result = await service.save_document_to_file(
+        make_document("MDS"), output_path
+    )
+
+    assert not success
+    assert "simulated replace failure" in result
+    assert output_path.read_text(encoding="utf-8") == "last good version"
+    assert not list(docs_dir.glob(".MDS.md.*.tmp"))
+
+
+@pytest.mark.asyncio
 async def test_unchanged_docs_skip_fetch(service, api_service, docs_dir):
     synced_state(service, docs_dir)
 
@@ -103,6 +155,20 @@ async def test_missing_local_file_refetched(service, api_service, docs_dir):
 
     assert api_service.get_document_tree.await_count == 1
     assert (docs_dir / "PRD.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_empty_local_file_refetched(service, api_service, docs_dir):
+    synced_state(service, docs_dir)
+    (docs_dir / "PRD.md").write_bytes(b"")
+
+    await service.ensure_documents(
+        "proj-1", ["PRD", "TRD"],
+        documents_updated_at={"PRD": TS_OLD, "TRD": TS_OLD},
+    )
+
+    assert api_service.get_document_tree.await_count == 1
+    assert (docs_dir / "PRD.md").stat().st_size > 0
 
 
 @pytest.mark.asyncio

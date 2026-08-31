@@ -80,6 +80,7 @@ class RefetchReason(str, Enum):
     BAD_STORED_TS = "bad_stored_ts"
     STORED_TS_IN_FUTURE = "stored_ts_in_future"
     LOCAL_FILE_MISSING = "local_file_missing"
+    LOCAL_FILE_EMPTY = "local_file_empty"
     SERVER_NEWER = "server_newer"
     UP_TO_DATE = "up_to_date"               # the only non-fetch outcome
 
@@ -109,6 +110,11 @@ def needs_refetch(
     if stored_dt > now + CLOCK_SKEW_TOLERANCE:
         return True, RefetchReason.STORED_TS_IN_FUTURE
     if not local_file.exists():
+        return True, RefetchReason.LOCAL_FILE_MISSING
+    try:
+        if local_file.stat().st_size == 0:
+            return True, RefetchReason.LOCAL_FILE_EMPTY
+    except OSError:
         return True, RefetchReason.LOCAL_FILE_MISSING
     if server_dt > stored_dt:
         return True, RefetchReason.SERVER_NEWER

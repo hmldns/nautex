@@ -2,6 +2,7 @@
 
 import os
 import logging
+import uuid
 from typing import List, Optional, Dict
 from pathlib import Path
 import aiofiles
@@ -60,6 +61,7 @@ class DocumentService:
         Returns:
             Tuple of (success, path or error message)
         """
+        temp_path: Optional[Path] = None
         try:
             # Create directory if it doesn't exist
             os.makedirs(output_path.parent, exist_ok=True)
@@ -71,13 +73,30 @@ class DocumentService:
             else:
                 content_str = document.render_markdown()
 
-            # Write to file
-            async with aiofiles.open(output_path, 'w') as f:
+            # Write UTF-8 to a sibling file first so a failed write never
+            # truncates the last successfully synced document.
+            temp_path = output_path.with_name(
+                f".{output_path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            async with aiofiles.open(
+                temp_path, "x", encoding="utf-8", newline="\n"
+            ) as f:
                 await f.write(content_str)
+            os.replace(temp_path, output_path)
+            temp_path = None
 
             logger.debug(f"Document {document.designator} saved to {output_path}")
             return True, str(output_path)
         except Exception as e:
+            if temp_path is not None:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    logger.warning(
+                        "Failed to clean up temporary document %s: %s",
+                        temp_path,
+                        cleanup_error,
+                    )
             error_msg = f"Error saving document {document.designator} to {output_path}: {e}"
             logger.error(error_msg)
             return False, error_msg

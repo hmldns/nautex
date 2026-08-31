@@ -110,6 +110,15 @@ class TestNeedsRefetch:
         entry = make_entry()
         assert needs_refetch(entry, TS_OLD, missing, now=NOW) == (True, RefetchReason.LOCAL_FILE_MISSING)
 
+    def test_rule6_local_file_empty(self, tmp_path):
+        empty = tmp_path / "PRD.md"
+        empty.write_bytes(b"")
+        entry = make_entry()
+        assert needs_refetch(entry, TS_OLD, empty, now=NOW) == (
+            True,
+            RefetchReason.LOCAL_FILE_EMPTY,
+        )
+
     def test_rule7_server_newer(self, local_file):
         entry = make_entry(updated_at=TS_OLD)
         assert needs_refetch(entry, TS_NEW, local_file, now=NOW) == (True, RefetchReason.SERVER_NEWER)
